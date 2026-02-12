@@ -1,0 +1,154 @@
+/*
+ * IpcErrorDetails -- collapsible error details panel.
+ * Brutalist style matching the existing design system.
+ */
+
+.container {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  background: var(--color-error-bg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: baseline;
+  padding: var(--space-sm) var(--space-md);
+}
+
+.code {
+  font-weight: 700;
+  color: var(--color-error);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.message {
+  color: var(--color-error);
+  word-break: break-word;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 100%;
+  border: none;
+  border-top: 1px dashed var(--color-error);
+  background: transparent;
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-error);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.toggle:hover {
+  background: rgba(185, 28, 28, 0.08);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: -2px;
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 0.6rem;
+  transition: transform 150ms ease-in-out;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.details {
+  border-top: 1px dashed var(--color-error);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+}
+
+.sectionTitle {
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 var(--space-xs);
+}
+
+/* ── Validation Issues ──────────────────────────────── */
+
+.issuesSection {
+  margin-bottom: var(--space-md);
+}
+
+.issueList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.issueItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-xs);
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.issuePath {
+  font-weight: 700;
+  color: var(--color-accent-2);
+}
+
+.issueMessage {
+  color: var(--color-text);
+}
+
+.issueMeta {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+
+.issueMeta strong {
+  color: var(--color-text);
+}
+
+.issueCode {
+  font-size: 0.65rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+
+/* ── Stack Trace ────────────────────────────────────── */
+
+.stackSection {
+  /* No extra top margin when following issuesSection -- gap handled by details padding */
+}
+
+.stackTrace {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-muted);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+}

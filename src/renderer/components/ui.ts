@@ -27,3 +27,6 @@ export { ULogViewer } from "./ui/ULogViewer";
 export type { ULogViewerProps, ULogViewerHandle } from "./ui/ULogViewer";
 
 export { RingBuffer } from "./ui/RingBuffer";
+
+export { IpcErrorDetails } from "./ui/IpcErrorDetails";
+export type { IpcErrorDetailsProps } from "./ui/IpcErrorDetails";

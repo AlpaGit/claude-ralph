@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { PlanListItem, RalphPlan } from "@shared/types";
+import type { IpcError, PlanListItem, RalphPlan } from "@shared/types";
+import { parseIpcError } from "../services/ipcErrorService";
 import { toastService } from "../services/toastService";
 
 /** Lightweight plan summary for the plans list sidebar. */
@@ -30,6 +31,9 @@ interface PlanState {
 
   /** Last error message from any plan operation. */
   error: string | null;
+
+  /** Last structured IPC error (includes dev-mode details when available). */
+  lastIpcError: IpcError | null;
 
   // ── Actions ──────────────────────────────────────────────
 
@@ -70,9 +74,10 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   loadingList: false,
   creating: false,
   error: null,
+  lastIpcError: null,
 
   createPlan: async (prdText: string, projectPath: string): Promise<string> => {
-    set({ creating: true, error: null });
+    set({ creating: true, error: null, lastIpcError: null });
     try {
       const api = getApi();
       const result = await api.createPlan({ prdText, projectPath });
@@ -81,9 +86,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       toastService.success("Plan created successfully.");
       return result.planId;
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Failed to create plan.";
-      set({ error: message });
-      toastService.error(message);
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message, lastIpcError: ipcError });
+      toastService.error(ipcError.message);
       throw caught;
     } finally {
       set({ creating: false });
@@ -91,7 +96,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   },
 
   loadPlan: async (planId: string): Promise<void> => {
-    set({ loadingPlan: true, error: null });
+    set({ loadingPlan: true, error: null, lastIpcError: null });
     try {
       const api = getApi();
       const plan = await api.getPlan(planId);
@@ -119,15 +124,15 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         });
       }
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Failed to load plan.";
-      set({ error: message });
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message, lastIpcError: ipcError });
     } finally {
       set({ loadingPlan: false });
     }
   },
 
   loadPlanList: async (filter?: { archived?: boolean; search?: string }): Promise<void> => {
-    set({ loadingList: true, error: null });
+    set({ loadingList: true, error: null, lastIpcError: null });
     try {
       const api = getApi();
       const items: PlanListItem[] = await api.listPlans({ filter });
@@ -141,15 +146,15 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }));
       set({ plansList: summaries });
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Failed to load plans list.";
-      set({ error: message });
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message, lastIpcError: ipcError });
     } finally {
       set({ loadingList: false });
     }
   },
 
   deletePlan: async (planId: string): Promise<void> => {
-    set({ error: null });
+    set({ error: null, lastIpcError: null });
     try {
       const api = getApi();
       await api.deletePlan({ planId });
@@ -159,14 +164,14 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }));
       toastService.success("Plan deleted.");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Failed to delete plan.";
-      set({ error: message });
-      toastService.error("Failed to delete plan.");
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message, lastIpcError: ipcError });
+      toastService.error(ipcError.message);
     }
   },
 
   archivePlan: async (planId: string): Promise<void> => {
-    set({ error: null });
+    set({ error: null, lastIpcError: null });
     try {
       const api = getApi();
       await api.archivePlan({ planId });
@@ -177,14 +182,14 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }));
       toastService.success("Plan archived.");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Failed to archive plan.";
-      set({ error: message });
-      toastService.error("Failed to archive plan.");
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message, lastIpcError: ipcError });
+      toastService.error(ipcError.message);
     }
   },
 
   unarchivePlan: async (planId: string): Promise<void> => {
-    set({ error: null });
+    set({ error: null, lastIpcError: null });
     try {
       const api = getApi();
       await api.unarchivePlan({ planId });
@@ -195,13 +200,13 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       }));
       toastService.success("Plan restored from archive.");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Failed to unarchive plan.";
-      set({ error: message });
-      toastService.error("Failed to restore plan from archive.");
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message, lastIpcError: ipcError });
+      toastService.error(ipcError.message);
     }
   },
 
   clearError: (): void => {
-    set({ error: null });
+    set({ error: null, lastIpcError: null });
   },
 }));

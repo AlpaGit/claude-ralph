@@ -369,6 +369,27 @@ export interface CancelDiscoveryResponse {
   ok: boolean;
 }
 
+/** Structured IPC error detail for a single Zod validation issue. */
+export interface IpcZodIssue {
+  path: (string | number)[];
+  message: string;
+  code?: string;
+  expected?: string;
+  received?: string;
+}
+
+/**
+ * Structured IPC error sent from main process to renderer.
+ * In development mode, includes detailed validation errors, stack traces,
+ * and original error messages. In production, sanitized to a generic message.
+ */
+export interface IpcError {
+  message: string;
+  code: string;
+  details?: IpcZodIssue[];
+  stack?: string;
+}
+
 export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
