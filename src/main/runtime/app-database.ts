@@ -13,6 +13,22 @@ import type {
 } from "@shared/types";
 import { MigrationRunner } from "./migrations/migration-runner";
 
+/**
+ * Custom error thrown when JSON columns in the database fail to parse.
+ * Carries the plan/task context so callers can diagnose corrupt data.
+ */
+export class PlanParseError extends Error {
+  constructor(
+    public readonly field: string,
+    public readonly entityId: string,
+    public readonly cause: unknown
+  ) {
+    const causeMsg = cause instanceof Error ? cause.message : String(cause);
+    super(`Failed to parse ${field} for plan ${entityId}: ${causeMsg}`);
+    this.name = "PlanParseError";
+  }
+}
+
 interface PlanRow {
   id: string;
   project_path: string;
@@ -94,7 +110,16 @@ interface UpdateRunInput {
 
 const nowIso = (): string => new Date().toISOString();
 
-const parseJsonArray = (value: string | null | undefined): string[] => {
+/**
+ * Parse a JSON string expected to contain a string array (e.g. dependencies, acceptance criteria).
+ * On parse failure, logs a descriptive warning and throws a PlanParseError so the caller can
+ * surface the problem rather than silently dropping data.
+ *
+ * @param value  - Raw JSON string from the database column.
+ * @param field  - Column name (for error context).
+ * @param entityId - The plan or task ID that owns the row (for error context).
+ */
+const parseJsonArray = (value: string | null | undefined, field: string, entityId: string): string[] => {
   if (!value) {
     return [];
   }
@@ -102,8 +127,9 @@ const parseJsonArray = (value: string | null | undefined): string[] => {
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
+  } catch (error: unknown) {
+    console.error(`[AppDatabase] Failed to parse ${field} for entity ${entityId}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new PlanParseError(field, entityId, error);
   }
 };
 
@@ -187,8 +213,9 @@ export class AppDatabase {
     let technicalPack: TechnicalPack;
     try {
       technicalPack = JSON.parse(planRow.technical_pack_json) as TechnicalPack;
-    } catch {
-      return null;
+    } catch (error: unknown) {
+      console.error(`[AppDatabase] Failed to parse technical_pack_json for plan ${planId}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new PlanParseError("technical_pack_json", planId, error);
     }
 
     const tasks: RalphTask[] = taskRows.map((row) => ({
@@ -197,8 +224,8 @@ export class AppDatabase {
       ordinal: row.ordinal,
       title: row.title,
       description: row.description,
-      dependencies: parseJsonArray(row.dependencies_json),
-      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json),
+      dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
+      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json, "acceptance_criteria_json", row.id),
       technicalNotes: row.technical_notes,
       status: row.status,
       createdAt: row.created_at,
@@ -250,8 +277,8 @@ export class AppDatabase {
       ordinal: row.ordinal,
       title: row.title,
       description: row.description,
-      dependencies: parseJsonArray(row.dependencies_json),
-      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json),
+      dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
+      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json, "acceptance_criteria_json", row.id),
       technicalNotes: row.technical_notes,
       status: row.status,
       createdAt: row.created_at,
@@ -271,8 +298,8 @@ export class AppDatabase {
       ordinal: row.ordinal,
       title: row.title,
       description: row.description,
-      dependencies: parseJsonArray(row.dependencies_json),
-      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json),
+      dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
+      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json, "acceptance_criteria_json", row.id),
       technicalNotes: row.technical_notes,
       status: row.status,
       createdAt: row.created_at,
