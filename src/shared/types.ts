@@ -269,6 +269,23 @@ export interface DiscoveryInterviewState {
   missingCriticalInfo: string[];
 }
 
+/** Status of a discovery session. */
+export type DiscoverySessionStatus = "active" | "completed" | "abandoned";
+
+/** Persisted discovery session record. */
+export interface DiscoverySession {
+  id: string;
+  projectPath: string;
+  seedSentence: string;
+  additionalContext: string;
+  answerHistory: DiscoveryAnswer[];
+  roundNumber: number;
+  latestState: DiscoveryInterviewState;
+  status: DiscoverySessionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type DiscoveryEventType = "status" | "log" | "agent" | "completed" | "failed";
 
 export interface DiscoveryEvent {

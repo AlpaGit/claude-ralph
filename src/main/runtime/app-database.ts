@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import type {
+  DiscoveryAnswer,
+  DiscoveryInterviewState,
+  DiscoverySession,
+  DiscoverySessionStatus,
   ListPlansFilter,
   PlanListItem,
   PlanStatus,
@@ -97,6 +101,35 @@ interface RunRow {
   result_text: string | null;
   stop_reason: string | null;
   error_text: string | null;
+}
+
+interface DiscoverySessionRow {
+  id: string;
+  project_path: string;
+  seed_sentence: string;
+  additional_context: string;
+  answer_history_json: string;
+  round_number: number;
+  latest_state_json: string;
+  status: DiscoverySessionStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CreateDiscoverySessionInput {
+  id: string;
+  projectPath: string;
+  seedSentence: string;
+  additionalContext: string;
+  latestState: DiscoveryInterviewState;
+}
+
+interface UpdateDiscoverySessionInput {
+  id: string;
+  answerHistory?: DiscoveryAnswer[];
+  roundNumber?: number;
+  latestState?: DiscoveryInterviewState;
+  status?: DiscoverySessionStatus;
 }
 
 interface CreatePlanTaskInput {
@@ -593,6 +626,161 @@ export class AppDatabase {
     if (result.changes === 0) {
       throw new Error(`Unknown agent role: ${role}`);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Discovery Sessions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Create a new discovery session.
+   * answer_history_json starts as an empty array; round_number defaults to 1.
+   */
+  createDiscoverySession(input: CreateDiscoverySessionInput): DiscoverySession {
+    const now = nowIso();
+
+    this.db
+      .prepare(`
+        INSERT INTO discovery_sessions (
+          id, project_path, seed_sentence, additional_context,
+          answer_history_json, round_number, latest_state_json,
+          status, created_at, updated_at
+        ) VALUES (
+          @id, @project_path, @seed_sentence, @additional_context,
+          @answer_history_json, @round_number, @latest_state_json,
+          @status, @created_at, @updated_at
+        );
+      `)
+      .run({
+        id: input.id,
+        project_path: input.projectPath,
+        seed_sentence: input.seedSentence,
+        additional_context: input.additionalContext,
+        answer_history_json: "[]",
+        round_number: 1,
+        latest_state_json: JSON.stringify(input.latestState),
+        status: "active",
+        created_at: now,
+        updated_at: now
+      });
+
+    return {
+      id: input.id,
+      projectPath: input.projectPath,
+      seedSentence: input.seedSentence,
+      additionalContext: input.additionalContext,
+      answerHistory: [],
+      roundNumber: 1,
+      latestState: input.latestState,
+      status: "active",
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  /**
+   * Update an existing discovery session.
+   * Only the provided fields are updated; others are left unchanged.
+   */
+  updateDiscoverySession(input: UpdateDiscoverySessionInput): void {
+    const sets: string[] = ["updated_at = @updated_at"];
+    const params: Record<string, unknown> = {
+      id: input.id,
+      updated_at: nowIso()
+    };
+
+    if (input.answerHistory !== undefined) {
+      sets.push("answer_history_json = @answer_history_json");
+      params.answer_history_json = JSON.stringify(input.answerHistory);
+    }
+
+    if (input.roundNumber !== undefined) {
+      sets.push("round_number = @round_number");
+      params.round_number = input.roundNumber;
+    }
+
+    if (input.latestState !== undefined) {
+      sets.push("latest_state_json = @latest_state_json");
+      params.latest_state_json = JSON.stringify(input.latestState);
+    }
+
+    if (input.status !== undefined) {
+      sets.push("status = @status");
+      params.status = input.status;
+    }
+
+    const sql = `UPDATE discovery_sessions SET ${sets.join(", ")} WHERE id = @id;`;
+    this.db.prepare(sql).run(params);
+  }
+
+  /**
+   * Return all discovery sessions with status 'active', ordered by most recently updated first.
+   */
+  getActiveDiscoverySessions(): DiscoverySession[] {
+    const rows = this.db
+      .prepare("SELECT * FROM discovery_sessions WHERE status = 'active' ORDER BY updated_at DESC;")
+      .all() as DiscoverySessionRow[];
+
+    return rows.map((row) => this.mapDiscoverySessionRow(row));
+  }
+
+  /**
+   * Return a single discovery session by ID, or null if not found.
+   */
+  getDiscoverySession(id: string): DiscoverySession | null {
+    const row = this.db
+      .prepare("SELECT * FROM discovery_sessions WHERE id = ? LIMIT 1;")
+      .get(id) as DiscoverySessionRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return this.mapDiscoverySessionRow(row);
+  }
+
+  /**
+   * Mark a discovery session as abandoned.
+   */
+  abandonDiscoverySession(id: string): void {
+    this.db
+      .prepare("UPDATE discovery_sessions SET status = 'abandoned', updated_at = ? WHERE id = ?;")
+      .run(nowIso(), id);
+  }
+
+  /**
+   * Map a raw DiscoverySessionRow to the application-level DiscoverySession type.
+   */
+  private mapDiscoverySessionRow(row: DiscoverySessionRow): DiscoverySession {
+    let answerHistory: DiscoveryAnswer[];
+    try {
+      const parsed = JSON.parse(row.answer_history_json);
+      answerHistory = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      console.error(`[AppDatabase] Failed to parse answer_history_json for discovery session ${row.id}`);
+      answerHistory = [];
+    }
+
+    let latestState: DiscoveryInterviewState;
+    try {
+      latestState = JSON.parse(row.latest_state_json) as DiscoveryInterviewState;
+    } catch (error: unknown) {
+      console.error(`[AppDatabase] Failed to parse latest_state_json for discovery session ${row.id}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new PlanParseError("latest_state_json", row.id, error);
+    }
+
+    return {
+      id: row.id,
+      projectPath: row.project_path,
+      seedSentence: row.seed_sentence,
+      additionalContext: row.additional_context,
+      answerHistory,
+      roundNumber: row.round_number,
+      latestState,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
   }
 
   close(): void {
