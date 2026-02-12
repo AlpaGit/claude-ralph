@@ -8,6 +8,7 @@ import {
   type ShortcutDefinition,
 } from "../../hooks/useKeyboardShortcuts";
 import { KeyboardShortcutHelp } from "../KeyboardShortcutHelp/KeyboardShortcutHelp";
+import { focusPlanSearchInput } from "../../services/domHelpers";
 import styles from "./AppShell.module.css";
 
 /**
@@ -69,16 +70,7 @@ export function AppShell(): JSX.Element {
   }, []);
 
   const handleFocusSearch = useCallback(() => {
-    // Focus the search input on the plan list page.
-    // We look for the search input by its aria-label since CSS module classes
-    // are hashed and unreliable for selectors.
-    const searchInput = document.querySelector<HTMLInputElement>(
-      'input[aria-label="Search plans"]'
-    );
-    if (searchInput) {
-      searchInput.focus();
-      searchInput.select();
-    }
+    focusPlanSearchInput();
   }, []);
 
   const handleOpenSettings = useCallback(() => {
