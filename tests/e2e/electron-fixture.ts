@@ -1,7 +1,8 @@
 import { test as base, type ElectronApplication, type Page } from "@playwright/test";
 import { _electron as electron } from "playwright";
-import { existsSync, mkdirSync, copyFileSync, unlinkSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, copyFileSync, unlinkSync, rmdirSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -43,8 +44,12 @@ export interface ElectronFixtures {
 // Constants
 // ---------------------------------------------------------------------------
 
+/** Derive __dirname equivalent for ESM. */
+const __filenameESM = fileURLToPath(import.meta.url);
+const __dirnameESM = dirname(__filenameESM);
+
 /** Root of the project (repository root). */
-const PROJECT_ROOT = resolve(__dirname, "..", "..");
+const PROJECT_ROOT = resolve(__dirnameESM, "..", "..");
 
 /** Path to the built main process entry point. */
 const MAIN_ENTRY = join(PROJECT_ROOT, "out", "main", "index.js");
@@ -81,8 +86,7 @@ function cleanupTempDb(dbPath: string): void {
     if (existsSync(shmPath)) unlinkSync(shmPath);
 
     // Remove the temp directory (it should be empty now)
-    const dir = join(dbPath, "..");
-    const { rmdirSync } = require("node:fs");
+    const dir = resolve(dbPath, "..");
     rmdirSync(dir);
   } catch {
     // Best-effort cleanup -- temp files will be cleared by OS eventually.

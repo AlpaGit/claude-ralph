@@ -27,8 +27,9 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
 
   /* Reporter */
-  reporter: process.env.CI ? "dot" : "list",
+  reporter: process.env.CI ? "dot" : "list"
 
-  /* No browser-based projects -- Electron fixture handles launch */
-  projects: []
+  /* No browser-based projects -- Electron fixture handles launch.
+   * projects is intentionally omitted so Playwright uses the default
+   * project with testDir/testMatch settings above. */
 });
