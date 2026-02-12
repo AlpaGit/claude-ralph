@@ -916,3 +916,41 @@ p3-02: Add cancel improvements with timeout and cleanup   [DONE]
     - .cancelProgressBar: amber fill with 200ms linear width transition
     - .cancelProgressText: mono font countdown, right-aligned
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-03: Add discovery abort/cancellation support   [DONE]
+  - src/shared/ipc.ts
+    - IPC_CHANNELS: added discoveryCancel ("discovery:cancel")
+    - discoveryCancelInputSchema: Zod schema with sessionId (uuid)
+  - src/shared/types.ts
+    - CancelDiscoveryInput interface: sessionId
+    - CancelDiscoveryResponse interface: ok (boolean)
+    - RalphApi: added cancelDiscovery() method
+  - src/main/runtime/task-runner.ts
+    - cancelledDiscoveries Set: tracks session IDs flagged for cancellation
+    - cancelDiscovery(input): sets cancelled flag, emits "failed" discovery event
+      with "Discovery cancelled by user." message, returns { ok: true }
+    - checkDiscoveryCancelled(sessionId) private method: checks cancelled flag,
+      cleans up in-memory session, throws cancellation Error to abort discovery flow
+    - startDiscovery(): calls checkDiscoveryCancelled after agentService.startDiscovery
+      resolves; catch block skips duplicate failure event if already cancelled
+    - continueDiscovery(): calls checkDiscoveryCancelled after agentService.continueDiscovery
+      resolves; catch block skips duplicate failure event if already cancelled
+    - Uses flag-based cancellation: if specialist query is mid-flight it may complete
+      but result is discarded when cancellation check runs after Promise.allSettled
+  - src/main/ipc.ts
+    - Registered ipcMain.handle for discovery:cancel, validates with Zod,
+      delegates to taskRunner.cancelDiscovery()
+  - src/preload/index.ts
+    - Bridge method: cancelDiscovery(input) via ipcRenderer.invoke(discovery:cancel)
+  - src/renderer/stores/discoveryStore.ts
+    - cancelDiscovery action: calls backend cancelDiscovery IPC, unsubscribes from
+      discovery events, resets loading state, sets error to "Discovery cancelled."
+  - src/renderer/views/DiscoveryView.tsx
+    - Wires cancelDiscovery action from discoveryStore
+    - handleCancelDiscovery handler invokes cancelDiscovery
+    - AI Feedback panel: wraps thinking indicator and new "Cancel Discovery" button
+      in feedbackHeaderActions container; button shown only when loading is true
+    - Cancel button uses UButton variant="danger" size="sm"
+  - src/renderer/views/DiscoveryView.module.css
+    - .feedbackHeaderActions: flex row with gap for thinking indicator + cancel button
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
