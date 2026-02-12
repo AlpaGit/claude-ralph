@@ -546,3 +546,15 @@ p1-20: Fix bug: titleBarStyle for Windows   [DONE]
     - .navLink, .planToggle, .planItem, .newPlanBtn, .collapseBtn: added
       -webkit-app-region: no-drag so interactive elements remain clickable
   - Build and typecheck pass
+
+p1-21: Fix bug: Deduplicate IPC_CHANNELS in preload   [DONE]
+  - src/preload/index.ts
+    - Removed local IPC_CHANNELS object (14 lines) that redeclared all 11 channel name strings
+    - Added import: `import { IPC_CHANNELS } from "@shared/ipc"`
+    - Single source of truth: all three contexts (main, preload, renderer) now
+      reference the same IPC_CHANNELS export from src/shared/ipc.ts
+    - @shared alias resolves correctly in preload CJS build (confirmed by electron-vite
+      bundling 2 modules into out/preload/index.js)
+  - No other files changed; all IPC_CHANNELS usages in preload already used
+    property access (IPC_CHANNELS.createPlan, etc.) so they work unchanged
+  - Build and typecheck pass
