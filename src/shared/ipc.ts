@@ -4,6 +4,8 @@ export const IPC_CHANNELS = {
   createPlan: "plan:create",
   getPlan: "plan:get",
   listPlans: "plan:list",
+  listProjectMemory: "project-memory:list",
+  refreshProjectStackProfile: "project-memory:refresh",
   deletePlan: "plan:delete",
   archivePlan: "plan:archive",
   unarchivePlan: "plan:unarchive",
@@ -35,6 +37,15 @@ export const listPlansInputSchema = z.object({
     archived: z.boolean().optional(),
     search: z.string().optional()
   }).optional()
+});
+
+export const listProjectMemoryInputSchema = z.object({
+  search: z.string().optional(),
+  limitPlans: z.number().int().min(1).max(20).optional()
+}).default({});
+
+export const refreshProjectStackProfileInputSchema = z.object({
+  projectId: z.string().min(1)
 });
 
 export const deletePlanInputSchema = z.object({
@@ -100,7 +111,7 @@ export const continueDiscoveryInputSchema = z.object({
         answer: z.string().min(1)
       })
     )
-    .min(1, "At least one answer is required.")
+    .min(0)
 });
 
 export const wizardStepDataSchema = z.object({

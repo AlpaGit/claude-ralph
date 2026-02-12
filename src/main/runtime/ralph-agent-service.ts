@@ -1,7 +1,9 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { execFile } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import type {
   AgentRole,
@@ -27,6 +29,7 @@ export type ModelConfigMap = Map<AgentRole, string>;
 interface CreatePlanArgs {
   projectPath: string;
   prdText: string;
+  projectHistoryContext?: string;
   onLog?: (line: string) => void;
 }
 
@@ -95,6 +98,7 @@ interface DiscoveryOutput {
     question_type?: "text" | "multiple_choice";
     options?: string[];
     recommendedOption?: string | null;
+    selectionMode?: "single" | "multi";
   }>;
   prdInputDraft: string;
   readinessScore: number;
@@ -123,6 +127,7 @@ interface StartDiscoveryArgs {
 interface ContinueDiscoveryArgs extends StartDiscoveryArgs {
   answerHistory: DiscoveryAnswer[];
   latestAnswers: DiscoveryAnswer[];
+  stackRefreshContext?: string;
 }
 
 type SpecialistAgentId =
@@ -135,6 +140,14 @@ type SpecialistAgentId =
 const MAX_ARCH_REFACTOR_CYCLES = 2;
 const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
 const CLAUDE_COAUTHOR_TRAILER = /co-authored-by:\s*.*claude/i;
+const MUTATING_GIT_COMMAND_PATTERN =
+  /\bgit\s+(?:add|am|apply|branch|checkout|cherry-pick|commit|merge|mv|pull|push|rebase|reset|revert|rm|stash|switch|tag|update-ref|worktree)\b/i;
+const GIT_MERGE_COMMAND_PATTERN = /\bgit\s+merge\b/i;
+const STACK_PROFILE_DIR = ".ralph";
+const STACK_PROFILE_FILE = "stack-profile.json";
+const STACK_REFRESH_TOKEN_PATTERN = /(?:^|\s)(?:\/refresh-stack|#refresh-stack)\b/i;
+const STACK_CHANGE_HINT_PATTERN =
+  /(?:\b(?:stack|framework|language|runtime|database|db|orm)\b[\s\S]{0,42}\b(?:change|changed|switch|switched|migrate|migrated|migration|replace|replaced|rewrite|refactor|move|moved)\b|\b(?:change|changed|switch|switched|migrate|migrated|migration|replace|replaced|rewrite|refactor|move|moved)\b[\s\S]{0,42}\b(?:stack|framework|language|runtime|database|db|orm)\b)/i;
 
 interface SpecialistAnalysis {
   summary: string;
@@ -153,6 +166,21 @@ interface SpecialistJob {
   id: SpecialistAgentId;
   title: string;
   objective: string;
+}
+
+export interface StackProfileCache {
+  version: 1;
+  updatedAt: string;
+  specialistId: "stack-analyst";
+  stackSummary: string;
+  stackHints: string[];
+  signals: string[];
+  confidence: number;
+}
+
+export interface StackProfileStore {
+  read(projectPath: string): Promise<StackProfileCache | null> | StackProfileCache | null;
+  write(projectPath: string, profile: StackProfileCache): Promise<void> | void;
 }
 
 const baseOptions: Pick<Options, "allowDangerouslySkipPermissions" | "permissionMode" | "settingSources"> = {
@@ -289,7 +317,8 @@ const discoveryOutputSchema = z.object({
       reason: z.string().min(8),
       question_type: z.enum(["text", "multiple_choice"]).default("text"),
       options: z.array(z.string()).default([]),
-      recommendedOption: z.string().nullable().default(null)
+      recommendedOption: z.string().nullable().default(null),
+      selectionMode: z.enum(["single", "multi"]).default("single")
     })
   ),
   prdInputDraft: z.string().min(120),
@@ -335,7 +364,8 @@ const discoveryOutputJsonSchema = {
           reason: { type: "string" },
           question_type: { type: "string", enum: ["text", "multiple_choice"], default: "text" },
           options: { type: "array", items: { type: "string" }, default: [] },
-          recommendedOption: { type: ["string", "null"], default: null }
+          recommendedOption: { type: ["string", "null"], default: null },
+          selectionMode: { type: "string", enum: ["single", "multi"], default: "single" }
         },
         required: ["id", "question", "reason"]
       }
@@ -367,6 +397,16 @@ const specialistAnalysisSchema = z.object({
   stackHints: z.array(z.string()),
   documentationHints: z.array(z.string()),
   questions: z.array(z.string()),
+  confidence: z.number().min(0).max(100)
+});
+
+const stackProfileCacheSchema = z.object({
+  version: z.literal(1),
+  updatedAt: z.string().min(1),
+  specialistId: z.literal("stack-analyst"),
+  stackSummary: z.string().min(1),
+  stackHints: z.array(z.string()),
+  signals: z.array(z.string()),
   confidence: z.number().min(0).max(100)
 });
 
@@ -575,6 +615,27 @@ function normalizeConfidencePercent(value: number): number {
     return Math.max(0, Math.min(100, Math.round(value * 100)));
   }
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function extractBashCommand(toolInput: Record<string, unknown>): string {
+  const candidateKeys = ["command", "cmd", "script", "input", "args", "argv"];
+
+  for (const key of candidateKeys) {
+    const value = toolInput[key];
+    if (typeof value === "string") {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      const joined = value
+        .filter((part): part is string => typeof part === "string")
+        .join(" ");
+      if (joined.trim().length > 0) {
+        return joined;
+      }
+    }
+  }
+
+  return JSON.stringify(toolInput);
 }
 
 function resolveQueryCwd(projectPath: string): string {
@@ -792,9 +853,11 @@ const DEFAULT_MODEL_BY_ROLE: Record<AgentRole, string> = {
 
 export class RalphAgentService {
   private readonly modelConfig: ModelConfigMap;
+  private readonly stackProfileStore?: StackProfileStore;
 
-  constructor(modelConfig?: ModelConfigMap) {
+  constructor(modelConfig?: ModelConfigMap, stackProfileStore?: StackProfileStore) {
     this.modelConfig = modelConfig ?? new Map();
+    this.stackProfileStore = stackProfileStore;
   }
 
   /**
@@ -805,9 +868,142 @@ export class RalphAgentService {
     return this.modelConfig.get(role) ?? DEFAULT_MODEL_BY_ROLE[role];
   }
 
+  private resolveStackProfilePath(projectPath: string): string | null {
+    const normalized = projectPath.trim();
+    if (normalized.length === 0 || !existsSync(normalized)) {
+      return null;
+    }
+    return join(normalized, STACK_PROFILE_DIR, STACK_PROFILE_FILE);
+  }
+
+  private async readStackProfileCache(projectPath: string): Promise<StackProfileCache | null> {
+    if (this.stackProfileStore) {
+      try {
+        const fromStore = await this.stackProfileStore.read(projectPath);
+        if (!fromStore) {
+          return null;
+        }
+        return stackProfileCacheSchema.parse(fromStore);
+      } catch {
+        return null;
+      }
+    }
+
+    const profilePath = this.resolveStackProfilePath(projectPath);
+    if (!profilePath) {
+      return null;
+    }
+
+    try {
+      const raw = await readFile(profilePath, "utf8");
+      const parsed = JSON.parse(raw);
+      return stackProfileCacheSchema.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeStackProfileCache(projectPath: string, report: SpecialistAnalysis): Promise<void> {
+    const payload = this.buildStackProfilePayload(report);
+
+    if (this.stackProfileStore) {
+      try {
+        await this.stackProfileStore.write(projectPath, payload);
+      } catch {
+        // Cache write failure should never block discovery.
+      }
+      return;
+    }
+
+    const profilePath = this.resolveStackProfilePath(projectPath);
+    if (!profilePath) {
+      return;
+    }
+
+    try {
+      await mkdir(dirname(profilePath), { recursive: true });
+      await writeFile(profilePath, JSON.stringify(payload, null, 2), "utf8");
+    } catch {
+      // Cache write failure should never block discovery.
+    }
+  }
+
+  private buildStackProfilePayload(report: SpecialistAnalysis): StackProfileCache {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      specialistId: "stack-analyst",
+      stackSummary: report.summary,
+      stackHints: report.stackHints,
+      signals: report.signals,
+      confidence: report.confidence
+    };
+  }
+
+  private shouldRefreshStackAnalysis(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
+    const combined = [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
+      .filter((value) => value.trim().length > 0)
+      .join("\n");
+
+    if (combined.length === 0) {
+      return false;
+    }
+
+    if (STACK_REFRESH_TOKEN_PATTERN.test(combined)) {
+      return true;
+    }
+
+    return STACK_CHANGE_HINT_PATTERN.test(combined);
+  }
+
+  async refreshStackProfile(args: {
+    projectPath: string;
+    additionalContext?: string;
+    callbacks?: DiscoveryCallbacks;
+  }): Promise<StackProfileCache> {
+    const normalizedPath = args.projectPath.trim();
+    if (normalizedPath.length === 0) {
+      throw new Error("Cannot refresh stack profile without a project path.");
+    }
+
+    const cwd = resolveQueryCwd(normalizedPath);
+    const stackJob = SPECIALIST_JOBS.find((job) => job.id === "stack-analyst");
+    if (!stackJob) {
+      throw new Error("stack-analyst specialist is not configured.");
+    }
+
+    const prompt = `
+Stack profile refresh request.
+
+Project path:
+${normalizedPath}
+
+Additional context:
+${args.additionalContext || "none"}
+
+Goal:
+- Analyze the current codebase stack as it exists now.
+- Detect stack signals from repository artifacts.
+- Produce a precise summary for future planning continuity.
+`;
+
+    const result = await this.runSpecialistAnalysis({
+      job: stackJob,
+      prompt,
+      cwd,
+      maxTurns: 8,
+      callbacks: args.callbacks
+    });
+
+    await this.writeStackProfileCache(normalizedPath, result.report);
+    return this.buildStackProfilePayload(result.report);
+  }
+
   async startDiscovery(args: StartDiscoveryArgs): Promise<DiscoveryOutput> {
     const hasProjectPath = args.projectPath.trim().length > 0 && existsSync(args.projectPath.trim());
     const cwd = resolveQueryCwd(args.projectPath);
+    const stackCache = await this.readStackProfileCache(args.projectPath);
+    const includeStackSpecialist = stackCache === null;
 
     const prompt = `
 Discovery context for PRD interview:
@@ -831,11 +1027,28 @@ Goal:
 - Ask many high-impact clarification questions and remove ambiguity.
 `;
 
-    return await this.runDiscoveryPrompt(prompt, cwd, 24, args.callbacks);
+    return await this.runDiscoveryPrompt(prompt, cwd, 24, args.callbacks, {
+      projectPath: args.projectPath,
+      includeStackSpecialist,
+      stackCache,
+      stackRefreshReason: includeStackSpecialist
+        ? "No stack cache found; running stack analysis."
+        : null
+    });
   }
 
   async continueDiscovery(args: ContinueDiscoveryArgs): Promise<DiscoveryOutput> {
     const cwd = resolveQueryCwd(args.projectPath);
+    const stackCache = await this.readStackProfileCache(args.projectPath);
+    const refreshContext = args.stackRefreshContext ?? args.additionalContext;
+    const refreshStack = this.shouldRefreshStackAnalysis(refreshContext, args.latestAnswers);
+    const includeStackSpecialist = stackCache === null || refreshStack;
+    const stackRefreshReason =
+      refreshStack
+        ? "Detected stack-change signal in latest answers/context. Re-running stack specialist."
+        : stackCache === null
+          ? "No stack cache found; running stack analysis."
+          : null;
 
     const prompt = `
 Discovery continuation context for PRD interview:
@@ -864,15 +1077,48 @@ Goal:
 - Produce an increasingly decision-complete PRD input draft.
 `;
 
-    return await this.runDiscoveryPrompt(prompt, cwd, 20, args.callbacks);
+    return await this.runDiscoveryPrompt(prompt, cwd, 20, args.callbacks, {
+      projectPath: args.projectPath,
+      includeStackSpecialist,
+      stackCache,
+      stackRefreshReason
+    });
   }
 
   private async runDiscoveryPrompt(
     prompt: string,
     cwd: string,
     maxTurns: number,
-    callbacks?: DiscoveryCallbacks
+    callbacks?: DiscoveryCallbacks,
+    options?: {
+      projectPath?: string;
+      includeStackSpecialist?: boolean;
+      stackCache?: StackProfileCache | null;
+      stackRefreshReason?: string | null;
+    }
   ): Promise<DiscoveryOutput> {
+    const selectedJobs = (options?.includeStackSpecialist ?? true)
+      ? SPECIALIST_JOBS
+      : SPECIALIST_JOBS.filter((job) => job.id !== "stack-analyst");
+
+    if (options?.stackRefreshReason) {
+      callbacks?.onEvent({
+        type: "status",
+        level: "info",
+        message: options.stackRefreshReason
+      });
+    }
+
+    if (options?.stackCache && !(options?.includeStackSpecialist ?? true)) {
+      callbacks?.onEvent({
+        type: "status",
+        level: "info",
+        message: this.stackProfileStore
+          ? `Using cached stack profile from project profile store (updated ${new Date(options.stackCache.updatedAt).toLocaleString()}).`
+          : `Using cached stack profile (${STACK_PROFILE_DIR}/${STACK_PROFILE_FILE}) from ${new Date(options.stackCache.updatedAt).toLocaleString()}.`
+      });
+    }
+
     callbacks?.onEvent({
       type: "status",
       level: "info",
@@ -883,7 +1129,7 @@ Goal:
     const specialistMaxAttempts = 2;
 
     const specialistOutcomes = await Promise.all(
-      SPECIALIST_JOBS.map(async (job) => {
+      selectedJobs.map(async (job) => {
         let lastError = "Unknown specialist failure.";
 
         for (let attempt = 1; attempt <= specialistMaxAttempts; attempt += 1) {
@@ -946,12 +1192,16 @@ Goal:
       callbacks?.onEvent({
         type: "status",
         level: "info",
-        message: `All specialists completed (${completedReports.length}/${SPECIALIST_JOBS.length}). Synthesizing final PRD input...`
+        message: `All specialists completed (${completedReports.length}/${selectedJobs.length}). Synthesizing final PRD input...`
       });
     }
 
-    const specialistSummary = completedReports
-      .map(
+    const stackReport = completedReports.find((entry) => entry.job.id === "stack-analyst")?.report ?? null;
+    if (stackReport && options?.projectPath) {
+      await this.writeStackProfileCache(options.projectPath, stackReport);
+    }
+
+    const specialistSummaries = completedReports.map(
         ({ job, report }) =>
           `### ${job.id}\n` +
           JSON.stringify(
@@ -970,8 +1220,31 @@ Goal:
             null,
             2
           )
-      )
-      .join("\n\n");
+      );
+
+    if (!stackReport && options?.stackCache) {
+      specialistSummaries.push(
+        `### stack-cache\n` +
+          JSON.stringify(
+            {
+              summary: options.stackCache.stackSummary,
+              findings: [],
+              signals: options.stackCache.signals,
+              painPoints: [],
+              constraints: [],
+              scopeHints: [],
+              stackHints: options.stackCache.stackHints,
+              documentationHints: [],
+              questions: [],
+              confidence: options.stackCache.confidence
+            },
+            null,
+            2
+          )
+      );
+    }
+
+    const specialistSummary = specialistSummaries.join("\n\n");
     const failedSpecialistSummary =
       failedReports.length > 0
         ? failedReports
@@ -1000,6 +1273,7 @@ Synthesis requirements:
 5) readinessScore must reflect real confidence.
 6) missingCriticalInfo must list blockers that can still change implementation decisions.
 7) If any specialist failed, explicitly reflect uncertainty in missingCriticalInfo.
+8) If stack-cache is present, treat it as the default stack truth unless new evidence contradicts it.
 `;
 
     let structuredOutput: unknown;
@@ -1389,6 +1663,7 @@ Optimize for actionable, implementation-ready outcomes.
 
   async createPlan(args: CreatePlanArgs): Promise<CreatePlanResult> {
     const cwd = resolveQueryCwd(args.projectPath);
+    const projectHistoryContext = args.projectHistoryContext?.trim() ?? "";
     const prompt = `
 You are a Ralph planning engine for strict single-task execution.
 
@@ -1396,6 +1671,9 @@ Generate a complete technical plan from this PRD text:
 ---
 ${args.prdText}
 ---
+
+Project history context (same project path, optional):
+${projectHistoryContext.length > 0 ? projectHistoryContext : "none"}
 
 Output MUST match the provided JSON schema exactly.
 
@@ -1405,6 +1683,7 @@ Rules:
 - Acceptance criteria must be testable.
 - Keep architecture notes practical and implementation-focused.
 - Include realistic risks, assumptions, and test strategy.
+- Avoid duplicating already-completed scope from project history unless the PRD explicitly requests it.
 `;
 
     let structuredOutput: unknown;
@@ -1492,7 +1771,7 @@ Rules:
       const currentHead = await readGitHeadCommit(cwd);
       if (currentHead && currentHead !== initialHead) {
         throw new Error(
-          `Runtime policy violation: commit detected before committer stage (${stageLabel}).`
+          `Runtime policy violation: git HEAD changed before committer stage (${stageLabel}). initial=${initialHead}, current=${currentHead}.`
         );
       }
     };
@@ -1522,13 +1801,41 @@ Rules:
       });
 
       try {
+        const isCommitterStage = agentRole === "committer";
         const options: Options = {
           ...baseOptions,
           model: input.model,
           cwd,
           resume: runSessionId ?? clearSessionId,
           includePartialMessages: true,
-          maxTurns: input.maxTurns
+          maxTurns: input.maxTurns,
+          canUseTool: async (toolName, toolInput) => {
+            if (toolName !== "Bash") {
+              return { behavior: "allow" };
+            }
+
+            const commandText = extractBashCommand(toolInput);
+
+            if (!isCommitterStage && MUTATING_GIT_COMMAND_PATTERN.test(commandText)) {
+              return {
+                behavior: "deny",
+                message:
+                  `Runtime policy: ${input.stageName} cannot execute mutating git commands. ` +
+                  "Only the committer stage may perform git state mutations."
+              };
+            }
+
+            if (isCommitterStage && GIT_MERGE_COMMAND_PATTERN.test(commandText)) {
+              return {
+                behavior: "deny",
+                message:
+                  "Runtime policy: committer task stage cannot run git merge. " +
+                  "Merges are only allowed in the dedicated phase-merge committer flow."
+              };
+            }
+
+            return { behavior: "allow" };
+          }
         };
 
         if (input.agents) {

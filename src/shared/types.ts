@@ -85,6 +85,29 @@ export interface PlanListItem {
   archivedAt: string | null;
 }
 
+export interface ProjectStackProfile {
+  version: 1;
+  updatedAt: string;
+  specialistId: "stack-analyst";
+  stackSummary: string;
+  stackHints: string[];
+  signals: string[];
+  confidence: number;
+}
+
+export interface ProjectMemoryItem {
+  projectId: string;
+  projectKey: string;
+  projectPath: string;
+  displayName: string;
+  metadata: Record<string, unknown>;
+  stackProfile: ProjectStackProfile | null;
+  createdAt: string;
+  updatedAt: string;
+  lastStackRefreshAt: string | null;
+  recentPlans: PlanListItem[];
+}
+
 /** Filter options for listPlans. */
 export interface ListPlansFilter {
   /** If true, return only archived plans. If false, return only non-archived. If undefined, return all. */
@@ -116,6 +139,15 @@ export interface RunEvent {
 
 export interface ListPlansInput {
   filter?: ListPlansFilter;
+}
+
+export interface ListProjectMemoryInput {
+  search?: string;
+  limitPlans?: number;
+}
+
+export interface RefreshProjectStackProfileInput {
+  projectId: string;
 }
 
 export interface DeletePlanInput {
@@ -262,6 +294,8 @@ export interface DiscoveryQuestion {
   options?: string[];
   /** Suggested best option (one of the options values) when question_type is 'multiple_choice'. Defaults to null. */
   recommendedOption?: string | null;
+  /** Whether the user can pick one option or multiple. Defaults to 'single'. */
+  selectionMode?: "single" | "multi";
 }
 
 export interface DiscoveryInferredContext {
@@ -432,6 +466,8 @@ export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
   listPlans(input: ListPlansInput): Promise<PlanListItem[]>;
+  listProjectMemory(input: ListProjectMemoryInput): Promise<ProjectMemoryItem[]>;
+  refreshProjectStackProfile(input: RefreshProjectStackProfileInput): Promise<ProjectMemoryItem>;
   deletePlan(input: DeletePlanInput): Promise<void>;
   archivePlan(input: ArchivePlanInput): Promise<void>;
   unarchivePlan(input: UnarchivePlanInput): Promise<void>;

@@ -610,18 +610,12 @@ describe("continueDiscoveryInputSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects empty answers array", () => {
+  it("accepts empty answers array for batch-skip", () => {
     const result = continueDiscoveryInputSchema.safeParse({
       sessionId: VALID_UUID,
       answers: []
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const answersIssue = result.error.issues.find((i) =>
-        i.path.includes("answers")
-      );
-      expect(answersIssue).toBeDefined();
-    }
+    expect(result.success).toBe(true);
   });
 
   it("rejects answer with empty questionId", () => {
@@ -1128,13 +1122,13 @@ describe("IPC handler validation (schema.parse rejects before handler)", () => {
     expect(() => runTaskInputSchema.parse({})).toThrow();
   });
 
-  it("continueDiscoveryInputSchema.parse throws on empty answers", () => {
+  it("continueDiscoveryInputSchema.parse succeeds on empty answers (batch-skip)", () => {
     expect(() =>
       continueDiscoveryInputSchema.parse({
         sessionId: VALID_UUID,
         answers: []
       })
-    ).toThrow();
+    ).not.toThrow();
   });
 
   it("updateModelConfigInputSchema.parse throws on invalid role", () => {
