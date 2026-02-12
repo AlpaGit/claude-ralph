@@ -51,11 +51,11 @@ import type {
   UpdateAppSettingsInput
 } from "@shared/types";
 import { AppDatabase } from "./app-database";
-import {
-  RalphAgentService,
-  type ModelConfigMap,
-  type StackProfileStore
-} from "./ralph-agent-service";
+import { type ModelConfigMap, createModelResolver } from "./agent-constants";
+import { DiscoveryAgent, type StackProfileStore } from "./discovery-agent";
+import { PlannerAgent, type CreatePlanResult } from "./planner-agent";
+import { TaskAgent } from "./task-agent";
+import { WizardService } from "./wizard-service";
 
 interface ActiveRun {
   interrupt?: () => Promise<void>;
@@ -214,14 +214,21 @@ export class TaskRunner {
   private readonly discoverySessions = new Map<string, DiscoverySession>();
   /** Set of discovery session IDs that have been cancelled. Checked between analysis-agent completions and before synthesis. */
   private readonly cancelledDiscoveries = new Set<string>();
-  private agentService: RalphAgentService;
+  private discovery: DiscoveryAgent;
+  private taskAgent: TaskAgent;
+  private planner: PlannerAgent;
+  private wizard: WizardService;
 
   constructor(
     private readonly db: AppDatabase,
     private readonly getWindow: () => BrowserWindow | null,
     private readonly options: TaskRunnerOptions = {}
   ) {
-    this.agentService = this.createAgentService();
+    const agents = this.createAgents();
+    this.discovery = agents.discovery;
+    this.taskAgent = agents.taskAgent;
+    this.planner = agents.planner;
+    this.wizard = agents.wizard;
     this.cleanupStaleRuns();
   }
 
@@ -283,8 +290,23 @@ export class TaskRunner {
     };
   }
 
-  private createAgentService(): RalphAgentService {
-    return new RalphAgentService(this.buildModelConfigMap(), this.buildStackProfileStore());
+  /**
+   * Instantiate all four decomposed agent modules with a shared model resolver.
+   */
+  private createAgents(): {
+    discovery: DiscoveryAgent;
+    taskAgent: TaskAgent;
+    planner: PlannerAgent;
+    wizard: WizardService;
+  } {
+    const resolver = createModelResolver(this.buildModelConfigMap());
+    const stackProfileStore = this.buildStackProfileStore();
+    return {
+      discovery: new DiscoveryAgent(resolver, stackProfileStore),
+      taskAgent: new TaskAgent(resolver),
+      planner: new PlannerAgent(resolver),
+      wizard: new WizardService(resolver)
+    };
   }
 
   private buildProjectHistoryContext(projectPath: string): string {
@@ -340,12 +362,15 @@ export class TaskRunner {
   }
 
   /**
-   * Rebuild the agent service with fresh model configuration from the database.
+   * Rebuild the agent modules with fresh model configuration from the database.
    * Called after model config changes so subsequent SDK calls use updated models.
    */
   refreshModelConfig(): void {
-    const newService = this.createAgentService();
-    this.agentService = newService;
+    const agents = this.createAgents();
+    this.discovery = agents.discovery;
+    this.taskAgent = agents.taskAgent;
+    this.planner = agents.planner;
+    this.wizard = agents.wizard;
   }
 
   getPlan(planId: string): RalphPlan | null {
@@ -366,7 +391,7 @@ export class TaskRunner {
       throw new Error(`Project not found: ${input.projectId}`);
     }
 
-    const refreshedProfile = await this.agentService.refreshStackProfile({
+    const refreshedProfile = await this.discovery.refreshStackProfile({
       projectPath: project.projectPath,
       additionalContext: "Manual refresh requested from Project Memory view."
     });
@@ -503,7 +528,7 @@ export class TaskRunner {
         input.additionalContext,
         input.projectPath
       );
-      const initialState = await this.agentService.startDiscovery({
+      const initialState = await this.discovery.startDiscovery({
         projectPath: input.projectPath,
         seedSentence: input.seedSentence,
         additionalContext: discoveryAdditionalContext,
@@ -592,7 +617,7 @@ export class TaskRunner {
         session.additionalContext,
         session.projectPath
       );
-      const nextState = await this.agentService.continueDiscovery({
+      const nextState = await this.discovery.continueDiscovery({
         projectPath: session.projectPath,
         seedSentence: session.seedSentence,
         additionalContext: discoveryAdditionalContext,
@@ -749,11 +774,11 @@ export class TaskRunner {
   }
 
   async getWizardGuidance(input: GetWizardGuidanceInput) {
-    return await this.agentService.getWizardGuidance(input);
+    return await this.wizard.getWizardGuidance(input);
   }
 
   async inferStack(input: InferStackInput) {
-    return await this.agentService.inferStack(input);
+    return await this.discovery.inferStack(input);
   }
 
   async createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
@@ -772,10 +797,10 @@ export class TaskRunner {
       }
     );
 
-    let planResult: Awaited<ReturnType<RalphAgentService["createPlan"]>>;
+    let planResult: CreatePlanResult;
     try {
       const projectHistoryContext = this.buildProjectHistoryContext(input.projectPath);
-      planResult = await this.agentService.createPlan({
+      planResult = await this.planner.createPlan({
         projectPath: input.projectPath,
         prdText: input.prdText,
         projectHistoryContext
@@ -2121,7 +2146,7 @@ export class TaskRunner {
       `Committer is stabilizing phase ${phaseNumber} integration branch ${integrationBranch}.`
     );
 
-    await this.agentService.stabilizePhaseIntegrationWithCommitter({
+    await this.taskAgent.stabilizePhaseIntegrationWithCommitter({
       repoRoot: gitContext.repoRoot,
       targetBranch: gitContext.mergeTargetBranch,
       integrationBranch,
@@ -2371,7 +2396,7 @@ export class TaskRunner {
       await this.runGitCommand(["rev-parse", targetBranch], gitContext.repoRoot)
     ).stdout.trim();
 
-    await this.agentService.mergePhaseWithCommitter({
+    await this.taskAgent.mergePhaseWithCommitter({
       repoRoot: gitContext.repoRoot,
       targetBranch,
       branches,
@@ -2836,7 +2861,7 @@ export class TaskRunner {
     let latestArchitectureReview: ArchitectureReviewSnapshot | null = null;
 
     try {
-      const result = await this.agentService.runTask({
+      const result = await this.taskAgent.runTask({
         plan: input.plan,
         task: input.task,
         planProgressContext,

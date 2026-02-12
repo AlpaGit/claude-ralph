@@ -110,6 +110,21 @@ export const DEFAULT_MODEL_BY_ROLE: Record<AgentRole, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Model resolver factory
+// ---------------------------------------------------------------------------
+
+/** Map of agent role to model ID, loaded from the model_config DB table. */
+export type ModelConfigMap = Map<AgentRole, string>;
+
+/**
+ * Build a {@link ModelResolver} that checks the given config map first,
+ * falling back to {@link DEFAULT_MODEL_BY_ROLE} when no override exists.
+ */
+export function createModelResolver(config: ModelConfigMap): ModelResolver {
+  return (role: AgentRole): string => config.get(role) ?? DEFAULT_MODEL_BY_ROLE[role];
+}
+
+// ---------------------------------------------------------------------------
 // Base Claude Agent SDK options
 // ---------------------------------------------------------------------------
 
