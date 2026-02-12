@@ -33,3 +33,9 @@ export type { IpcErrorDetailsProps } from "./ui/IpcErrorDetails";
 
 export { ErrorToast } from "./ui/ErrorToast";
 export type { ErrorToastProps } from "./ui/ErrorToast";
+
+export { UOptionCard, OTHER_OPTION_VALUE } from "./ui/UOptionCard";
+export type { UOptionCardProps } from "./ui/UOptionCard";
+
+export { UProgressHeader } from "./ui/UProgressHeader";
+export type { UProgressHeaderProps } from "./ui/UProgressHeader";

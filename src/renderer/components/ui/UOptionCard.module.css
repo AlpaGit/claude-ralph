@@ -1,0 +1,212 @@
+/*
+ * UOptionCard CSS Module
+ * Selectable option card for multiple-choice discovery questions.
+ * Brutalist style with solid borders and clean typography.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Base card ────────────────────────────────────────── */
+
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  position: relative;
+  padding: var(--space-md) var(--space-md);
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.card:hover:not(.disabled) {
+  transform: scale(1.02);
+}
+
+.card:active:not(.disabled) {
+  transform: scale(1);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: 2px;
+}
+
+/* ── Selected state ───────────────────────────────────── */
+
+.selected {
+  border-color: var(--color-wizard-active-border);
+  background: var(--color-wizard-active-bg);
+  animation: selectPulse 0.3s ease-out;
+}
+
+@keyframes selectPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+  }
+}
+
+/* ── Disabled state ───────────────────────────────────── */
+
+.disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+/* ── Indicator (radio / checkbox) ─────────────────────── */
+
+.indicator {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 2px solid var(--color-panel-border);
+  background: var(--color-surface);
+  margin-top: 0.1rem;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.indicatorRadio {
+  border-radius: var(--radius-circle);
+}
+
+.indicatorCheckbox {
+  border-radius: 3px;
+}
+
+.selected .indicator {
+  border-color: var(--color-wizard-active-border);
+  background: var(--color-accent-2);
+}
+
+/* ── Inner mark (dot for radio, check for checkbox) ───── */
+
+.indicatorMark {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.selected .indicatorMark {
+  opacity: 1;
+}
+
+/* Radio dot */
+.indicatorRadio .indicatorMark {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: var(--radius-circle);
+  background: var(--color-white);
+}
+
+/* Checkbox check */
+.indicatorCheckbox .indicatorMark {
+  width: 0.55rem;
+  height: 0.35rem;
+  border-left: 2px solid var(--color-white);
+  border-bottom: 2px solid var(--color-white);
+  transform: rotate(-45deg);
+  margin-top: -0.1rem;
+}
+
+/* ── Label text ───────────────────────────────────────── */
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text);
+}
+
+/* ── Recommended badge ────────────────────────────────── */
+
+.badge {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--color-accent-2);
+  background: var(--color-wizard-active-bg);
+  border: 1px solid var(--color-wizard-active-border);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Content wrapper ──────────────────────────────────── */
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* ── Other free-text input ───────────────────────────── */
+
+.otherInput {
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--color-text);
+  outline: none;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  animation: otherReveal 0.2s ease-out;
+}
+
+.otherInput::placeholder {
+  color: var(--color-muted);
+}
+
+.otherInput:focus {
+  border-color: var(--color-wizard-active-border);
+  box-shadow: 0 0 0 1px var(--color-wizard-active-border);
+}
+
+@keyframes otherReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.otherInput:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.selected .badge {
+  background: var(--color-white);
+}
