@@ -1505,3 +1505,13 @@ p4-06: Set up Playwright with Electron fixture for E2E tests   [DONE]
     - pretest:e2e: electron-vite build (ensures app is built before E2E tests)
     - test:e2e: npx playwright test --config playwright.config.ts
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+## p4-07 — Write E2E tests for plan CRUD flow
+**Status**: ✅ Done
+**Commit**: 4dc716f
+**Files changed**:
+- tests/e2e/plan-crud.e2e.ts (new — 614 lines, 8 E2E tests for plan CRUD lifecycle)
+- playwright.config.ts (modified — removed empty projects array for Playwright defaults)
+- tests/e2e/electron-fixture.ts (modified — ESM compatibility with import.meta.url)
+
+**Notes**: Comprehensive E2E test suite covering: empty state, create plan (seed via IPC), view detail (verify sections/tasks render), archive (confirm modal → verify archived list), unarchive (restore from archive), delete (confirm modal → verify removal), search/filter (by name and project path), and cancel-delete confirmation. Tests use direct SQLite seeding via Electron's evaluate API to bypass Claude Agent SDK. Serial execution mode ensures clean state between tests.
