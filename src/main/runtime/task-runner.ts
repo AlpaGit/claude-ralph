@@ -99,6 +99,12 @@ interface ArchitectureReviewSnapshot {
   findings: ArchitectureReviewFindingSnapshot[];
 }
 
+interface AutoApproveFollowupSummary {
+  approvedCount: number;
+  createdCount: number;
+  reusedCount: number;
+}
+
 interface PhaseWorktree {
   taskId: string;
   branchName: string;
@@ -1309,13 +1315,16 @@ export class TaskRunner {
       type: "info",
       level: "info",
       payload: {
-        message: `Approved follow-up proposal and created task ${result.taskId}.`,
+        message: result.created
+          ? `Approved follow-up proposal and created task ${result.taskId}.`
+          : `Approved follow-up proposal and linked to existing task ${result.taskId}.`,
         proposalId: input.proposalId,
-        taskId: result.taskId
+        taskId: result.taskId,
+        created: result.created
       }
     });
 
-    return { taskId: result.taskId };
+    return { taskId: result.taskId, created: result.created };
   }
 
   dismissTaskProposal(input: DismissTaskProposalInput): void {
@@ -2692,6 +2701,25 @@ export class TaskRunner {
     };
   }
 
+  private normalizeArchitectureFindingKeyPart(value: string): string {
+    return value.trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  private buildArchitectureFindingKey(
+    finding: ArchitectureReviewFindingSnapshot
+  ): string {
+    return createHash("sha1")
+      .update(
+        [
+          this.normalizeArchitectureFindingKeyPart(finding.rule),
+          this.normalizeArchitectureFindingKeyPart(finding.location),
+          this.normalizeArchitectureFindingKeyPart(finding.message),
+          this.normalizeArchitectureFindingKeyPart(finding.recommendedAction)
+        ].join("|")
+      )
+      .digest("hex");
+  }
+
   private createArchitectureFollowupProposals(input: {
     plan: RalphPlan;
     task: RalphTask;
@@ -2704,18 +2732,7 @@ export class TaskRunner {
 
     let createdCount = 0;
     for (const finding of input.review.findings) {
-      const findingKey = createHash("sha1")
-        .update(
-          [
-            input.task.id,
-            finding.severity,
-            finding.rule,
-            finding.location,
-            finding.message,
-            finding.recommendedAction
-          ].join("|")
-        )
-        .digest("hex");
+      const findingKey = this.buildArchitectureFindingKey(finding);
 
       const title = `Architecture follow-up: ${finding.rule} (${finding.location})`;
       const description = [
@@ -2762,6 +2779,48 @@ export class TaskRunner {
     }
 
     return createdCount;
+  }
+
+  private autoApproveArchitectureFollowupsForRun(input: {
+    planId: string;
+    runId: string;
+  }): AutoApproveFollowupSummary {
+    const candidates = this.db
+      .listTaskFollowupProposals(input.planId, ["proposed"])
+      .filter((proposal) => proposal.sourceRunId === input.runId);
+    if (candidates.length === 0) {
+      return {
+        approvedCount: 0,
+        createdCount: 0,
+        reusedCount: 0
+      };
+    }
+
+    let approvedCount = 0;
+    let createdCount = 0;
+    let reusedCount = 0;
+    for (const proposal of candidates) {
+      const result = this.db.approveTaskFollowupProposal({
+        planId: input.planId,
+        proposalId: proposal.id
+      });
+      if (!result) {
+        continue;
+      }
+
+      approvedCount += 1;
+      if (result.created) {
+        createdCount += 1;
+      } else {
+        reusedCount += 1;
+      }
+    }
+
+    return {
+      approvedCount,
+      createdCount,
+      reusedCount
+    };
   }
 
   private async executeRun(input: {
@@ -2946,6 +3005,24 @@ export class TaskRunner {
             })
           : 0;
         if (createdFollowups > 0) {
+          const autoApproveEnabled = this.db.getAppSettings().autoApprovePendingTasks;
+          const autoApproveSummary = autoApproveEnabled
+            ? this.autoApproveArchitectureFollowupsForRun({
+                planId: input.plan.id,
+                runId: input.runId
+              })
+            : null;
+
+          const defaultMessage =
+            `Architecture review produced ${createdFollowups} follow-up proposal(s). ` +
+            "Approve proposals from the plan detail view to add them to the checklist.";
+          const autoApproveMessage =
+            autoApproveSummary && autoApproveSummary.approvedCount > 0
+              ? `Architecture review produced ${createdFollowups} follow-up proposal(s). ` +
+                `Auto-approved ${autoApproveSummary.approvedCount} proposal(s): ` +
+                `${autoApproveSummary.createdCount} new task(s), ${autoApproveSummary.reusedCount} linked to existing task(s).`
+              : defaultMessage;
+
           this.emitEvent({
             runId: input.runId,
             planId: input.plan.id,
@@ -2955,9 +3032,8 @@ export class TaskRunner {
             payload: {
               kind: "architecture_followup_proposals",
               count: createdFollowups,
-              message:
-                `Architecture review produced ${createdFollowups} follow-up proposal(s). ` +
-                "Approve proposals from the plan detail view to add them to the checklist."
+              autoApproved: autoApproveSummary?.approvedCount ?? 0,
+              message: autoApproveEnabled ? autoApproveMessage : defaultMessage
             }
           });
         }

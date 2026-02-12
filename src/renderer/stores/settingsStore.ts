@@ -50,7 +50,7 @@ interface SettingsState {
   updateModelForRole: (role: AgentRole, modelId: string) => Promise<void>;
 
   /**
-   * Update persisted app settings (Discord webhook + queue mode).
+   * Update persisted app settings (Discord webhook + queue mode + follow-up approval mode).
    */
   updateAppSettings: (input: AppSettings) => Promise<void>;
 }
@@ -68,6 +68,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   appSettings: {
     discordWebhookUrl: "",
     queueParallelEnabled: true,
+    autoApprovePendingTasks: false,
   },
   error: null,
 

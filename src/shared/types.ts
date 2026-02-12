@@ -250,6 +250,7 @@ export interface ApproveTaskProposalInput {
 
 export interface ApproveTaskProposalResponse {
   taskId: string;
+  created: boolean;
 }
 
 export interface DismissTaskProposalInput {
@@ -437,12 +438,15 @@ export interface AppSettings {
   discordWebhookUrl: string;
   /** Whether run-all executes runnable tasks in parallel phases. False forces sequential execution. */
   queueParallelEnabled: boolean;
+  /** Whether pass-with-notes follow-up proposals are automatically approved into tasks. */
+  autoApprovePendingTasks: boolean;
 }
 
 /** Input for updating persisted application settings. */
 export interface UpdateAppSettingsInput {
   discordWebhookUrl: string;
   queueParallelEnabled: boolean;
+  autoApprovePendingTasks: boolean;
 }
 
 /** Lightweight summary of a discovery session for the resume dialog. */

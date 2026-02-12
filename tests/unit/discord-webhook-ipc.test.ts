@@ -50,7 +50,11 @@ const settingsInitialState = {
     committer: undefined,
   },
   loading: false,
-  appSettings: { discordWebhookUrl: "", queueParallelEnabled: true },
+  appSettings: {
+    discordWebhookUrl: "",
+    queueParallelEnabled: true,
+    autoApprovePendingTasks: false,
+  },
   error: null,
 };
 
@@ -120,6 +124,7 @@ describe("Discord webhook test — settingsStore integration", () => {
     api.getAppSettings.mockResolvedValue({
       discordWebhookUrl: "https://discord.com/api/webhooks/saved/url",
       queueParallelEnabled: true,
+      autoApprovePendingTasks: false,
     });
 
     await useSettingsStore.getState().loadSettings();
@@ -136,11 +141,13 @@ describe("Discord webhook test — settingsStore integration", () => {
     await useSettingsStore.getState().updateAppSettings({
       discordWebhookUrl: "https://discord.com/api/webhooks/new/url",
       queueParallelEnabled: true,
+      autoApprovePendingTasks: false,
     });
 
     expect(api.updateAppSettings).toHaveBeenCalledWith({
       discordWebhookUrl: "https://discord.com/api/webhooks/new/url",
       queueParallelEnabled: true,
+      autoApprovePendingTasks: false,
     });
     expect(useSettingsStore.getState().appSettings.discordWebhookUrl).toBe(
       "https://discord.com/api/webhooks/new/url"
@@ -173,6 +180,7 @@ describe("Discord webhook test — simulated UI flow", () => {
     api.getAppSettings.mockResolvedValue({
       discordWebhookUrl: "https://discord.com/api/webhooks/existing/url",
       queueParallelEnabled: true,
+      autoApprovePendingTasks: false,
     });
     await useSettingsStore.getState().loadSettings();
 
@@ -194,7 +202,11 @@ describe("Discord webhook test — simulated UI flow", () => {
   it("simulates test-webhook with unsaved URL (user typed but didn't save)", async () => {
     // Settings has empty URL
     api.getModelConfig.mockResolvedValue([]);
-    api.getAppSettings.mockResolvedValue({ discordWebhookUrl: "", queueParallelEnabled: true });
+    api.getAppSettings.mockResolvedValue({
+      discordWebhookUrl: "",
+      queueParallelEnabled: true,
+      autoApprovePendingTasks: false,
+    });
     await useSettingsStore.getState().loadSettings();
 
     // User types a new URL (local state in component, not saved yet)

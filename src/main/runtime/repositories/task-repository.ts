@@ -233,12 +233,15 @@ export class TaskRepository {
   /**
    * Approve a followup proposal: creates a new task from the proposal data,
    * marks the proposal as approved, and touches the parent plan's updated_at.
-   * Returns the new task ID, or null if the proposal was not found or not in 'proposed' state.
+   * If an equivalent pending/in-progress task already exists, links to it instead
+   * of creating a duplicate task row.
+   * Returns the target task ID + creation mode, or null if proposal was not found
+   * or not in 'proposed' state.
    */
   approveTaskFollowupProposal(input: {
     planId: string;
     proposalId: string;
-  }): { taskId: string } | null {
+  }): { taskId: string; created: boolean } | null {
     const transaction = this.conn.transaction(() => {
       const proposal = this.conn
         .prepare(
@@ -262,19 +265,67 @@ export class TaskRepository {
         return null;
       }
 
-      const maxOrdinalRow = this.conn
-        .prepare("SELECT MAX(ordinal) AS max_ordinal FROM tasks WHERE plan_id = @plan_id;")
-        .get({
-          plan_id: input.planId,
-        }) as { max_ordinal: number | null } | undefined;
-      const nextOrdinal = (maxOrdinalRow?.max_ordinal ?? 0) + 1;
-
-      const taskId = randomUUID();
       const now = nowIso();
-      const sourceTaskExists = this.conn
+      const existingTaskRow = this.conn
         .prepare(
           `
-          SELECT 1
+          SELECT id
+          FROM tasks
+          WHERE plan_id = @plan_id
+            AND status IN ('pending', 'in_progress')
+            AND (
+              technical_notes LIKE @finding_marker
+              OR (
+                title = @title
+                AND description = @description
+              )
+            )
+          LIMIT 1;
+        `,
+        )
+        .get({
+          plan_id: input.planId,
+          finding_marker: `%Follow-up finding key: ${proposal.finding_key}.%`,
+          title: proposal.title,
+          description: proposal.description,
+        }) as { id: string } | undefined;
+
+      if (existingTaskRow?.id) {
+        const updateResult = this.conn
+          .prepare(
+            `
+            UPDATE task_followup_proposals
+            SET status = 'approved',
+                approved_task_id = @approved_task_id,
+                updated_at = @updated_at
+            WHERE id = @id
+              AND plan_id = @plan_id
+              AND status = 'proposed';
+          `,
+          )
+          .run({
+            id: input.proposalId,
+            plan_id: input.planId,
+            approved_task_id: existingTaskRow.id,
+            updated_at: now,
+          });
+
+        if (updateResult.changes === 0) {
+          throw new Error(`Proposal approval race detected for proposal ${input.proposalId}.`);
+        }
+
+        this.conn.prepare("UPDATE plans SET updated_at = @updated_at WHERE id = @plan_id;").run({
+          plan_id: input.planId,
+          updated_at: now,
+        });
+
+        return { taskId: existingTaskRow.id, created: false };
+      }
+
+      const sourceTaskRow = this.conn
+        .prepare(
+          `
+          SELECT ordinal
           FROM tasks
           WHERE id = @task_id
             AND plan_id = @plan_id
@@ -284,7 +335,40 @@ export class TaskRepository {
         .get({
           task_id: proposal.source_task_id,
           plan_id: input.planId,
-        }) as { 1: number } | undefined;
+        }) as { ordinal: number } | undefined;
+      const sourceTaskOrdinal = sourceTaskRow?.ordinal ?? null;
+
+      let nextOrdinal: number;
+      if (sourceTaskOrdinal !== null) {
+        nextOrdinal = sourceTaskOrdinal + 1;
+        this.conn
+          .prepare(
+            `
+            UPDATE tasks
+            SET ordinal = ordinal + 1,
+                updated_at = @updated_at
+            WHERE plan_id = @plan_id
+              AND id <> @source_task_id
+              AND ordinal >= @insert_ordinal;
+          `,
+          )
+          .run({
+            plan_id: input.planId,
+            source_task_id: proposal.source_task_id,
+            insert_ordinal: nextOrdinal,
+            updated_at: now,
+          });
+      } else {
+        const maxOrdinalRow = this.conn
+          .prepare("SELECT MAX(ordinal) AS max_ordinal FROM tasks WHERE plan_id = @plan_id;")
+          .get({
+            plan_id: input.planId,
+          }) as { max_ordinal: number | null } | undefined;
+        nextOrdinal = (maxOrdinalRow?.max_ordinal ?? 0) + 1;
+      }
+
+      const taskId = randomUUID();
+      const sourceTaskExists = sourceTaskOrdinal !== null;
       const dependencies = sourceTaskExists ? [proposal.source_task_id] : [];
 
       this.conn
@@ -309,7 +393,10 @@ export class TaskRepository {
           description: proposal.description,
           dependencies_json: JSON.stringify(dependencies),
           acceptance_criteria_json: proposal.acceptance_criteria_json,
-          technical_notes: `${proposal.technical_notes}\n\nApproved from proposal ${proposal.id}.`,
+          technical_notes:
+            `${proposal.technical_notes}\n\n` +
+            `Follow-up finding key: ${proposal.finding_key}.\n` +
+            `Approved from proposal ${proposal.id}.`,
           created_at: now,
           updated_at: now,
         });
@@ -342,7 +429,7 @@ export class TaskRepository {
         updated_at: now,
       });
 
-      return { taskId };
+      return { taskId, created: true };
     });
 
     return transaction();

@@ -675,6 +675,113 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (comprehensive)", () => {
       expect(createdTask).toBeDefined();
       expect(createdTask!.status).toBe("pending");
       expect(createdTask!.dependencies).toContain("source-task");
+      expect(approval!.created).toBe(true);
+    });
+
+    it("should insert approved follow-up task immediately after source task", () => {
+      const planId = createTestPlan(db, {
+        tasks: [
+          { id: "source-task", ordinal: 1, title: "Source task" },
+          { id: "next-task", ordinal: 2, title: "Next task" }
+        ]
+      });
+
+      db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "finding-order",
+        title: "Architecture follow-up: ordering",
+        description: "Run this right after source task.",
+        severity: "low",
+        rule: "boundary",
+        location: "src/feature/file.ts",
+        message: "Order-sensitive follow-up.",
+        recommendedAction: "Apply follow-up right after source task.",
+        acceptanceCriteria: ["Follow-up task runs immediately after source task."],
+        technicalNotes: "Generated from architecture review."
+      });
+
+      const proposal = db.listTaskFollowupProposals(planId)[0];
+      const approval = db.approveTaskFollowupProposal({
+        planId,
+        proposalId: proposal.id
+      });
+
+      expect(approval).not.toBeNull();
+      expect(approval!.created).toBe(true);
+
+      const tasks = db.getTasks(planId);
+      const source = tasks.find((task) => task.id === "source-task");
+      const created = tasks.find((task) => task.id === approval!.taskId);
+      const shifted = tasks.find((task) => task.id === "next-task");
+
+      expect(source).toBeDefined();
+      expect(created).toBeDefined();
+      expect(shifted).toBeDefined();
+      expect(source!.ordinal).toBe(1);
+      expect(created!.ordinal).toBe(2);
+      expect(shifted!.ordinal).toBe(3);
+      expect(created!.dependencies).toContain("source-task");
+    });
+
+    it("should not create duplicate pending task when approving equivalent proposals", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "source-task", ordinal: 1, title: "Source task" }]
+      });
+
+      db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "dup-1",
+        title: "Architecture follow-up: dedupe",
+        description: "Equivalent follow-up task description.",
+        severity: "low",
+        rule: "duplication",
+        location: "src/a.ts",
+        message: "Duplicate note.",
+        recommendedAction: "Refactor once.",
+        acceptanceCriteria: ["Single task should exist."],
+        technicalNotes: "Generated from architecture review."
+      });
+      db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "dup-2",
+        title: "Architecture follow-up: dedupe",
+        description: "Equivalent follow-up task description.",
+        severity: "low",
+        rule: "duplication",
+        location: "src/b.ts",
+        message: "Duplicate note again.",
+        recommendedAction: "Refactor once.",
+        acceptanceCriteria: ["Single task should exist."],
+        technicalNotes: "Generated from architecture review."
+      });
+
+      const proposals = db.listTaskFollowupProposals(planId);
+      expect(proposals).toHaveLength(2);
+
+      const firstApproval = db.approveTaskFollowupProposal({
+        planId,
+        proposalId: proposals[0].id
+      });
+      expect(firstApproval).not.toBeNull();
+      expect(firstApproval!.created).toBe(true);
+
+      const secondApproval = db.approveTaskFollowupProposal({
+        planId,
+        proposalId: proposals[1].id
+      });
+      expect(secondApproval).not.toBeNull();
+      expect(secondApproval!.created).toBe(false);
+      expect(secondApproval!.taskId).toBe(firstApproval!.taskId);
+
+      const tasks = db.getTasks(planId);
+      const dedupeTasks = tasks.filter((task) => task.title === "Architecture follow-up: dedupe");
+      expect(dedupeTasks).toHaveLength(1);
     });
 
     it("should dismiss a proposal", () => {

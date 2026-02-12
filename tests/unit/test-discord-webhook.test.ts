@@ -229,7 +229,8 @@ describe("TaskRunner.testDiscordWebhook", () => {
     // Set a different URL in the database
     db.updateAppSettings({
       discordWebhookUrl: "https://different-url.com/webhook",
-      queueParallelEnabled: true
+      queueParallelEnabled: true,
+      autoApprovePendingTasks: false
     });
 
     const fetchMock = mockFetchOk();

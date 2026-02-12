@@ -180,6 +180,7 @@ export const updateAppSettingsInputSchema = z.object({
       "discordWebhookUrl must be empty or a valid URL.",
     ),
   queueParallelEnabled: z.boolean(),
+  autoApprovePendingTasks: z.boolean(),
 });
 
 export const discoveryResumeInputSchema = z.object({

@@ -61,6 +61,7 @@ interface AppSettingRow {
 
 const APP_SETTING_DISCORD_WEBHOOK_URL = "discord_webhook_url";
 const APP_SETTING_QUEUE_PARALLEL_ENABLED = "queue_parallel_enabled";
+const APP_SETTING_AUTO_APPROVE_PENDING_TASKS = "auto_approve_pending_tasks";
 
 // Row interfaces for plans, tasks, runs, and run events are defined in ./repositories/row-mappers.ts
 // CreateRunInput and UpdateRunInput are defined in ./repositories/run-repository.ts
@@ -477,7 +478,7 @@ export class AppDatabase {
   approveTaskFollowupProposal(input: {
     planId: string;
     proposalId: string;
-  }): { taskId: string } | null {
+  }): { taskId: string; created: boolean } | null {
     return this.taskRepo.approveTaskFollowupProposal(input);
   }
 
@@ -572,22 +573,28 @@ export class AppDatabase {
         `
         SELECT key, value, updated_at
         FROM app_settings
-        WHERE key IN (@webhook_key, @queue_parallel_key);
+        WHERE key IN (@webhook_key, @queue_parallel_key, @auto_approve_key);
       `,
       )
       .all({
         webhook_key: APP_SETTING_DISCORD_WEBHOOK_URL,
         queue_parallel_key: APP_SETTING_QUEUE_PARALLEL_ENABLED,
+        auto_approve_key: APP_SETTING_AUTO_APPROVE_PENDING_TASKS,
       }) as AppSettingRow[];
 
     const settingsMap = new Map(rows.map((row) => [row.key, row.value]));
     const queueParallelRaw = settingsMap.get(APP_SETTING_QUEUE_PARALLEL_ENABLED) ?? "1";
     const queueParallelEnabled =
       queueParallelRaw === "1" || queueParallelRaw.toLowerCase() === "true";
+    const autoApprovePendingRaw =
+      settingsMap.get(APP_SETTING_AUTO_APPROVE_PENDING_TASKS) ?? "0";
+    const autoApprovePendingTasks =
+      autoApprovePendingRaw === "1" || autoApprovePendingRaw.toLowerCase() === "true";
 
     return {
       discordWebhookUrl: settingsMap.get(APP_SETTING_DISCORD_WEBHOOK_URL) ?? "",
       queueParallelEnabled,
+      autoApprovePendingTasks,
     };
   }
 
@@ -616,6 +623,11 @@ export class AppDatabase {
       upsert.run({
         key: APP_SETTING_QUEUE_PARALLEL_ENABLED,
         value: input.queueParallelEnabled ? "1" : "0",
+        updated_at: updatedAt,
+      });
+      upsert.run({
+        key: APP_SETTING_AUTO_APPROVE_PENDING_TASKS,
+        value: input.autoApprovePendingTasks ? "1" : "0",
         updated_at: updatedAt,
       });
     });

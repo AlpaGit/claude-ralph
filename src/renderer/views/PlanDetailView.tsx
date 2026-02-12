@@ -190,7 +190,11 @@ export function PlanDetailView(): JSX.Element {
           planId: plan.id,
           proposalId
         });
-        toastService.success(`Follow-up task created: ${result.taskId.slice(0, 8)}...`);
+        toastService.success(
+          result.created
+            ? `Follow-up task created: ${result.taskId.slice(0, 8)}...`
+            : `Follow-up linked to existing task: ${result.taskId.slice(0, 8)}...`
+        );
         await loadPlan(plan.id);
       } catch (caught) {
         const message =

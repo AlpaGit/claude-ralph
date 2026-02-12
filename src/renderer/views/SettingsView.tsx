@@ -75,6 +75,7 @@ export function SettingsView(): JSX.Element {
   const updateAppSettings = useSettingsStore((s) => s.updateAppSettings);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
   const [queueParallelEnabled, setQueueParallelEnabled] = useState(true);
+  const [autoApprovePendingTasks, setAutoApprovePendingTasks] = useState(false);
 
   /* -- Load settings on mount -- */
   useEffect(() => {
@@ -84,7 +85,12 @@ export function SettingsView(): JSX.Element {
   useEffect(() => {
     setDiscordWebhookUrl(appSettings.discordWebhookUrl);
     setQueueParallelEnabled(appSettings.queueParallelEnabled);
-  }, [appSettings.discordWebhookUrl, appSettings.queueParallelEnabled]);
+    setAutoApprovePendingTasks(appSettings.autoApprovePendingTasks);
+  }, [
+    appSettings.autoApprovePendingTasks,
+    appSettings.discordWebhookUrl,
+    appSettings.queueParallelEnabled,
+  ]);
 
   /**
    * Handle model select change. Saves immediately via IPC.
@@ -97,6 +103,7 @@ export function SettingsView(): JSX.Element {
     void updateAppSettings({
       discordWebhookUrl: discordWebhookUrl.trim(),
       queueParallelEnabled,
+      autoApprovePendingTasks,
     });
   }
 
@@ -188,6 +195,19 @@ export function SettingsView(): JSX.Element {
             </label>
             <p className={styles.preferenceHint}>
               Disable this to force `Run All` to execute tasks sequentially (one at a time).
+            </p>
+            <label className={styles.preferenceCheckboxRow}>
+              <input
+                className={styles.preferenceCheckbox}
+                type="checkbox"
+                checked={autoApprovePendingTasks}
+                onChange={(event) => setAutoApprovePendingTasks(event.target.checked)}
+              />
+              <span>Auto-approve architecture follow-up tasks</span>
+            </label>
+            <p className={styles.preferenceHint}>
+              When enabled, `pass_with_notes` follow-up proposals are automatically approved and
+              added as pending tasks.
             </p>
             <button
               type="button"

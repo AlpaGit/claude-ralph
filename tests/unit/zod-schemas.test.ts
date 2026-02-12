@@ -1079,7 +1079,8 @@ describe("updateAppSettingsInputSchema", () => {
   it("accepts empty webhook URL (notifications disabled)", () => {
     const result = updateAppSettingsInputSchema.safeParse({
       discordWebhookUrl: "",
-      queueParallelEnabled: true
+      queueParallelEnabled: true,
+      autoApprovePendingTasks: false
     });
     expect(result.success).toBe(true);
   });
@@ -1087,7 +1088,8 @@ describe("updateAppSettingsInputSchema", () => {
   it("accepts valid webhook URL string", () => {
     const result = updateAppSettingsInputSchema.safeParse({
       discordWebhookUrl: "https://discord.com/api/webhooks/abc/def",
-      queueParallelEnabled: false
+      queueParallelEnabled: false,
+      autoApprovePendingTasks: true
     });
     expect(result.success).toBe(true);
   });
@@ -1095,7 +1097,8 @@ describe("updateAppSettingsInputSchema", () => {
   it("rejects non-url string webhook value", () => {
     const result = updateAppSettingsInputSchema.safeParse({
       discordWebhookUrl: "not-a-url",
-      queueParallelEnabled: true
+      queueParallelEnabled: true,
+      autoApprovePendingTasks: false
     });
     expect(result.success).toBe(false);
   });
@@ -1108,14 +1111,16 @@ describe("updateAppSettingsInputSchema", () => {
   it("rejects non-string discordWebhookUrl", () => {
     const result = updateAppSettingsInputSchema.safeParse({
       discordWebhookUrl: 42,
-      queueParallelEnabled: true
+      queueParallelEnabled: true,
+      autoApprovePendingTasks: false
     });
     expect(result.success).toBe(false);
   });
 
   it("rejects missing queueParallelEnabled", () => {
     const result = updateAppSettingsInputSchema.safeParse({
-      discordWebhookUrl: ""
+      discordWebhookUrl: "",
+      autoApprovePendingTasks: false
     });
     expect(result.success).toBe(false);
   });
@@ -1123,7 +1128,25 @@ describe("updateAppSettingsInputSchema", () => {
   it("rejects non-boolean queueParallelEnabled", () => {
     const result = updateAppSettingsInputSchema.safeParse({
       discordWebhookUrl: "",
-      queueParallelEnabled: "yes"
+      queueParallelEnabled: "yes",
+      autoApprovePendingTasks: false
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing autoApprovePendingTasks", () => {
+    const result = updateAppSettingsInputSchema.safeParse({
+      discordWebhookUrl: "",
+      queueParallelEnabled: true
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-boolean autoApprovePendingTasks", () => {
+    const result = updateAppSettingsInputSchema.safeParse({
+      discordWebhookUrl: "",
+      queueParallelEnabled: true,
+      autoApprovePendingTasks: "yes"
     });
     expect(result.success).toBe(false);
   });
@@ -1338,7 +1361,8 @@ describe("IPC handler validation (schema.parse rejects before handler)", () => {
     expect(() =>
       updateAppSettingsInputSchema.parse({
         discordWebhookUrl: { nested: "bad" },
-        queueParallelEnabled: true
+        queueParallelEnabled: true,
+        autoApprovePendingTasks: false
       })
     ).toThrow();
   });
