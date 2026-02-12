@@ -31,6 +31,23 @@ export class PlanParseError extends Error {
   }
 }
 
+/** Agent roles stored in the model_config table. */
+export type AgentRole = "discovery_specialist" | "plan_synthesis" | "task_execution";
+
+export interface ModelConfigRow {
+  id: string;
+  agent_role: AgentRole;
+  model_id: string;
+  updated_at: string;
+}
+
+export interface ModelConfigEntry {
+  id: string;
+  agentRole: AgentRole;
+  modelId: string;
+  updatedAt: string;
+}
+
 interface PlanRow {
   id: string;
   project_path: string;
@@ -546,6 +563,36 @@ export class AppDatabase {
     this.db
       .prepare("UPDATE plans SET archived_at = NULL, updated_at = ? WHERE id = ?;")
       .run(nowIso(), planId);
+  }
+
+  /**
+   * Return all model configuration rows (one per agent role).
+   */
+  getModelConfig(): ModelConfigEntry[] {
+    const rows = this.db
+      .prepare("SELECT id, agent_role, model_id, updated_at FROM model_config ORDER BY agent_role ASC;")
+      .all() as ModelConfigRow[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      agentRole: row.agent_role,
+      modelId: row.model_id,
+      updatedAt: row.updated_at
+    }));
+  }
+
+  /**
+   * Update the model ID for a specific agent role.
+   * Throws if the role does not exist in the model_config table.
+   */
+  updateModelForRole(role: AgentRole, modelId: string): void {
+    const result = this.db
+      .prepare("UPDATE model_config SET model_id = ?, updated_at = ? WHERE agent_role = ?;")
+      .run(modelId, nowIso(), role);
+
+    if (result.changes === 0) {
+      throw new Error(`Unknown agent role: ${role}`);
+    }
   }
 
   close(): void {
