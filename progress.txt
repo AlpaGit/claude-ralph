@@ -709,3 +709,27 @@ p2-05: Add model config IPC and Settings UI   [DONE]
     - Hover: accent-2 border color, focus-visible: 2px accent-2 outline with offset
     - Responsive: max-width 100% on mobile
   - Build and typecheck pass
+
+p2-06: Integrate model config into Agent SDK calls   [DONE]
+  - src/main/runtime/ralph-agent-service.ts
+    - ModelConfigMap type export: Map<AgentRole, string> mapping roles to model IDs
+    - Constructor: accepts optional ModelConfigMap, defaults to empty Map
+    - getModel(role) private helper: resolves model ID for a given AgentRole, returns
+      undefined when no config exists (SDK falls back to its default)
+    - Discovery specialist queries (runDiscoveryPrompt synthesis, runSpecialistAnalysis):
+      pass model from getModel("discovery_specialist") to query() options
+    - Plan synthesis queries (createPlan, getWizardGuidance, inferStack):
+      pass model from getModel("plan_synthesis") to query() options
+    - Task execution queries (runTask /clear and main task prompt):
+      pass model from getModel("task_execution") to query() options
+    - taskModel variable extracted in runTask() to share model across both query() calls
+  - src/main/runtime/task-runner.ts
+    - Import ModelConfigMap type from ralph-agent-service
+    - buildModelConfigMap() private method: reads db.getModelConfig() entries and builds
+      a Map<AgentRole, string> for RalphAgentService constructor
+    - Constructor: initializes agentService with buildModelConfigMap() instead of bare new
+    - refreshModelConfig() method: rebuilds RalphAgentService with fresh DB config,
+      replaces agentService reference via controlled type cast
+    - updateModelForRole(): now calls refreshModelConfig() after DB write so subsequent
+      SDK calls use the updated model immediately
+  - Build and typecheck pass
