@@ -25,6 +25,7 @@ import type {
 } from "@shared/types";
 import { MigrationRunner } from "./migrations/migration-runner";
 import { PlanRepository } from "./repositories/plan-repository";
+import { ProposalRepository } from "./repositories/proposal-repository";
 import { RunRepository } from "./repositories/run-repository";
 import type { CreateRunInput, UpdateRunInput } from "./repositories/run-repository";
 import { TaskRepository } from "./repositories/task-repository";
@@ -116,6 +117,7 @@ export class AppDatabase {
   private readonly planRepo: PlanRepository;
   private readonly taskRepo: TaskRepository;
   private readonly runRepo: RunRepository;
+  private readonly proposalRepo: ProposalRepository;
 
   constructor(dbPath: string, migrationsDir: string) {
     this.db = new Database(dbPath);
@@ -131,6 +133,7 @@ export class AppDatabase {
     this.planRepo = new PlanRepository(this.db, touchProjectBound);
     this.taskRepo = new TaskRepository(this.db);
     this.runRepo = new RunRepository(this.db);
+    this.proposalRepo = new ProposalRepository(this.db);
   }
 
   private parseProjectStackProfile(raw: string | null): ProjectStackProfile | null {
@@ -465,25 +468,25 @@ export class AppDatabase {
     acceptanceCriteria: string[];
     technicalNotes: string;
   }): boolean {
-    return this.taskRepo.createTaskFollowupProposal(input);
+    return this.proposalRepo.createTaskFollowupProposal(input);
   }
 
   listTaskFollowupProposals(
     planId: string,
     statuses?: TaskFollowupProposalStatus[],
   ): TaskFollowupProposal[] {
-    return this.taskRepo.listTaskFollowupProposals(planId, statuses);
+    return this.proposalRepo.listTaskFollowupProposals(planId, statuses);
   }
 
   approveTaskFollowupProposal(input: {
     planId: string;
     proposalId: string;
   }): { taskId: string; created: boolean } | null {
-    return this.taskRepo.approveTaskFollowupProposal(input);
+    return this.proposalRepo.approveTaskFollowupProposal(input);
   }
 
   dismissTaskFollowupProposal(input: { planId: string; proposalId: string }): boolean {
-    return this.taskRepo.dismissTaskFollowupProposal(input);
+    return this.proposalRepo.dismissTaskFollowupProposal(input);
   }
 
   countRunnableTasks(planId: string): number {

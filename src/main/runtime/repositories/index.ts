@@ -1,6 +1,12 @@
 export { Database } from "./database";
 export { PlanRepository } from "./plan-repository";
 export type { TouchProjectFn } from "./plan-repository";
+export { ProposalRepository } from "./proposal-repository";
+export type {
+  CreateProposalInput,
+  ApproveProposalInput,
+  DismissProposalInput,
+} from "./proposal-repository";
 export { TaskRepository } from "./task-repository";
 export { RunRepository, STALE_RUN_THRESHOLD_MS } from "./run-repository";
 export type { CreateRunInput, UpdateRunInput } from "./run-repository";
