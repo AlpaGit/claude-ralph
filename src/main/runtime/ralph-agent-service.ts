@@ -1067,7 +1067,7 @@ Strict workflow:
 1) Read PRD.md (or equivalent PRD context in repo).
 2) Read progress.txt.
 3) Implement only this task.
-4) Run dotnet build and required tests from PRD.
+4) Run build and required tests. Use the project's build and test commands as detected from project configuration files (package.json, Cargo.toml, Makefile, etc.) or as specified in the plan's technical notes.
 5) Commit with Ralph format.
 6) Append progress entry in Ralph format.
 7) Stop.
