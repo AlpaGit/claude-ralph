@@ -28,8 +28,10 @@ try {
 }
 
 describe.skipIf(!sqliteAvailable)("AppDatabase (in-memory)", () => {
+  /* eslint-disable @typescript-eslint/consistent-type-imports -- dynamic import() type annotations */
   let createMockDatabase: typeof import("../../test-utils/mock-database").createMockDatabase;
   type MockDatabase = import("../../test-utils/mock-database").MockDatabase;
+  /* eslint-enable @typescript-eslint/consistent-type-imports */
   let mock: MockDatabase;
 
   beforeEach(async () => {
@@ -64,7 +66,7 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (in-memory)", () => {
         acceptance_criteria: ["criterion1"],
         test_strategy: ["strategy1"],
         effort_estimate: "1 day",
-        checklist: []
+        checklist: [],
       },
       tasks: [
         {
@@ -74,9 +76,9 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (in-memory)", () => {
           description: "First task description",
           dependencies: [],
           acceptanceCriteria: ["AC1"],
-          technicalNotes: "Some notes"
-        }
-      ]
+          technicalNotes: "Some notes",
+        },
+      ],
     });
 
     const plan = mock.db.getPlan(planId);
@@ -109,9 +111,9 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (in-memory)", () => {
         acceptance_criteria: [],
         test_strategy: [],
         effort_estimate: "",
-        checklist: []
+        checklist: [],
       },
-      tasks: []
+      tasks: [],
     });
 
     const plans = mock.db.listPlans();
@@ -135,7 +137,7 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (in-memory)", () => {
         acceptance_criteria: [],
         test_strategy: [],
         effort_estimate: "",
-        checklist: []
+        checklist: [],
       },
       tasks: [
         {
@@ -145,9 +147,9 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (in-memory)", () => {
           description: "Desc",
           dependencies: [],
           acceptanceCriteria: [],
-          technicalNotes: ""
-        }
-      ]
+          technicalNotes: "",
+        },
+      ],
     });
 
     mock.db.updateTaskStatus("task-s1", "completed");

@@ -19,10 +19,7 @@ export function parseIpcError(caught: unknown): IpcError {
   if (jsonCandidate) {
     try {
       const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>;
-      if (
-        typeof parsed.message === "string" &&
-        typeof parsed.code === "string"
-      ) {
+      if (typeof parsed.message === "string" && typeof parsed.code === "string") {
         return parsed as unknown as IpcError;
       }
     } catch {
@@ -32,7 +29,7 @@ export function parseIpcError(caught: unknown): IpcError {
 
   return {
     message: rawMessage,
-    code: "UNKNOWN_ERROR"
+    code: "UNKNOWN_ERROR",
   };
 }
 

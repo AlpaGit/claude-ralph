@@ -25,7 +25,7 @@ function cn(...classes: (string | false | undefined | null)[]): string {
  */
 function buildTaskRunMap(runs: TaskRun[]): Map<string, TaskRun> {
   const sorted = [...runs].sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
   );
   const map = new Map<string, TaskRun>();
   for (const run of sorted) {
@@ -99,25 +99,25 @@ export function PlanDetailView(): JSX.Element {
 
   const latestRunByTask = useMemo(
     () => (plan ? buildTaskRunMap(plan.runs) : new Map<string, TaskRun>()),
-    [plan]
+    [plan],
   );
   const followupProposals = useMemo(
     () =>
-      ((plan?.taskProposals ?? []).filter(
-        (proposal) => proposal.status === "proposed"
-      ) as TaskFollowupProposal[]),
-    [plan]
+      (plan?.taskProposals ?? []).filter(
+        (proposal) => proposal.status === "proposed",
+      ) as TaskFollowupProposal[],
+    [plan],
   );
 
   const selectedRun = useMemo(
     () => (plan?.runs ?? []).find((run) => run.id === selectedRunId) ?? null,
-    [plan, selectedRunId]
+    [plan, selectedRunId],
   );
 
   /** Events filtered to the current plan only. */
   const planEvents = useMemo(
     () => (planId ? recentEvents.filter((e) => e.planId === planId) : []),
-    [recentEvents, planId]
+    [recentEvents, planId],
   );
 
   /* ── Expanded task IDs (collapsible cards) ────────────── */
@@ -151,7 +151,9 @@ export function PlanDetailView(): JSX.Element {
   }, []);
 
   /** Whether all tasks are currently expanded (for toggle button label). */
-  const allExpanded = plan ? plan.tasks.length > 0 && expandedTaskIds.size === plan.tasks.length : false;
+  const allExpanded = plan
+    ? plan.tasks.length > 0 && expandedTaskIds.size === plan.tasks.length
+    : false;
 
   /**
    * Auto-expand tasks with in_progress or failed status.
@@ -164,10 +166,7 @@ export function PlanDetailView(): JSX.Element {
       const next = new Set(prev);
       let changed = false;
       for (const task of plan.tasks) {
-        if (
-          (task.status === "in_progress" || task.status === "failed") &&
-          !next.has(task.id)
-        ) {
+        if ((task.status === "in_progress" || task.status === "failed") && !next.has(task.id)) {
           next.add(task.id);
           changed = true;
         }
@@ -187,7 +186,7 @@ export function PlanDetailView(): JSX.Element {
       try {
         const result = await api.approveTaskProposal({
           planId: plan.id,
-          proposalId
+          proposalId,
         });
         toastService.success(`Follow-up task created: ${result.taskId.slice(0, 8)}...`);
         await loadPlan(plan.id);
@@ -199,7 +198,7 @@ export function PlanDetailView(): JSX.Element {
         setProposalActionId(null);
       }
     },
-    [plan, loadPlan]
+    [plan, loadPlan],
   );
 
   const handleDismissProposal = useCallback(
@@ -212,7 +211,7 @@ export function PlanDetailView(): JSX.Element {
       try {
         await api.dismissTaskProposal({
           planId: plan.id,
-          proposalId
+          proposalId,
         });
         toastService.info("Follow-up proposal dismissed.");
         await loadPlan(plan.id);
@@ -224,7 +223,7 @@ export function PlanDetailView(): JSX.Element {
         setProposalActionId(null);
       }
     },
-    [plan, loadPlan]
+    [plan, loadPlan],
   );
 
   const handleRunTask = useCallback(
@@ -239,7 +238,7 @@ export function PlanDetailView(): JSX.Element {
         // Error will be surfaced by planStore if the plan reloads
       }
     },
-    [plan, selectRun]
+    [plan, selectRun],
   );
 
   const handleStartPlan = useCallback(async () => {
@@ -282,7 +281,7 @@ export function PlanDetailView(): JSX.Element {
         // Error will be surfaced by planStore if the plan reloads
       }
     },
-    [plan, selectRun]
+    [plan, selectRun],
   );
 
   const handleSkipTask = useCallback(
@@ -297,7 +296,7 @@ export function PlanDetailView(): JSX.Element {
         // Error will be surfaced on next plan reload
       }
     },
-    [plan, loadPlan]
+    [plan, loadPlan],
   );
 
   const handleAbortQueue = useCallback(async () => {
@@ -317,7 +316,7 @@ export function PlanDetailView(): JSX.Element {
       selectRun(runId);
       navigate(`/run/${runId}`);
     },
-    [selectRun, navigate]
+    [selectRun, navigate],
   );
 
   /* ── Loading state ───────────────────────────────────── */
@@ -416,9 +415,7 @@ export function PlanDetailView(): JSX.Element {
             <div className={styles.followupPanel}>
               <div className={styles.followupHeader}>
                 <h2>Architecture Follow-up Proposals</h2>
-                <span className={styles.followupCount}>
-                  {followupProposals.length} pending
-                </span>
+                <span className={styles.followupCount}>{followupProposals.length} pending</span>
               </div>
               <p className={styles.followupIntro}>
                 These notes came from architecture review (`pass_with_notes`). Approve to add a new

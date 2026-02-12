@@ -90,9 +90,7 @@ function PlanListItem({ plan, collapsed }: PlanListItemProps): JSX.Element {
   return (
     <NavLink
       to={`/plan/${plan.id}`}
-      className={({ isActive }) =>
-        cn(styles.planItem, isActive && styles.planItemActive)
-      }
+      className={({ isActive }) => cn(styles.planItem, isActive && styles.planItemActive)}
     >
       <span className={styles.planSummary}>{truncate(plan.summary, 40)}</span>
       <span className={styles.planMeta}>
@@ -149,13 +147,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
   }, [navigate]);
 
   return (
-    <aside
-      className={cn(
-        styles.sidebar,
-        collapsed && styles.sidebarCollapsed,
-        className
-      )}
-    >
+    <aside className={cn(styles.sidebar, collapsed && styles.sidebarCollapsed, className)}>
       {/* ── Brand ──────────────────────────────────────────── */}
       <div className={styles.brand}>
         <span className={styles.brandBadge}>R</span>
@@ -169,9 +161,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
             <NavLink
               to={item.to}
               end={item.end}
-              className={({ isActive }) =>
-                cn(styles.navLink, isActive && styles.navLinkActive)
-              }
+              className={({ isActive }) => cn(styles.navLink, isActive && styles.navLinkActive)}
               title={
                 collapsed
                   ? item.shortcutHint
@@ -197,27 +187,18 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
                   aria-label={planListOpen ? "Collapse plan list" : "Expand plan list"}
                 >
                   <span
-                    className={cn(
-                      styles.planChevron,
-                      planListOpen && styles.planChevronOpen
-                    )}
+                    className={cn(styles.planChevron, planListOpen && styles.planChevronOpen)}
                     aria-hidden="true"
                   >
                     {"\u25B6"}
                   </span>
-                  <span className={styles.planToggleLabel}>
-                    Recent Plans ({plansList.length})
-                  </span>
+                  <span className={styles.planToggleLabel}>Recent Plans ({plansList.length})</span>
                 </button>
 
                 {planListOpen && (
                   <div className={styles.planList} role="list">
                     {plansList.map((plan) => (
-                      <PlanListItem
-                        key={plan.id}
-                        plan={plan}
-                        collapsed={collapsed}
-                      />
+                      <PlanListItem key={plan.id} plan={plan} collapsed={collapsed} />
                     ))}
                   </div>
                 )}
@@ -228,11 +209,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
             {item.to === "/" && collapsed && plansList.length > 0 && (
               <div className={styles.planListCollapsed}>
                 {plansList.slice(0, 5).map((plan) => (
-                  <PlanListItem
-                    key={plan.id}
-                    plan={plan}
-                    collapsed={collapsed}
-                  />
+                  <PlanListItem key={plan.id} plan={plan} collapsed={collapsed} />
                 ))}
               </div>
             )}
@@ -250,7 +227,9 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
         onClick={handleNewPlan}
         title={collapsed ? "New Plan (Ctrl+N)" : "New Plan (Ctrl+N)"}
       >
-        <span className={styles.newPlanIcon} aria-hidden="true">+</span>
+        <span className={styles.newPlanIcon} aria-hidden="true">
+          +
+        </span>
         {!collapsed && <span>New Plan</span>}
       </button>
 
@@ -263,10 +242,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         <span
-          className={cn(
-            styles.collapseIcon,
-            collapsed && styles.collapseIconFlipped
-          )}
+          className={cn(styles.collapseIcon, collapsed && styles.collapseIconFlipped)}
           aria-hidden="true"
         >
           {"\u00AB"}

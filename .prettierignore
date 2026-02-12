@@ -1,0 +1,8 @@
+out/
+dist/
+node_modules/
+test-results/
+coverage/
+resources/
+package-lock.json
+*.md

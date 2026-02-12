@@ -19,7 +19,9 @@
   background: var(--color-panel);
   overflow-y: auto;
   overflow-x: hidden;
-  transition: width 150ms ease-in-out, min-width 150ms ease-in-out;
+  transition:
+    width 150ms ease-in-out,
+    min-width 150ms ease-in-out;
 }
 
 .sidebarCollapsed {
@@ -86,7 +88,9 @@
   color: var(--color-text);
   text-decoration: none;
   border: 2px solid transparent;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
   white-space: nowrap;
   overflow: hidden;
   -webkit-app-region: no-drag;
@@ -201,7 +205,9 @@
   text-decoration: none;
   color: var(--color-text);
   border: 1px solid transparent;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
   -webkit-app-region: no-drag;
 }
 
@@ -333,7 +339,9 @@
   background: var(--color-surface);
   color: var(--color-muted);
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }

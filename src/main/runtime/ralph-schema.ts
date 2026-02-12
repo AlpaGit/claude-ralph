@@ -6,7 +6,7 @@ export const technicalChecklistItemSchema = z.object({
   description: z.string().min(10),
   dependencies: z.array(z.string()),
   acceptanceCriteria: z.array(z.string().min(3)).min(1),
-  technicalNotes: z.string().min(5)
+  technicalNotes: z.string().min(5),
 });
 
 export const technicalPackSchema = z.object({
@@ -19,7 +19,7 @@ export const technicalPackSchema = z.object({
   acceptance_criteria: z.array(z.string().min(3)).min(1),
   test_strategy: z.array(z.string().min(3)).min(1),
   effort_estimate: z.string().min(3),
-  checklist: z.array(technicalChecklistItemSchema).min(1)
+  checklist: z.array(technicalChecklistItemSchema).min(1),
 });
 
 export type TechnicalPackOutput = z.infer<typeof technicalPackSchema>;
@@ -31,31 +31,31 @@ export const technicalPackJsonSchema = {
     summary: { type: "string" },
     architecture_notes: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     files_expected: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     dependencies: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     risks: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     assumptions: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     acceptance_criteria: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     test_strategy: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     effort_estimate: { type: "string" },
     checklist: {
@@ -69,13 +69,13 @@ export const technicalPackJsonSchema = {
           description: { type: "string" },
           dependencies: {
             type: "array",
-            items: { type: "string" }
+            items: { type: "string" },
           },
           acceptanceCriteria: {
             type: "array",
-            items: { type: "string" }
+            items: { type: "string" },
           },
-          technicalNotes: { type: "string" }
+          technicalNotes: { type: "string" },
         },
         required: [
           "id",
@@ -83,10 +83,10 @@ export const technicalPackJsonSchema = {
           "description",
           "dependencies",
           "acceptanceCriteria",
-          "technicalNotes"
-        ]
-      }
-    }
+          "technicalNotes",
+        ],
+      },
+    },
   },
   required: [
     "summary",
@@ -98,7 +98,6 @@ export const technicalPackJsonSchema = {
     "acceptance_criteria",
     "test_strategy",
     "effort_estimate",
-    "checklist"
-  ]
+    "checklist",
+  ],
 } as const;
-

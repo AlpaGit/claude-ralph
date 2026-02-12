@@ -32,7 +32,7 @@ function statusClass(status: string): string {
  */
 function taskRunMap(runs: TaskRun[]): Map<string, TaskRun> {
   const sorted = [...runs].sort(
-    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
   );
   const map = new Map<string, TaskRun>();
   for (const run of sorted) {
@@ -74,7 +74,7 @@ export function App(): JSX.Element {
         setError(message);
       }
     },
-    [reloadPlan]
+    [reloadPlan],
   );
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export function App(): JSX.Element {
         if (line.trim().length > 0) {
           setRunLogs((current) => ({
             ...current,
-            [event.runId]: [...(current[event.runId] ?? []), line]
+            [event.runId]: [...(current[event.runId] ?? []), line],
           }));
         }
       }
@@ -105,7 +105,7 @@ export function App(): JSX.Element {
         const todos = (event.payload as { todos?: TodoItem[] })?.todos ?? [];
         setRunTodos((current) => ({
           ...current,
-          [event.runId]: todos
+          [event.runId]: todos,
         }));
       }
 
@@ -126,7 +126,7 @@ export function App(): JSX.Element {
 
   const selectedRun = useMemo(
     () => (plan?.runs ?? []).find((run) => run.id === selectedRunId) ?? null,
-    [plan, selectedRunId]
+    [plan, selectedRunId],
   );
 
   const handleCreatePlan = async (): Promise<void> => {
@@ -141,7 +141,7 @@ export function App(): JSX.Element {
       setError(null);
       const created = await api.createPlan({
         prdText,
-        projectPath
+        projectPath,
       });
       await loadPlanFromId(created.planId);
     } catch (caught) {
@@ -166,7 +166,7 @@ export function App(): JSX.Element {
       setError(null);
       const result = await api.runTask({
         planId: plan.id,
-        taskId: task.id
+        taskId: task.id,
       });
       setSelectedRunId(result.runId);
     } catch (caught) {
@@ -188,7 +188,7 @@ export function App(): JSX.Element {
     try {
       setError(null);
       await api.runAll({
-        planId: plan.id
+        planId: plan.id,
       });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to run queue.";
@@ -220,8 +220,8 @@ export function App(): JSX.Element {
         <div className={styles.heroBadge}>RALPH ORCHESTRATOR</div>
         <h1 className={styles.heroTitle}>Discovery To Ralph Loop</h1>
         <p className={styles.heroDescription}>
-          Start with a short goal sentence, run an AI discovery interview, generate PRD input, then execute
-          checklist tasks one-by-one in isolated Ralph runs.
+          Start with a short goal sentence, run an AI discovery interview, generate PRD input, then
+          execute checklist tasks one-by-one in isolated Ralph runs.
         </p>
       </header>
 
@@ -331,7 +331,10 @@ export function App(): JSX.Element {
           <article className={`${styles.panel} ${styles.checklistPanel}`}>
             <div className={styles.panelHeader}>
               <h2>Checklist</h2>
-              <button className={`${styles.actionBtn} ${styles.secondary}`} onClick={() => void handleRunAll()}>
+              <button
+                className={`${styles.actionBtn} ${styles.secondary}`}
+                onClick={() => void handleRunAll()}
+              >
                 Démarrer le plan
               </button>
             </div>
@@ -350,7 +353,8 @@ export function App(): JSX.Element {
                     <div className={styles.metaRow}>
                       <span>ID: {task.id}</span>
                       <span>
-                        Depends on: {task.dependencies.length > 0 ? task.dependencies.join(", ") : "none"}
+                        Depends on:{" "}
+                        {task.dependencies.length > 0 ? task.dependencies.join(", ") : "none"}
                       </span>
                     </div>
                     {task.acceptanceCriteria.length > 0 ? (
@@ -362,7 +366,10 @@ export function App(): JSX.Element {
                     ) : null}
                     <p className={styles.notes}>{task.technicalNotes}</p>
                     <div className={styles.taskActions}>
-                      <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => void handleRunTask(task)}>
+                      <button
+                        className={`${styles.actionBtn} ${styles.primary}`}
+                        onClick={() => void handleRunTask(task)}
+                      >
                         Run Task
                       </button>
                       {lastRun ? (
@@ -386,8 +393,13 @@ export function App(): JSX.Element {
             <div className={styles.panelHeader}>
               <h2>Live Run</h2>
               <div className={styles.panelHeaderActions}>
-                {selectedRun ? <span className={statusClass(selectedRun.status)}>{selectedRun.status}</span> : null}
-                <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => void handleCancelSelectedRun()}>
+                {selectedRun ? (
+                  <span className={statusClass(selectedRun.status)}>{selectedRun.status}</span>
+                ) : null}
+                <button
+                  className={`${styles.actionBtn} ${styles.danger}`}
+                  onClick={() => void handleCancelSelectedRun()}
+                >
                   Cancel Run
                 </button>
               </div>
@@ -411,7 +423,9 @@ export function App(): JSX.Element {
                 </ul>
 
                 <h3>Streamed Logs</h3>
-                <pre className={styles.logBox}>{(runLogs[selectedRun.id] ?? []).join("") || "No streamed logs yet."}</pre>
+                <pre className={styles.logBox}>
+                  {(runLogs[selectedRun.id] ?? []).join("") || "No streamed logs yet."}
+                </pre>
 
                 {selectedRun.resultText ? (
                   <>

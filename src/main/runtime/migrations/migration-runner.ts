@@ -39,9 +39,9 @@ export class MigrationRunner {
   }
 
   private getAppliedMigrations(): Set<string> {
-    const rows = this.db
-      .prepare("SELECT name FROM schema_migrations ORDER BY name ASC;")
-      .all() as Array<{ name: string }>;
+    const rows = this.db.prepare("SELECT name FROM schema_migrations ORDER BY name ASC;").all() as {
+      name: string;
+    }[];
 
     return new Set(rows.map((row) => row.name));
   }
@@ -66,7 +66,7 @@ export class MigrationRunner {
       migrations.push({
         name: file,
         number: parseInt(match[1], 10),
-        path: join(this.migrationsDir, file)
+        path: join(this.migrationsDir, file),
       });
     }
 

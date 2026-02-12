@@ -62,26 +62,12 @@ export function USkeleton({
             ...overrideStyle,
             ...(isLast && width === undefined ? { width: "65%" } : {}),
           };
-          return (
-            <span
-              key={i}
-              className={baseClass}
-              style={lineStyle}
-              aria-hidden="true"
-            />
-          );
+          return <span key={i} className={baseClass} style={lineStyle} aria-hidden="true" />;
         })}
         <span className="sr-only">Loading...</span>
       </div>
     );
   }
 
-  return (
-    <span
-      className={baseClass}
-      style={overrideStyle}
-      role="status"
-      aria-label="Loading"
-    />
-  );
+  return <span className={baseClass} style={overrideStyle} role="status" aria-label="Loading" />;
 }

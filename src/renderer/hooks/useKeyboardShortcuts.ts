@@ -45,9 +45,7 @@ export interface ShortcutDefinition {
  * Adapts to macOS vs Windows/Linux conventions.
  */
 export function formatShortcutKeys(def: ShortcutDefinition): string {
-  const isMac =
-    typeof navigator !== "undefined" &&
-    /macintosh|mac os x/i.test(navigator.userAgent);
+  const isMac = typeof navigator !== "undefined" && /macintosh|mac os x/i.test(navigator.userAgent);
 
   const parts: string[] = [];
   if (def.ctrl) parts.push(isMac ? "\u2318" : "Ctrl");
@@ -107,10 +105,7 @@ function isInputFocused(event: KeyboardEvent): boolean {
  * @param shortcuts  Array of shortcut definitions to listen for.
  * @param enabled    Pass `false` to temporarily disable all shortcuts.
  */
-export function useKeyboardShortcuts(
-  shortcuts: ShortcutDefinition[],
-  enabled = true
-): void {
+export function useKeyboardShortcuts(shortcuts: ShortcutDefinition[], enabled = true): void {
   // Keep a stable ref to the latest shortcuts to avoid re-registering the
   // listener every time a handler function reference changes.
   const shortcutsRef = useRef(shortcuts);
@@ -143,7 +138,7 @@ export function useKeyboardShortcuts(
         return; // Only fire the first matching shortcut
       }
     },
-    [] // stable -- reads from ref
+    [], // stable -- reads from ref
   );
 
   useEffect(() => {

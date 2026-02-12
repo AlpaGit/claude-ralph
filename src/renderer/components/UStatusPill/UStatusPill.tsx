@@ -25,7 +25,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   running: "#d97706",
   queued: "#6b7280",
   skipped: "#9333ea",
-  cancelling: "#d97706"
+  cancelling: "#d97706",
 };
 
 const STATUS_BG_MAP: Record<string, string> = {
@@ -39,7 +39,7 @@ const STATUS_BG_MAP: Record<string, string> = {
   running: "#fde68a",
   queued: "#eceff1",
   skipped: "#f3e8ff",
-  cancelling: "#fde68a"
+  cancelling: "#fde68a",
 };
 
 export interface UStatusPillProps {
@@ -57,7 +57,7 @@ export function UStatusPill({
   status,
   label,
   showDot = true,
-  className
+  className,
 }: UStatusPillProps): JSX.Element {
   const normalizedStatus = status.toLowerCase().trim();
   const color = STATUS_COLOR_MAP[normalizedStatus] ?? "#6b7280";
@@ -68,7 +68,7 @@ export function UStatusPill({
 
   const cssVars: CSSProperties = {
     "--pill-color": color,
-    "--pill-bg": bg
+    "--pill-bg": bg,
   } as CSSProperties;
 
   return (

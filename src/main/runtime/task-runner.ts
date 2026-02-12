@@ -44,13 +44,13 @@ import type {
   SkipTaskInput,
   StartDiscoveryInput,
   TodoItem,
-  UpdateAppSettingsInput
+  UpdateAppSettingsInput,
 } from "@shared/types";
-import { AppDatabase } from "./app-database";
+import type { AppDatabase } from "./app-database";
 import {
   RalphAgentService,
   type ModelConfigMap,
-  type StackProfileStore
+  type StackProfileStore,
 } from "./ralph-agent-service";
 
 interface ActiveRun {
@@ -154,7 +154,10 @@ const CLAUDE_COAUTHOR_TRAILER = /co-authored-by:\s*.*claude/i;
 
 export class TaskRunner {
   private readonly activeRuns = new Map<string, ActiveRun>();
-  private readonly runCompletion = new Map<string, { promise: Promise<void>; resolve: () => void }>();
+  private readonly runCompletion = new Map<
+    string,
+    { promise: Promise<void>; resolve: () => void }
+  >();
   private readonly runningPlanQueues = new Set<string>();
   private readonly abortedPlanQueues = new Set<string>();
   private readonly discoverySessions = new Map<string, DiscoverySession>();
@@ -165,7 +168,7 @@ export class TaskRunner {
   constructor(
     private readonly db: AppDatabase,
     private readonly getWindow: () => BrowserWindow | null,
-    private readonly options: TaskRunnerOptions = {}
+    private readonly options: TaskRunnerOptions = {},
   ) {
     this.agentService = this.createAgentService();
     this.cleanupStaleRuns();
@@ -183,14 +186,16 @@ export class TaskRunner {
     }
 
     const subagentType =
-      typeof input.payload.subagent_type === "string" && input.payload.subagent_type.trim().length > 0
+      typeof input.payload.subagent_type === "string" &&
+      input.payload.subagent_type.trim().length > 0
         ? input.payload.subagent_type.trim()
         : "unknown";
     const stage =
       typeof input.payload.stage === "string" && input.payload.stage.trim().length > 0
         ? input.payload.stage.trim()
         : "unknown";
-    const description = typeof input.payload.description === "string" ? input.payload.description : "";
+    const description =
+      typeof input.payload.description === "string" ? input.payload.description : "";
     const prompt = typeof input.payload.prompt === "string" ? input.payload.prompt : "";
 
     const entry =
@@ -225,7 +230,8 @@ export class TaskRunner {
   private buildStackProfileStore(): StackProfileStore {
     return {
       read: (projectPath: string) => this.db.getProjectStackProfile(projectPath),
-      write: (projectPath: string, profile) => this.db.upsertProjectStackProfile(projectPath, profile)
+      write: (projectPath: string, profile) =>
+        this.db.upsertProjectStackProfile(projectPath, profile),
     };
   }
 
@@ -241,13 +247,13 @@ export class TaskRunner {
 
     const lines = history.map(
       (plan, index) =>
-        `${index + 1}. [${plan.status}] ${plan.summary} (id=${plan.id}, created=${plan.createdAt})`
+        `${index + 1}. [${plan.status}] ${plan.summary} (id=${plan.id}, created=${plan.createdAt})`,
     );
 
     return [
       "Project memory (recent plans for the same project path):",
       ...lines,
-      "Use this history to avoid redundant plans and preserve continuity."
+      "Use this history to avoid redundant plans and preserve continuity.",
     ].join("\n");
   }
 
@@ -269,7 +275,7 @@ export class TaskRunner {
 
   private composeDiscoveryAdditionalContext(
     userAdditionalContext: string,
-    projectPath: string
+    projectPath: string,
   ): string {
     const blocks: string[] = [];
     const trimmed = userAdditionalContext.trim();
@@ -306,7 +312,9 @@ export class TaskRunner {
     return this.db.listProjectMemory(input);
   }
 
-  async refreshProjectStackProfile(input: RefreshProjectStackProfileInput): Promise<ProjectMemoryItem> {
+  async refreshProjectStackProfile(
+    input: RefreshProjectStackProfileInput,
+  ): Promise<ProjectMemoryItem> {
     const project = this.db.getProjectMemoryItemById(input.projectId, 8);
     if (!project) {
       throw new Error(`Project not found: ${input.projectId}`);
@@ -314,7 +322,7 @@ export class TaskRunner {
 
     const refreshedProfile = await this.agentService.refreshStackProfile({
       projectPath: project.projectPath,
-      additionalContext: "Manual refresh requested from Project Memory view."
+      additionalContext: "Manual refresh requested from Project Memory view.",
     });
 
     this.db.upsertProjectStackProfile(project.projectPath, refreshedProfile);
@@ -341,7 +349,7 @@ export class TaskRunner {
 
   getRunEvents(
     runId: string,
-    options: { limit?: number; afterId?: string } = {}
+    options: { limit?: number; afterId?: string } = {},
   ): GetRunEventsResponse {
     return this.db.getRunEvents(runId, options);
   }
@@ -372,7 +380,7 @@ export class TaskRunner {
       additionalContext: input.additionalContext,
       answerHistory: [],
       round: 0,
-      latestState: null
+      latestState: null,
     };
 
     this.discoverySessions.set(sessionId, session);
@@ -380,13 +388,13 @@ export class TaskRunner {
       sessionId,
       type: "status",
       level: "info",
-      message: "Discovery started. Spawning dynamic analysis agents..."
+      message: "Discovery started. Spawning dynamic analysis agents...",
     });
 
     try {
       const discoveryAdditionalContext = this.composeDiscoveryAdditionalContext(
         input.additionalContext,
-        input.projectPath
+        input.projectPath,
       );
       const initialState = await this.agentService.startDiscovery({
         projectPath: input.projectPath,
@@ -400,10 +408,10 @@ export class TaskRunner {
               level: event.level,
               message: event.message,
               agent: event.agent,
-              details: event.details
+              details: event.details,
             });
-          }
-        }
+          },
+        },
       });
 
       // Check if cancelled while the discovery was running
@@ -414,7 +422,7 @@ export class TaskRunner {
       const fullState: DiscoveryInterviewState = {
         sessionId,
         round: session.round,
-        ...initialState
+        ...initialState,
       };
       session.latestState = fullState;
 
@@ -424,14 +432,14 @@ export class TaskRunner {
         projectPath: input.projectPath,
         seedSentence: input.seedSentence,
         additionalContext: input.additionalContext,
-        latestState: fullState
+        latestState: fullState,
       });
 
       this.emitDiscoveryEvent({
         sessionId,
         type: "completed",
         level: "info",
-        message: `Discovery round 1 completed. Readiness ${initialState.readinessScore}%.`
+        message: `Discovery round 1 completed. Readiness ${initialState.readinessScore}%.`,
       });
 
       return fullState;
@@ -443,7 +451,7 @@ export class TaskRunner {
           sessionId,
           type: "failed",
           level: "error",
-          message
+          message,
         });
       }
       this.cancelledDiscoveries.delete(sessionId);
@@ -461,21 +469,21 @@ export class TaskRunner {
     session.answerHistory.push(
       ...input.answers.map((answer) => ({
         questionId: answer.questionId,
-        answer: answer.answer
-      }))
+        answer: answer.answer,
+      })),
     );
 
     this.emitDiscoveryEvent({
       sessionId: session.id,
       type: "status",
       level: "info",
-      message: "Processing your answers and refining PRD direction..."
+      message: "Processing your answers and refining PRD direction...",
     });
 
     try {
       const discoveryAdditionalContext = this.composeDiscoveryAdditionalContext(
         session.additionalContext,
-        session.projectPath
+        session.projectPath,
       );
       const nextState = await this.agentService.continueDiscovery({
         projectPath: session.projectPath,
@@ -493,10 +501,10 @@ export class TaskRunner {
               level: event.level,
               message: event.message,
               agent: event.agent,
-              details: event.details
+              details: event.details,
             });
-          }
-        }
+          },
+        },
       });
 
       // Check if cancelled while the discovery was running
@@ -507,7 +515,7 @@ export class TaskRunner {
       const fullState: DiscoveryInterviewState = {
         sessionId: session.id,
         round: session.round,
-        ...nextState
+        ...nextState,
       };
       session.latestState = fullState;
 
@@ -516,14 +524,14 @@ export class TaskRunner {
         id: session.id,
         answerHistory: session.answerHistory,
         roundNumber: session.round,
-        latestState: fullState
+        latestState: fullState,
       });
 
       this.emitDiscoveryEvent({
         sessionId: session.id,
         type: "completed",
         level: "info",
-        message: `Discovery round ${session.round} completed. Readiness ${nextState.readinessScore}%.`
+        message: `Discovery round ${session.round} completed. Readiness ${nextState.readinessScore}%.`,
       });
 
       return fullState;
@@ -535,7 +543,7 @@ export class TaskRunner {
           sessionId: session.id,
           type: "failed",
           level: "error",
-          message
+          message,
         });
       }
       this.cancelledDiscoveries.delete(session.id);
@@ -554,7 +562,7 @@ export class TaskRunner {
       seedSentence: session.seedSentence,
       roundNumber: session.roundNumber,
       readinessScore: session.latestState.readinessScore,
-      updatedAt: session.updatedAt
+      updatedAt: session.updatedAt,
     }));
   }
 
@@ -569,7 +577,9 @@ export class TaskRunner {
       throw new Error(`Discovery session not found: ${sessionId}`);
     }
     if (dbSession.status !== "active") {
-      throw new Error(`Discovery session is not active: ${sessionId} (status: ${dbSession.status})`);
+      throw new Error(
+        `Discovery session is not active: ${sessionId} (status: ${dbSession.status})`,
+      );
     }
 
     // Hydrate in-memory session so continueDiscovery() works
@@ -580,7 +590,7 @@ export class TaskRunner {
       additionalContext: dbSession.additionalContext,
       answerHistory: dbSession.answerHistory,
       round: dbSession.roundNumber,
-      latestState: dbSession.latestState
+      latestState: dbSession.latestState,
     });
 
     return dbSession.latestState;
@@ -614,7 +624,7 @@ export class TaskRunner {
       sessionId: input.sessionId,
       type: "failed",
       level: "info",
-      message: "Discovery cancelled by user."
+      message: "Discovery cancelled by user.",
     });
 
     return { ok: true };
@@ -642,20 +652,18 @@ export class TaskRunner {
   }
 
   async createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
-    void this.postDiscordNotification(
-      {
-        speaker: this.displayRoleLabel("plan_synthesis"),
-        title: "Creating Plan",
-        description: "Generating technical plan from PRD input.",
-        level: "info",
-        fields: [
-          {
-            name: "Project Path",
-            value: input.projectPath || "(none provided)"
-          }
-        ]
-      }
-    );
+    void this.postDiscordNotification({
+      speaker: this.displayRoleLabel("plan_synthesis"),
+      title: "Creating Plan",
+      description: "Generating technical plan from PRD input.",
+      level: "info",
+      fields: [
+        {
+          name: "Project Path",
+          value: input.projectPath || "(none provided)",
+        },
+      ],
+    });
 
     let planResult: Awaited<ReturnType<RalphAgentService["createPlan"]>>;
     try {
@@ -663,18 +671,16 @@ export class TaskRunner {
       planResult = await this.agentService.createPlan({
         projectPath: input.projectPath,
         prdText: input.prdText,
-        projectHistoryContext
+        projectHistoryContext,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      void this.postDiscordNotification(
-        {
-          speaker: this.displayRoleLabel("plan_synthesis"),
-          title: "Plan Creation Failed",
-          description: this.truncateForDiscord(message, 800),
-          level: "error"
-        }
-      );
+      void this.postDiscordNotification({
+        speaker: this.displayRoleLabel("plan_synthesis"),
+        title: "Plan Creation Failed",
+        description: this.truncateForDiscord(message, 800),
+        level: "error",
+      });
       throw error;
     }
 
@@ -704,7 +710,7 @@ export class TaskRunner {
         description: item.description,
         dependencies: item.dependencies,
         acceptanceCriteria: item.acceptanceCriteria,
-        technicalNotes: item.technicalNotes
+        technicalNotes: item.technicalNotes,
       };
     });
 
@@ -728,21 +734,19 @@ export class TaskRunner {
       prdText: input.prdText,
       summary: planResult.summary,
       technicalPack: planResult.technicalPack,
-      tasks
+      tasks,
     });
 
-    void this.postDiscordNotification(
-      {
-        speaker: this.displayRoleLabel("plan_synthesis"),
-        title: "Plan Created",
-        description: this.truncateForDiscord(planResult.summary, 1200),
-        level: "info",
-        fields: [
-          { name: "Plan ID", value: planId, inline: true },
-          { name: "Tasks", value: String(tasks.length), inline: true }
-        ]
-      }
-    );
+    void this.postDiscordNotification({
+      speaker: this.displayRoleLabel("plan_synthesis"),
+      title: "Plan Created",
+      description: this.truncateForDiscord(planResult.summary, 1200),
+      level: "info",
+      fields: [
+        { name: "Plan ID", value: planId, inline: true },
+        { name: "Tasks", value: String(tasks.length), inline: true },
+      ],
+    });
 
     return { planId };
   }
@@ -751,7 +755,7 @@ export class TaskRunner {
     return await this.startTaskExecution({
       planId: input.planId,
       taskId: input.taskId,
-      startedMessage: "Task execution started."
+      startedMessage: "Task execution started.",
     });
   }
 
@@ -780,7 +784,7 @@ export class TaskRunner {
       planId: input.planId,
       taskId: input.taskId,
       status: "in_progress",
-      retryCount: input.retryCount
+      retryCount: input.retryCount,
     });
 
     this.db.updateTaskStatus(input.taskId, "in_progress");
@@ -797,8 +801,8 @@ export class TaskRunner {
         taskTitle: task.title,
         retryCount: input.retryCount ?? 0,
         phaseNumber: input.executionContext?.phaseNumber ?? null,
-        branchName: input.executionContext?.branchName ?? null
-      }
+        branchName: input.executionContext?.branchName ?? null,
+      },
     });
 
     this.emitEvent({
@@ -808,8 +812,8 @@ export class TaskRunner {
       type: "task_status",
       level: "info",
       payload: {
-        status: "in_progress"
-      }
+        status: "in_progress",
+      },
     });
 
     let resolveRun: () => void = () => undefined;
@@ -824,7 +828,7 @@ export class TaskRunner {
       plan,
       task,
       retryContext: input.retryContext,
-      executionContext: input.executionContext
+      executionContext: input.executionContext,
     });
 
     return { runId };
@@ -836,7 +840,7 @@ export class TaskRunner {
       this.emitQueueInfo(input.planId, reason);
       return {
         queued: 0,
-        reason
+        reason,
       };
     }
 
@@ -852,14 +856,10 @@ export class TaskRunner {
     if (trackedActiveRuns.length > 0) {
       const reason =
         "A task run is already in progress. Wait for it to finish or cancel it before starting the queue.";
-      this.emitQueueInfo(
-        input.planId,
-        reason,
-        "error"
-      );
+      this.emitQueueInfo(input.planId, reason, "error");
       return {
         queued: 0,
-        reason
+        reason,
       };
     }
 
@@ -869,14 +869,14 @@ export class TaskRunner {
           runId: run.id,
           status: "cancelled",
           endedAt: nowIso(),
-          errorText: "Cancelled (recovered orphaned in-progress run before queue start)"
+          errorText: "Cancelled (recovered orphaned in-progress run before queue start)",
         });
         this.db.updateTaskStatus(run.taskId, "pending");
       }
       this.db.updatePlanStatus(input.planId, "ready");
       this.emitQueueInfo(
         input.planId,
-        `Recovered ${orphanedRuns.length} orphaned in-progress run(s) before starting queue.`
+        `Recovered ${orphanedRuns.length} orphaned in-progress run(s) before starting queue.`,
       );
     }
 
@@ -886,7 +886,7 @@ export class TaskRunner {
       this.emitQueueInfo(input.planId, reason);
       return {
         queued: 0,
-        reason
+        reason,
       };
     }
 
@@ -903,7 +903,7 @@ export class TaskRunner {
       this.emitQueueInfo(input.planId, reason, "error");
       return {
         queued: 0,
-        reason
+        reason,
       };
     }
 
@@ -912,7 +912,7 @@ export class TaskRunner {
     });
 
     return {
-      queued: estimated
+      queued: estimated,
     };
   }
 
@@ -936,7 +936,7 @@ export class TaskRunner {
 
       const result = await Promise.race([
         interruptPromise.then(() => "interrupted" as const),
-        timeoutPromise
+        timeoutPromise,
       ]);
 
       if (result === "timeout") {
@@ -965,7 +965,7 @@ export class TaskRunner {
         runId,
         status: "cancelled",
         endedAt: nowIso(),
-        errorText: "Cancelled (forced after timeout)"
+        errorText: "Cancelled (forced after timeout)",
       });
 
       // Reset the task status back to pending so it can be re-run
@@ -981,8 +981,8 @@ export class TaskRunner {
         type: "cancelled",
         level: "info",
         payload: {
-          message: "Run cancelled (forced after timeout)."
-        }
+          message: "Run cancelled (forced after timeout).",
+        },
       });
     }
 
@@ -1012,7 +1012,7 @@ export class TaskRunner {
           runId: run.id,
           status: "cancelled",
           endedAt: nowIso(),
-          errorText: "Cancelled (stale run cleaned up on startup)"
+          errorText: "Cancelled (stale run cleaned up on startup)",
         });
 
         this.db.updateTaskStatus(run.taskId, "pending");
@@ -1021,7 +1021,9 @@ export class TaskRunner {
     }
 
     if (staleRuns.length > 0) {
-      console.info(`[TaskRunner] Cleaned up ${staleRuns.length} stale run(s) from previous session.`);
+      console.info(
+        `[TaskRunner] Cleaned up ${staleRuns.length} stale run(s) from previous session.`,
+      );
     }
   }
 
@@ -1042,7 +1044,9 @@ export class TaskRunner {
     }
 
     if (task.status !== "failed") {
-      throw new Error(`Task ${input.taskId} is not in a failed state (current: ${task.status}). Only failed tasks can be retried.`);
+      throw new Error(
+        `Task ${input.taskId} is not in a failed state (current: ${task.status}). Only failed tasks can be retried.`,
+      );
     }
 
     const failedRun = this.db.getLatestFailedRun(input.planId, input.taskId);
@@ -1050,7 +1054,9 @@ export class TaskRunner {
     const newRetryCount = previousRetryCount + 1;
 
     if (newRetryCount > MAX_RETRIES) {
-      throw new Error(`Task ${input.taskId} has reached the maximum retry limit (${MAX_RETRIES}). Consider skipping this task or adjusting the approach manually.`);
+      throw new Error(
+        `Task ${input.taskId} has reached the maximum retry limit (${MAX_RETRIES}). Consider skipping this task or adjusting the approach manually.`,
+      );
     }
 
     const previousError = failedRun?.errorText ?? "Unknown error from previous attempt.";
@@ -1061,8 +1067,8 @@ export class TaskRunner {
       retryCount: newRetryCount,
       retryContext: {
         retryCount: newRetryCount,
-        previousError
-      }
+        previousError,
+      },
     });
   }
 
@@ -1082,7 +1088,9 @@ export class TaskRunner {
     }
 
     if (task.status !== "failed") {
-      throw new Error(`Task ${input.taskId} is not in a failed state (current: ${task.status}). Only failed tasks can be skipped.`);
+      throw new Error(
+        `Task ${input.taskId} is not in a failed state (current: ${task.status}). Only failed tasks can be skipped.`,
+      );
     }
 
     this.db.updateTaskStatus(input.taskId, "skipped");
@@ -1104,8 +1112,8 @@ export class TaskRunner {
       level: "info",
       payload: {
         status: "skipped",
-        message: `Task ${input.taskId} skipped by user.`
-      }
+        message: `Task ${input.taskId} skipped by user.`,
+      },
     });
   }
 
@@ -1117,7 +1125,7 @@ export class TaskRunner {
 
     const result = this.db.approveTaskFollowupProposal({
       planId: input.planId,
-      proposalId: input.proposalId
+      proposalId: input.proposalId,
     });
     if (!result) {
       throw new Error(`Follow-up proposal not found or already processed: ${input.proposalId}`);
@@ -1137,8 +1145,8 @@ export class TaskRunner {
       payload: {
         message: `Approved follow-up proposal and created task ${result.taskId}.`,
         proposalId: input.proposalId,
-        taskId: result.taskId
-      }
+        taskId: result.taskId,
+      },
     });
 
     return { taskId: result.taskId };
@@ -1152,7 +1160,7 @@ export class TaskRunner {
 
     const changed = this.db.dismissTaskFollowupProposal({
       planId: input.planId,
-      proposalId: input.proposalId
+      proposalId: input.proposalId,
     });
     if (!changed) {
       throw new Error(`Follow-up proposal not found or already processed: ${input.proposalId}`);
@@ -1166,8 +1174,8 @@ export class TaskRunner {
       level: "info",
       payload: {
         message: "Follow-up proposal dismissed.",
-        proposalId: input.proposalId
-      }
+        proposalId: input.proposalId,
+      },
     });
   }
 
@@ -1205,8 +1213,8 @@ export class TaskRunner {
       type: "info",
       level: "info",
       payload: {
-        message: "Queue execution aborted by user."
-      }
+        message: "Queue execution aborted by user.",
+      },
     });
   }
 
@@ -1234,8 +1242,8 @@ export class TaskRunner {
       type: "info",
       level,
       payload: {
-        message
-      }
+        message,
+      },
     });
   }
 
@@ -1254,13 +1262,13 @@ export class TaskRunner {
       if (gitContext.mergeTargetBranch !== "main") {
         this.emitQueueInfo(
           planId,
-          `Branch "main" not found. Using "${gitContext.mergeTargetBranch}" as merge target for this queue.`
+          `Branch "main" not found. Using "${gitContext.mergeTargetBranch}" as merge target for this queue.`,
         );
       }
 
       this.emitQueueInfo(
         planId,
-        `Queue started. Runnable phases execute in parallel worktrees and merge into ${gitContext.mergeTargetBranch} after each phase.`
+        `Queue started. Runnable phases execute in parallel worktrees and merge into ${gitContext.mergeTargetBranch} after each phase.`,
       );
 
       let phaseNumber = 0;
@@ -1278,11 +1286,16 @@ export class TaskRunner {
         phaseNumber += 1;
         this.emitQueueInfo(
           planId,
-          `Starting phase ${phaseNumber} with ${phaseTasks.length} parallel task(s).`
+          `Starting phase ${phaseNumber} with ${phaseTasks.length} parallel task(s).`,
         );
 
-        const phaseWorktrees = await this.createPhaseWorktrees(plan, phaseNumber, phaseTasks, gitContext);
-        const phaseRuns: Array<{ runId: string; taskId: string }> = [];
+        const phaseWorktrees = await this.createPhaseWorktrees(
+          plan,
+          phaseNumber,
+          phaseTasks,
+          gitContext,
+        );
+        const phaseRuns: { runId: string; taskId: string }[] = [];
 
         try {
           for (const task of phaseTasks) {
@@ -1298,13 +1311,13 @@ export class TaskRunner {
               executionContext: {
                 workingDirectory: worktree.path,
                 branchName: worktree.branchName,
-                phaseNumber
-              }
+                phaseNumber,
+              },
             });
 
             phaseRuns.push({
               runId: run.runId,
-              taskId: task.id
+              taskId: task.id,
             });
           }
 
@@ -1315,7 +1328,7 @@ export class TaskRunner {
               phaseRuns.map(async (run) => {
                 await this.cancelRun({ runId: run.runId }).catch(() => ({ ok: false }));
                 await this.waitForRun(run.runId);
-              })
+              }),
             );
           }
 
@@ -1337,7 +1350,7 @@ export class TaskRunner {
           this.emitQueueInfo(
             planId,
             `Phase ${phaseNumber} stopped because ${unfinishedRuns.length} task(s) did not complete successfully.`,
-            "error"
+            "error",
           );
           await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
           break;
@@ -1350,13 +1363,13 @@ export class TaskRunner {
             planId,
             phaseNumber,
             phaseWorktrees.map((worktree) => worktree.branchName),
-            gitContext
+            gitContext,
           );
 
           await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, true);
           this.emitQueueInfo(
             planId,
-            `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`
+            `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`,
           );
         } catch (error) {
           await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
@@ -1378,7 +1391,10 @@ export class TaskRunner {
   }
 
   private async prepareQueueGitContext(plan: RalphPlan): Promise<QueueGitContext> {
-    const repoRootResult = await this.runGitCommand(["rev-parse", "--show-toplevel"], plan.projectPath);
+    const repoRootResult = await this.runGitCommand(
+      ["rev-parse", "--show-toplevel"],
+      plan.projectPath,
+    );
     const repoRoot = repoRootResult.stdout.trim();
     if (!repoRoot) {
       throw new Error("Unable to resolve repository root for queue execution.");
@@ -1389,7 +1405,7 @@ export class TaskRunner {
     const statusResult = await this.runGitCommand(["status", "--porcelain"], repoRoot);
     if (statusResult.stdout.trim().length > 0) {
       throw new Error(
-        "Repository still has uncommitted changes after automatic queue cleanup. Queue merges require a clean working tree in the main checkout."
+        "Repository still has uncommitted changes after automatic queue cleanup. Queue merges require a clean working tree in the main checkout.",
       );
     }
 
@@ -1417,7 +1433,7 @@ export class TaskRunner {
       repoRoot,
       mergeTargetBranch,
       originalBranch,
-      worktreeRoot
+      worktreeRoot,
     };
   }
 
@@ -1434,7 +1450,7 @@ export class TaskRunner {
 
     this.emitQueueInfo(
       planId,
-      "Repository has local changes. Creating an automatic pre-queue commit."
+      "Repository has local changes. Creating an automatic pre-queue commit.",
     );
 
     await this.runGitCommand(["add", "-A"], repoRoot);
@@ -1443,22 +1459,25 @@ export class TaskRunner {
     const commitMessage = `chore(queue): auto-commit workspace before run-all (${timestampToken})`;
     await this.runGitCommand(["commit", "--no-verify", "-m", commitMessage], repoRoot);
 
-    const commitHash = (await this.runGitCommand(["rev-parse", "--short", "HEAD"], repoRoot)).stdout.trim();
+    const commitHash = (
+      await this.runGitCommand(["rev-parse", "--short", "HEAD"], repoRoot)
+    ).stdout.trim();
     this.emitQueueInfo(
       planId,
-      `Created pre-queue auto-commit ${commitHash || "(hash unavailable)"}.`
+      `Created pre-queue auto-commit ${commitHash || "(hash unavailable)"}.`,
     );
 
     const statusAfterCommit = await this.runGitCommand(["status", "--porcelain"], repoRoot);
     if (statusAfterCommit.stdout.trim().length > 0) {
-      throw new Error(
-        "Repository still has uncommitted changes after automatic pre-queue commit."
-      );
+      throw new Error("Repository still has uncommitted changes after automatic pre-queue commit.");
     }
   }
 
   private async removeWindowsNulFileIfPresent(repoRoot: string): Promise<boolean> {
-    const nulStatusBefore = await this.runGitCommand(["status", "--porcelain", "--", "nul"], repoRoot);
+    const nulStatusBefore = await this.runGitCommand(
+      ["status", "--porcelain", "--", "nul"],
+      repoRoot,
+    );
     if (nulStatusBefore.stdout.trim().length === 0) {
       return false;
     }
@@ -1473,7 +1492,7 @@ export class TaskRunner {
           {
             cwd: repoRoot,
             windowsHide: true,
-            maxBuffer: 8 * 1024 * 1024
+            maxBuffer: 8 * 1024 * 1024,
           },
           (error, _stdout, stderr) => {
             if (error) {
@@ -1482,14 +1501,17 @@ export class TaskRunner {
               return;
             }
             resolve();
-          }
+          },
         );
       });
     } else {
       await rm(join(repoRoot, "nul"), { force: true });
     }
 
-    const nulStatusAfter = await this.runGitCommand(["status", "--porcelain", "--", "nul"], repoRoot);
+    const nulStatusAfter = await this.runGitCommand(
+      ["status", "--porcelain", "--", "nul"],
+      repoRoot,
+    );
     const hasUntrackedNul = nulStatusAfter.stdout
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -1506,7 +1528,7 @@ export class TaskRunner {
     plan: RalphPlan,
     phaseNumber: number,
     phaseTasks: RalphTask[],
-    gitContext: QueueGitContext
+    gitContext: QueueGitContext,
   ): Promise<PhaseWorktree[]> {
     const created: PhaseWorktree[] = [];
     const planToken = this.sanitizeToken(plan.id, 12);
@@ -1519,12 +1541,12 @@ export class TaskRunner {
         const branchName = `ralph/${planToken}/p${phaseNumber}-${index + 1}-${taskToken}`;
         const worktreePath = join(
           gitContext.worktreeRoot,
-          `phase-${phaseNumber}-${index + 1}-${taskToken}`
+          `phase-${phaseNumber}-${index + 1}-${taskToken}`,
         );
 
         await this.safeRunGitCommand(
           ["worktree", "remove", "--force", worktreePath],
-          gitContext.repoRoot
+          gitContext.repoRoot,
         );
         await rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
         await this.safeRunGitCommand(["worktree", "prune"], gitContext.repoRoot);
@@ -1532,7 +1554,7 @@ export class TaskRunner {
         const existingBranch = (
           await this.safeRunGitCommand(
             ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
-            gitContext.repoRoot
+            gitContext.repoRoot,
           )
         ).ok;
         if (existingBranch) {
@@ -1541,7 +1563,7 @@ export class TaskRunner {
 
         await this.runGitCommand(
           ["worktree", "add", "-b", branchName, worktreePath, gitContext.mergeTargetBranch],
-          gitContext.repoRoot
+          gitContext.repoRoot,
         );
         const baseCommit = (
           await this.runGitCommand(["rev-parse", "HEAD"], worktreePath)
@@ -1551,7 +1573,7 @@ export class TaskRunner {
           taskId: task.id,
           branchName,
           path: worktreePath,
-          baseCommit
+          baseCommit,
         });
       }
 
@@ -1566,18 +1588,18 @@ export class TaskRunner {
     planId: string,
     phaseNumber: number,
     branches: string[],
-    gitContext: QueueGitContext
+    gitContext: QueueGitContext,
   ): Promise<void> {
     const cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
     if (cleanResult.stdout.trim().length > 0) {
       throw new Error(
-        `Cannot merge phase ${phaseNumber}: main checkout contains uncommitted changes.`
+        `Cannot merge phase ${phaseNumber}: main checkout contains uncommitted changes.`,
       );
     }
 
     const currentBranchResult = await this.runGitCommand(
       ["rev-parse", "--abbrev-ref", "HEAD"],
-      gitContext.repoRoot
+      gitContext.repoRoot,
     );
     const currentBranch = currentBranchResult.stdout.trim();
     if (currentBranch !== gitContext.mergeTargetBranch) {
@@ -1586,21 +1608,19 @@ export class TaskRunner {
 
     this.emitQueueInfo(
       planId,
-      `Committer is merging phase ${phaseNumber} into ${gitContext.mergeTargetBranch} (${branches.length} branch(es)).`
+      `Committer is merging phase ${phaseNumber} into ${gitContext.mergeTargetBranch} (${branches.length} branch(es)).`,
     );
-    void this.postDiscordNotification(
-      {
-        speaker: this.displayRoleLabel("committer"),
-        title: `Queue Merge Started (Phase ${phaseNumber})`,
-        description: "Merging completed phase worktrees into target branch.",
-        level: "info",
-        fields: [
-          { name: "Plan", value: planId, inline: true },
-          { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
-          { name: "Branches", value: branches.join("\n") || "(none)" }
-        ]
-      }
-    );
+    void this.postDiscordNotification({
+      speaker: this.displayRoleLabel("committer"),
+      title: `Queue Merge Started (Phase ${phaseNumber})`,
+      description: "Merging completed phase worktrees into target branch.",
+      level: "info",
+      fields: [
+        { name: "Plan", value: planId, inline: true },
+        { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
+        { name: "Branches", value: branches.join("\n") || "(none)" },
+      ],
+    });
 
     const beforeHead = (
       await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
@@ -1613,8 +1633,8 @@ export class TaskRunner {
       phaseNumber,
       callbacks: {
         onLog: (line) => this.emitQueueInfo(planId, `[committer] ${line}`),
-        onQuery: () => undefined
-      }
+        onQuery: () => undefined,
+      },
     });
 
     const afterHead = (
@@ -1622,18 +1642,18 @@ export class TaskRunner {
     ).stdout.trim();
     if (beforeHead === afterHead) {
       throw new Error(
-        `Committer merge for phase ${phaseNumber} did not create any new commit on ${gitContext.mergeTargetBranch}.`
+        `Committer merge for phase ${phaseNumber} did not create any new commit on ${gitContext.mergeTargetBranch}.`,
       );
     }
 
     for (const branch of branches) {
       const merged = await this.safeRunGitCommand(
         ["merge-base", "--is-ancestor", branch, gitContext.mergeTargetBranch],
-        gitContext.repoRoot
+        gitContext.repoRoot,
       );
       if (!merged.ok) {
         throw new Error(
-          `Committer merge validation failed: branch "${branch}" is not an ancestor of "${gitContext.mergeTargetBranch}".`
+          `Committer merge validation failed: branch "${branch}" is not an ancestor of "${gitContext.mergeTargetBranch}".`,
         );
       }
     }
@@ -1641,29 +1661,27 @@ export class TaskRunner {
     await this.validateCommitRangePolicy(
       gitContext.repoRoot,
       `${beforeHead}..${afterHead}`,
-      `phase ${phaseNumber} merge`
+      `phase ${phaseNumber} merge`,
     );
-    void this.postDiscordNotification(
-      {
-        speaker: this.displayRoleLabel("committer"),
-        title: `Queue Merge Completed (Phase ${phaseNumber})`,
-        description: "All phase branches were merged and validated.",
-        level: "info",
-        fields: [
-          { name: "Plan", value: planId, inline: true },
-          { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
-          { name: "Before", value: beforeHead, inline: false },
-          { name: "After", value: afterHead, inline: false }
-        ]
-      }
-    );
+    void this.postDiscordNotification({
+      speaker: this.displayRoleLabel("committer"),
+      title: `Queue Merge Completed (Phase ${phaseNumber})`,
+      description: "All phase branches were merged and validated.",
+      level: "info",
+      fields: [
+        { name: "Plan", value: planId, inline: true },
+        { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
+        { name: "Before", value: beforeHead, inline: false },
+        { name: "After", value: afterHead, inline: false },
+      ],
+    });
   }
 
   private async validatePhaseBranchCommits(
     planId: string,
     phaseNumber: number,
     phaseWorktrees: PhaseWorktree[],
-    gitContext: QueueGitContext
+    gitContext: QueueGitContext,
   ): Promise<void> {
     for (const phaseWorktree of phaseWorktrees) {
       const range = `${phaseWorktree.baseCommit}..${phaseWorktree.branchName}`;
@@ -1674,33 +1692,30 @@ export class TaskRunner {
 
       if (!Number.isFinite(commitCount) || commitCount <= 0) {
         throw new Error(
-          `Task ${phaseWorktree.taskId} on branch ${phaseWorktree.branchName} produced no commits. Committer must create a conventional commit.`
+          `Task ${phaseWorktree.taskId} on branch ${phaseWorktree.branchName} produced no commits. Committer must create a conventional commit.`,
         );
       }
 
       await this.validateCommitRangePolicy(
         gitContext.repoRoot,
         range,
-        `task ${phaseWorktree.taskId} (phase ${phaseNumber})`
+        `task ${phaseWorktree.taskId} (phase ${phaseNumber})`,
       );
     }
 
     this.emitQueueInfo(
       planId,
-      `Phase ${phaseNumber} commit policy validated (Conventional Commits + no Claude co-author trailers).`
+      `Phase ${phaseNumber} commit policy validated (Conventional Commits + no Claude co-author trailers).`,
     );
   }
 
   private async validateCommitRangePolicy(
     repoRoot: string,
     range: string,
-    contextLabel: string
+    contextLabel: string,
   ): Promise<void> {
     const logOutput = (
-      await this.runGitCommand(
-        ["log", "--format=%H%x1f%s%x1f%B%x1e", range],
-        repoRoot
-      )
+      await this.runGitCommand(["log", "--format=%H%x1f%s%x1f%B%x1e", range], repoRoot)
     ).stdout;
 
     const records = logOutput
@@ -1718,13 +1733,13 @@ export class TaskRunner {
 
       if (!CONVENTIONAL_COMMIT_HEADER.test(subject.trim())) {
         throw new Error(
-          `Commit ${hash} in ${contextLabel} does not follow Conventional Commits: "${subject}".`
+          `Commit ${hash} in ${contextLabel} does not follow Conventional Commits: "${subject}".`,
         );
       }
 
       if (CLAUDE_COAUTHOR_TRAILER.test(body)) {
         throw new Error(
-          `Commit ${hash} in ${contextLabel} includes a forbidden Claude co-author trailer.`
+          `Commit ${hash} in ${contextLabel} includes a forbidden Claude co-author trailer.`,
         );
       }
     }
@@ -1733,23 +1748,23 @@ export class TaskRunner {
   private async cleanupPhaseWorktrees(
     gitContext: QueueGitContext,
     phaseWorktrees: PhaseWorktree[],
-    deleteBranches: boolean
+    deleteBranches: boolean,
   ): Promise<void> {
     await Promise.all(
       phaseWorktrees.map(async (phaseWorktree) => {
         await this.safeRunGitCommand(
           ["worktree", "remove", "--force", phaseWorktree.path],
-          gitContext.repoRoot
+          gitContext.repoRoot,
         );
         await rm(phaseWorktree.path, { recursive: true, force: true }).catch(() => undefined);
 
         if (deleteBranches) {
           await this.safeRunGitCommand(
             ["branch", "-D", phaseWorktree.branchName],
-            gitContext.repoRoot
+            gitContext.repoRoot,
           );
         }
-      })
+      }),
     );
   }
 
@@ -1760,14 +1775,14 @@ export class TaskRunner {
 
     const restoreResult = await this.safeRunGitCommand(
       ["checkout", gitContext.originalBranch],
-      gitContext.repoRoot
+      gitContext.repoRoot,
     );
 
     if (!restoreResult.ok) {
       this.emitQueueInfo(
         planId,
         `Queue finished, but switching back to "${gitContext.originalBranch}" failed: ${restoreResult.stderr}`,
-        "error"
+        "error",
       );
     }
   }
@@ -1789,7 +1804,7 @@ export class TaskRunner {
 
   private async runGitCommand(
     args: string[],
-    cwd: string
+    cwd: string,
   ): Promise<{ stdout: string; stderr: string }> {
     return await new Promise((resolve, reject) => {
       execFile(
@@ -1798,43 +1813,44 @@ export class TaskRunner {
         {
           cwd,
           windowsHide: true,
-          maxBuffer: 32 * 1024 * 1024
+          maxBuffer: 32 * 1024 * 1024,
         },
         (error, stdout, stderr) => {
           const normalizedStdout = String(stdout ?? "");
           const normalizedStderr = String(stderr ?? "");
 
           if (error) {
-            const details = normalizedStderr.trim().length > 0 ? normalizedStderr.trim() : error.message;
+            const details =
+              normalizedStderr.trim().length > 0 ? normalizedStderr.trim() : error.message;
             reject(new Error(`git ${args.join(" ")} failed in ${cwd}: ${details}`));
             return;
           }
 
           resolve({
             stdout: normalizedStdout,
-            stderr: normalizedStderr
+            stderr: normalizedStderr,
           });
-        }
+        },
       );
     });
   }
 
   private async safeRunGitCommand(
     args: string[],
-    cwd: string
+    cwd: string,
   ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
     try {
       const result = await this.runGitCommand(args, cwd);
       return {
         ok: true,
         stdout: result.stdout,
-        stderr: result.stderr
+        stderr: result.stderr,
       };
     } catch (error) {
       return {
         ok: false,
         stdout: "",
-        stderr: error instanceof Error ? error.message : String(error)
+        stderr: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -1880,7 +1896,7 @@ export class TaskRunner {
               recommendedAction:
                 typeof findingRecord.recommendedAction === "string"
                   ? findingRecord.recommendedAction
-                  : ""
+                  : "",
             } as ArchitectureReviewFindingSnapshot;
           })
           .filter((finding): finding is ArchitectureReviewFindingSnapshot => {
@@ -1895,7 +1911,7 @@ export class TaskRunner {
       status,
       summary,
       confidence,
-      findings
+      findings,
     };
   }
 
@@ -1919,8 +1935,8 @@ export class TaskRunner {
             finding.rule,
             finding.location,
             finding.message,
-            finding.recommendedAction
-          ].join("|")
+            finding.recommendedAction,
+          ].join("|"),
         )
         .digest("hex");
 
@@ -1929,7 +1945,7 @@ export class TaskRunner {
         finding.message.trim(),
         finding.recommendedAction.trim().length > 0
           ? `Recommended action: ${finding.recommendedAction.trim()}`
-          : ""
+          : "",
       ]
         .filter((line) => line.length > 0)
         .join("\n");
@@ -1938,14 +1954,14 @@ export class TaskRunner {
         finding.recommendedAction.trim().length > 0
           ? `Apply this action: ${finding.recommendedAction.trim()}`
           : "Resolve the reported architecture note without widening scope.",
-        "Keep behavior stable and run relevant tests."
+        "Keep behavior stable and run relevant tests.",
       ];
       const technicalNotes = [
         `Source task: ${input.task.id}`,
         `Source run: ${input.runId}`,
         `Review status: ${input.review.status}`,
         `Review confidence: ${input.review.confidence}`,
-        `Review summary: ${input.review.summary}`
+        `Review summary: ${input.review.summary}`,
       ].join("\n");
 
       const inserted = this.db.createTaskFollowupProposal({
@@ -1961,7 +1977,7 @@ export class TaskRunner {
         message: finding.message,
         recommendedAction: finding.recommendedAction,
         acceptanceCriteria,
-        technicalNotes
+        technicalNotes,
       });
       if (inserted) {
         createdCount += 1;
@@ -2001,8 +2017,8 @@ export class TaskRunner {
               type: "log",
               level: "info",
               payload: {
-                line
-              }
+                line,
+              },
             });
           },
           onTodo: (todos: TodoItem[]) => {
@@ -2014,8 +2030,8 @@ export class TaskRunner {
               type: "todo_update",
               level: "info",
               payload: {
-                todos
-              }
+                todos,
+              },
             });
           },
           onSession: (newSessionId) => {
@@ -2023,7 +2039,7 @@ export class TaskRunner {
             this.db.updateRun({
               runId: input.runId,
               status: "in_progress",
-              sessionId: newSessionId
+              sessionId: newSessionId,
             });
           },
           onSubagent: (payload) => {
@@ -2039,7 +2055,7 @@ export class TaskRunner {
                 runId: input.runId,
                 planId: input.plan.id,
                 taskId: input.task.id,
-                payload: record
+                payload: record,
               });
             }
             const kind = typeof record?.kind === "string" ? record.kind : null;
@@ -2051,15 +2067,15 @@ export class TaskRunner {
               kind === "agent_stage"
                 ? "Agent stage update received."
                 : kind === "architecture_review"
-                ? "Architecture review result received."
-                : kind === "committer_summary"
-                  ? "Committer summary received."
-                  : "Subagent invocation detected.";
+                  ? "Architecture review result received."
+                  : kind === "committer_summary"
+                    ? "Committer summary received."
+                    : "Subagent invocation detected.";
 
             this.notifyDiscordForSubagentPayload({
               plan: input.plan,
               task: input.task,
-              payload
+              payload,
             });
 
             this.emitEvent({
@@ -2070,8 +2086,8 @@ export class TaskRunner {
               level: "info",
               payload: {
                 message,
-                data: payload
-              }
+                data: payload,
+              },
             });
           },
           onQuery: (queryHandle) => {
@@ -2079,8 +2095,8 @@ export class TaskRunner {
             if (active) {
               active.interrupt = queryHandle.interrupt;
             }
-          }
-        }
+          },
+        },
       });
 
       const active = this.activeRuns.get(input.runId);
@@ -2093,7 +2109,7 @@ export class TaskRunner {
           durationMs: Date.now() - startedAt,
           resultText: result.resultText,
           stopReason: result.stopReason,
-          totalCostUsd: result.totalCostUsd
+          totalCostUsd: result.totalCostUsd,
         });
         this.db.appendPlanProgressEntry({
           planId: input.plan.id,
@@ -2102,10 +2118,10 @@ export class TaskRunner {
           entryText: [
             `Task ${input.task.id} (${input.task.title}) was cancelled.`,
             result.stopReason ? `Stop reason: ${result.stopReason}` : "",
-            result.resultText.trim()
+            result.resultText.trim(),
           ]
             .filter((block) => block.length > 0)
-            .join("\n\n")
+            .join("\n\n"),
         });
 
         this.db.updateTaskStatus(input.task.id, "pending");
@@ -2118,8 +2134,8 @@ export class TaskRunner {
           type: "cancelled",
           level: "info",
           payload: {
-            message: "Run cancelled by user."
-          }
+            message: "Run cancelled by user.",
+          },
         });
       } else {
         this.db.updateRun({
@@ -2130,7 +2146,7 @@ export class TaskRunner {
           durationMs: result.durationMs ?? Date.now() - startedAt,
           resultText: result.resultText,
           stopReason: result.stopReason,
-          totalCostUsd: result.totalCostUsd
+          totalCostUsd: result.totalCostUsd,
         });
         this.db.appendPlanProgressEntry({
           planId: input.plan.id,
@@ -2139,17 +2155,17 @@ export class TaskRunner {
           entryText: [
             `Task ${input.task.id} (${input.task.title}) completed successfully.`,
             result.stopReason ? `Stop reason: ${result.stopReason}` : "",
-            result.resultText.trim()
+            result.resultText.trim(),
           ]
             .filter((block) => block.length > 0)
-            .join("\n\n")
+            .join("\n\n"),
         });
         const createdFollowups = latestArchitectureReview
           ? this.createArchitectureFollowupProposals({
               plan: input.plan,
               task: input.task,
               runId: input.runId,
-              review: latestArchitectureReview
+              review: latestArchitectureReview,
             })
           : 0;
         if (createdFollowups > 0) {
@@ -2164,8 +2180,8 @@ export class TaskRunner {
               count: createdFollowups,
               message:
                 `Architecture review produced ${createdFollowups} follow-up proposal(s). ` +
-                "Approve proposals from the plan detail view to add them to the checklist."
-            }
+                "Approve proposals from the plan detail view to add them to the checklist.",
+            },
           });
         }
 
@@ -2188,8 +2204,8 @@ export class TaskRunner {
           type: "task_status",
           level: "info",
           payload: {
-            status: "completed"
-          }
+            status: "completed",
+          },
         });
 
         this.emitEvent({
@@ -2201,8 +2217,8 @@ export class TaskRunner {
           payload: {
             stopReason: result.stopReason,
             totalCostUsd: result.totalCostUsd,
-            durationMs: result.durationMs
-          }
+            durationMs: result.durationMs,
+          },
         });
       }
     } catch (error) {
@@ -2214,7 +2230,7 @@ export class TaskRunner {
         sessionId,
         endedAt: nowIso(),
         durationMs: Date.now() - startedAt,
-        errorText: message
+        errorText: message,
       });
       this.db.appendPlanProgressEntry({
         planId: input.plan.id,
@@ -2222,8 +2238,8 @@ export class TaskRunner {
         status: "failed",
         entryText: [
           `Task ${input.task.id} (${input.task.title}) failed.`,
-          `Error: ${message}`
-        ].join("\n\n")
+          `Error: ${message}`,
+        ].join("\n\n"),
       });
 
       this.db.updateTaskStatus(input.task.id, "failed");
@@ -2236,8 +2252,8 @@ export class TaskRunner {
         type: "task_status",
         level: "error",
         payload: {
-          status: "failed"
-        }
+          status: "failed",
+        },
       });
 
       this.emitEvent({
@@ -2247,8 +2263,8 @@ export class TaskRunner {
         type: "failed",
         level: "error",
         payload: {
-          error: message
-        }
+          error: message,
+        },
       });
     } finally {
       this.activeRuns.delete(input.runId);
@@ -2308,7 +2324,7 @@ export class TaskRunner {
       .map((field) => ({
         name: this.truncateForDiscord(field.name, 256),
         value: this.truncateForDiscord(field.value, 1024),
-        inline: field.inline ?? false
+        inline: field.inline ?? false,
       }))
       .filter((field) => field.name.trim().length > 0 && field.value.trim().length > 0);
 
@@ -2318,11 +2334,11 @@ export class TaskRunner {
       color: this.toDiscordColor(input.level ?? "info"),
       timestamp: new Date().toISOString(),
       author: {
-        name: input.speaker
+        name: input.speaker,
       },
       footer: {
-        text: input.footer ?? "Ralph Desktop"
-      }
+        text: input.footer ?? "Ralph Desktop",
+      },
     };
 
     if (fields.length > 0) {
@@ -2334,15 +2350,17 @@ export class TaskRunner {
       avatar_url: this.speakerToAvatarUrl(input.speaker),
       embeds: [embed],
       allowed_mentions: {
-        parse: []
-      }
+        parse: [],
+      },
     };
   }
 
   private compactDiscordFields(
-    fields: Array<DiscordNotificationField | null | undefined>
+    fields: (DiscordNotificationField | null | undefined)[],
   ): DiscordNotificationField[] {
-    return fields.filter((field): field is DiscordNotificationField => field !== null && field !== undefined);
+    return fields.filter(
+      (field): field is DiscordNotificationField => field !== null && field !== undefined,
+    );
   }
 
   private async postDiscordNotification(input: DiscordNotificationInput): Promise<void> {
@@ -2362,10 +2380,10 @@ export class TaskRunner {
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
         },
         body: JSON.stringify(this.buildDiscordPayload(input)),
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -2381,15 +2399,17 @@ export class TaskRunner {
   }
 
   private notifyDiscordForDiscoveryEvent(event: Omit<DiscoveryEvent, "id" | "ts">): void {
-    const isSynthesisStatus =
-      event.type === "status" && /synth|synthesis/i.test(event.message);
-    if (event.type !== "agent" && event.type !== "completed" && event.type !== "failed" && !isSynthesisStatus) {
+    const isSynthesisStatus = event.type === "status" && /synth|synthesis/i.test(event.message);
+    if (
+      event.type !== "agent" &&
+      event.type !== "completed" &&
+      event.type !== "failed" &&
+      !isSynthesisStatus
+    ) {
       return;
     }
 
-    const speaker = event.agent
-      ? this.displayRoleLabel(event.agent)
-      : "Discovery Orchestrator";
+    const speaker = event.agent ? this.displayRoleLabel(event.agent) : "Discovery Orchestrator";
 
     void this.postDiscordNotification({
       speaker,
@@ -2398,8 +2418,8 @@ export class TaskRunner {
       level: event.level,
       fields: this.compactDiscordFields([
         { name: "Session", value: event.sessionId, inline: true },
-        event.agent ? { name: "Agent", value: event.agent, inline: true } : null
-      ])
+        event.agent ? { name: "Agent", value: event.agent, inline: true } : null,
+      ]),
     });
   }
 
@@ -2439,8 +2459,8 @@ export class TaskRunner {
           { name: "Role", value: role, inline: true },
           stopReason
             ? { name: "Stop Reason", value: this.truncateForDiscord(stopReason, 600) }
-            : null
-        ])
+            : null,
+        ]),
       });
       return;
     }
@@ -2474,20 +2494,20 @@ export class TaskRunner {
           {
             name: "Iteration",
             value: `${String(record.iteration ?? "?")}/${String(record.maxIterations ?? "?")}`,
-            inline: true
+            inline: true,
           },
           {
             name: "Confidence",
             value: String(review?.confidence ?? "n/a"),
-            inline: true
+            inline: true,
           },
           topFindings.length > 0
             ? {
-              name: "Top Findings",
-              value: this.truncateForDiscord(topFindings.join("\n"), 1000)
-            }
-            : null
-        ])
+                name: "Top Findings",
+                value: this.truncateForDiscord(topFindings.join("\n"), 1000),
+              }
+            : null,
+        ]),
       });
       return;
     }
@@ -2502,8 +2522,8 @@ export class TaskRunner {
           { name: "Plan", value: input.plan.id, inline: true },
           { name: "Task", value: input.task.id, inline: true },
           { name: "Head Before", value: String(record.headBefore ?? "unknown") },
-          { name: "Head After", value: String(record.headAfter ?? "unknown") }
-        ]
+          { name: "Head After", value: String(record.headAfter ?? "unknown") },
+        ],
       });
     }
   }
@@ -2512,7 +2532,7 @@ export class TaskRunner {
     const payload: RunEvent = {
       id: randomUUID(),
       ts: nowIso(),
-      ...event
+      ...event,
     };
 
     // Queue-level informational events have no backing run row and should
@@ -2533,7 +2553,7 @@ export class TaskRunner {
     const payload: DiscoveryEvent = {
       id: randomUUID(),
       ts: nowIso(),
-      ...event
+      ...event,
     };
 
     this.notifyDiscordForDiscoveryEvent(event);

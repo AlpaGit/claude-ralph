@@ -16,12 +16,12 @@ import type {
   RalphPlan,
   RalphTask,
   TodoItem,
-  WizardGuidanceResult
+  WizardGuidanceResult,
 } from "@shared/types";
 import {
   technicalPackJsonSchema,
   technicalPackSchema,
-  type TechnicalPackOutput
+  type TechnicalPackOutput,
 } from "./ralph-schema";
 
 /** Map of agent role to model ID, loaded from model_config DB table. */
@@ -99,7 +99,7 @@ interface TaskToolInvocation {
 interface DiscoveryOutput {
   directionSummary: string;
   inferredContext: DiscoveryInferredContext;
-  questions: Array<{
+  questions: {
     id: string;
     question: string;
     reason: string;
@@ -107,7 +107,7 @@ interface DiscoveryOutput {
     options: string[];
     recommendedOption: string;
     selectionMode: "single" | "multi";
-  }>;
+  }[];
   prdInputDraft: string;
   readinessScore: number;
   missingCriticalInfo: string[];
@@ -196,10 +196,13 @@ export interface StackProfileStore {
   write(projectPath: string, profile: StackProfileCache): Promise<void> | void;
 }
 
-const baseOptions: Pick<Options, "allowDangerouslySkipPermissions" | "permissionMode" | "settingSources"> = {
+const baseOptions: Pick<
+  Options,
+  "allowDangerouslySkipPermissions" | "permissionMode" | "settingSources"
+> = {
   allowDangerouslySkipPermissions: true,
   permissionMode: "bypassPermissions" as const,
-  settingSources: ["project", "local", "user"]
+  settingSources: ["project", "local", "user"],
 };
 
 const wizardGuidanceSchema = z.object({
@@ -213,9 +216,9 @@ const wizardGuidanceSchema = z.object({
     z.object({
       field: z.string().min(1),
       value: z.string().min(1),
-      reason: z.string().min(5)
-    })
-  )
+      reason: z.string().min(5),
+    }),
+  ),
 });
 
 const wizardGuidanceJsonSchema = {
@@ -228,7 +231,7 @@ const wizardGuidanceJsonSchema = {
     completenessScore: { type: "number" },
     missingPoints: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     promptFragment: { type: "string" },
     suggestedEdits: {
@@ -239,11 +242,11 @@ const wizardGuidanceJsonSchema = {
         properties: {
           field: { type: "string" },
           value: { type: "string" },
-          reason: { type: "string" }
+          reason: { type: "string" },
         },
-        required: ["field", "value", "reason"]
-      }
-    }
+        required: ["field", "value", "reason"],
+      },
+    },
   },
   required: [
     "nextQuestion",
@@ -252,8 +255,8 @@ const wizardGuidanceJsonSchema = {
     "completenessScore",
     "missingPoints",
     "promptFragment",
-    "suggestedEdits"
-  ]
+    "suggestedEdits",
+  ],
 } as const;
 
 const inferStackSchema = z.object({
@@ -264,11 +267,11 @@ const inferStackSchema = z.object({
     z.object({
       name: z.string().min(1),
       why: z.string().min(5),
-      tradeoffs: z.array(z.string())
-    })
+      tradeoffs: z.array(z.string()),
+    }),
   ),
   followUpQuestions: z.array(z.string()),
-  rationale: z.string().min(10)
+  rationale: z.string().min(10),
 });
 
 const inferStackJsonSchema = {
@@ -279,7 +282,7 @@ const inferStackJsonSchema = {
     confidence: { type: "number" },
     detectedSignals: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     alternatives: {
       type: "array",
@@ -291,17 +294,17 @@ const inferStackJsonSchema = {
           why: { type: "string" },
           tradeoffs: {
             type: "array",
-            items: { type: "string" }
-          }
+            items: { type: "string" },
+          },
         },
-        required: ["name", "why", "tradeoffs"]
-      }
+        required: ["name", "why", "tradeoffs"],
+      },
     },
     followUpQuestions: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
-    rationale: { type: "string" }
+    rationale: { type: "string" },
   },
   required: [
     "recommendedStack",
@@ -309,8 +312,8 @@ const inferStackJsonSchema = {
     "detectedSignals",
     "alternatives",
     "followUpQuestions",
-    "rationale"
-  ]
+    "rationale",
+  ],
 } as const;
 
 const discoveryOutputSchema = z.object({
@@ -321,7 +324,7 @@ const discoveryOutputSchema = z.object({
     scope: z.string().min(1),
     painPoints: z.array(z.string()),
     constraints: z.array(z.string()),
-    signals: z.array(z.string())
+    signals: z.array(z.string()),
   }),
   questions: z.array(
     z.object({
@@ -331,12 +334,12 @@ const discoveryOutputSchema = z.object({
       question_type: z.literal("multiple_choice"),
       options: z.array(z.string()).min(4).max(5),
       recommendedOption: z.string().min(1),
-      selectionMode: z.enum(["single", "multi"])
-    })
+      selectionMode: z.enum(["single", "multi"]),
+    }),
   ),
   prdInputDraft: z.string().min(120),
   readinessScore: z.number().min(0).max(100),
-  missingCriticalInfo: z.array(z.string())
+  missingCriticalInfo: z.array(z.string()),
 });
 
 const discoveryOutputJsonSchema = {
@@ -353,18 +356,18 @@ const discoveryOutputJsonSchema = {
         scope: { type: "string" },
         painPoints: {
           type: "array",
-          items: { type: "string" }
+          items: { type: "string" },
         },
         constraints: {
           type: "array",
-          items: { type: "string" }
+          items: { type: "string" },
         },
         signals: {
           type: "array",
-          items: { type: "string" }
-        }
+          items: { type: "string" },
+        },
       },
-      required: ["stack", "documentation", "scope", "painPoints", "constraints", "signals"]
+      required: ["stack", "documentation", "scope", "painPoints", "constraints", "signals"],
     },
     questions: {
       type: "array",
@@ -380,17 +383,25 @@ const discoveryOutputJsonSchema = {
           question_type: { type: "string", enum: ["multiple_choice"] },
           options: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 5 },
           recommendedOption: { type: "string" },
-          selectionMode: { type: "string", enum: ["single", "multi"] }
+          selectionMode: { type: "string", enum: ["single", "multi"] },
         },
-        required: ["id", "question", "reason", "question_type", "options", "recommendedOption", "selectionMode"]
-      }
+        required: [
+          "id",
+          "question",
+          "reason",
+          "question_type",
+          "options",
+          "recommendedOption",
+          "selectionMode",
+        ],
+      },
     },
     prdInputDraft: { type: "string" },
     readinessScore: { type: "number" },
     missingCriticalInfo: {
       type: "array",
-      items: { type: "string" }
-    }
+      items: { type: "string" },
+    },
   },
   required: [
     "directionSummary",
@@ -398,8 +409,8 @@ const discoveryOutputJsonSchema = {
     "questions",
     "prdInputDraft",
     "readinessScore",
-    "missingCriticalInfo"
-  ]
+    "missingCriticalInfo",
+  ],
 } as const;
 
 const specialistAnalysisSchema = z.object({
@@ -412,7 +423,7 @@ const specialistAnalysisSchema = z.object({
   stackHints: z.array(z.string()),
   documentationHints: z.array(z.string()),
   questions: z.array(z.string()),
-  confidence: z.number().min(0).max(100)
+  confidence: z.number().min(0).max(100),
 });
 
 const stackProfileCacheSchema = z.object({
@@ -422,7 +433,7 @@ const stackProfileCacheSchema = z.object({
   stackSummary: z.string().min(1),
   stackHints: z.array(z.string()),
   signals: z.array(z.string()),
-  confidence: z.number().min(0).max(100)
+  confidence: z.number().min(0).max(100),
 });
 
 const discoveryAgentPlanSchema = z.object({
@@ -433,11 +444,11 @@ const discoveryAgentPlanSchema = z.object({
         id: z.string().min(1),
         title: z.string().min(3),
         objective: z.string().min(20),
-        producesStackProfile: z.boolean()
-      })
+        producesStackProfile: z.boolean(),
+      }),
     )
     .min(1)
-    .max(MAX_DYNAMIC_DISCOVERY_AGENTS)
+    .max(MAX_DYNAMIC_DISCOVERY_AGENTS),
 });
 
 const discoveryAgentPlanJsonSchema = {
@@ -456,13 +467,13 @@ const discoveryAgentPlanJsonSchema = {
           id: { type: "string" },
           title: { type: "string" },
           objective: { type: "string" },
-          producesStackProfile: { type: "boolean" }
+          producesStackProfile: { type: "boolean" },
         },
-        required: ["id", "title", "objective", "producesStackProfile"]
-      }
-    }
+        required: ["id", "title", "objective", "producesStackProfile"],
+      },
+    },
   },
-  required: ["rationale", "jobs"]
+  required: ["rationale", "jobs"],
 } as const;
 
 const specialistAnalysisJsonSchema = {
@@ -472,37 +483,37 @@ const specialistAnalysisJsonSchema = {
     summary: { type: "string" },
     findings: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     signals: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     painPoints: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     constraints: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     scopeHints: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     stackHints: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     documentationHints: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
     questions: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
-    confidence: { type: "number" }
+    confidence: { type: "number" },
   },
   required: [
     "summary",
@@ -514,8 +525,8 @@ const specialistAnalysisJsonSchema = {
     "stackHints",
     "documentationHints",
     "questions",
-    "confidence"
-  ]
+    "confidence",
+  ],
 } as const;
 
 const architectureFindingSchema = z.object({
@@ -523,7 +534,7 @@ const architectureFindingSchema = z.object({
   location: z.string().min(1),
   rule: z.enum(["boundary", "srp", "duplication", "solid", "other"]),
   message: z.string().min(8),
-  recommendedAction: z.string().min(8)
+  recommendedAction: z.string().min(8),
 });
 
 const architectureReviewSchema = z.object({
@@ -531,7 +542,7 @@ const architectureReviewSchema = z.object({
   summary: z.string().min(10),
   findings: z.array(architectureFindingSchema),
   recommendedActions: z.array(z.string()),
-  confidence: z.number().min(0).max(100)
+  confidence: z.number().min(0).max(100),
 });
 
 type ArchitectureReview = z.infer<typeof architectureReviewSchema>;
@@ -542,7 +553,7 @@ const architectureReviewJsonSchema = {
   properties: {
     status: {
       type: "string",
-      enum: ["pass", "pass_with_notes", "needs_refactor", "blocked"]
+      enum: ["pass", "pass_with_notes", "needs_refactor", "blocked"],
     },
     summary: { type: "string" },
     findings: {
@@ -553,26 +564,26 @@ const architectureReviewJsonSchema = {
         properties: {
           severity: {
             type: "string",
-            enum: ["low", "medium", "high", "critical"]
+            enum: ["low", "medium", "high", "critical"],
           },
           location: { type: "string" },
           rule: {
             type: "string",
-            enum: ["boundary", "srp", "duplication", "solid", "other"]
+            enum: ["boundary", "srp", "duplication", "solid", "other"],
           },
           message: { type: "string" },
-          recommendedAction: { type: "string" }
+          recommendedAction: { type: "string" },
         },
-        required: ["severity", "location", "rule", "message", "recommendedAction"]
-      }
+        required: ["severity", "location", "rule", "message", "recommendedAction"],
+      },
     },
     recommendedActions: {
       type: "array",
-      items: { type: "string" }
+      items: { type: "string" },
     },
-    confidence: { type: "number" }
+    confidence: { type: "number" },
   },
-  required: ["status", "summary", "findings", "recommendedActions", "confidence"]
+  required: ["status", "summary", "findings", "recommendedActions", "confidence"],
 } as const;
 
 function extractTextDelta(message: unknown): string | null {
@@ -597,12 +608,12 @@ function extractTextDelta(message: unknown): string | null {
 }
 
 function extractAssistantToolBlocks(
-  message: unknown
-): Array<{ type: string; name?: string; input?: unknown }> {
+  message: unknown,
+): { type: string; name?: string; input?: unknown }[] {
   const maybe = message as {
     type?: string;
     message?: {
-      content?: Array<{ type: string; name?: string; input?: unknown }>;
+      content?: { type: string; name?: string; input?: unknown }[];
     };
   };
 
@@ -619,18 +630,23 @@ function parseTaskToolInvocation(input: unknown): TaskToolInvocation | null {
   }
 
   const record = input as Record<string, unknown>;
-  const subagentTypeRaw = typeof record.subagent_type === "string" ? record.subagent_type.trim() : "";
+  const subagentTypeRaw =
+    typeof record.subagent_type === "string" ? record.subagent_type.trim() : "";
   const description = typeof record.description === "string" ? record.description : "";
   const prompt = typeof record.prompt === "string" ? record.prompt : "";
 
-  if (subagentTypeRaw.length === 0 && description.trim().length === 0 && prompt.trim().length === 0) {
+  if (
+    subagentTypeRaw.length === 0 &&
+    description.trim().length === 0 &&
+    prompt.trim().length === 0
+  ) {
     return null;
   }
 
   return {
     subagentType: subagentTypeRaw.length > 0 ? subagentTypeRaw : "unknown",
     description,
-    prompt
+    prompt,
   };
 }
 
@@ -705,14 +721,21 @@ function sanitizeDiscoveryAgentId(raw: string, fallbackOrdinal: number): string 
   return base.slice(0, MAX_DISCOVERY_AGENT_ID_LENGTH);
 }
 
-function allocateUniqueDiscoveryAgentId(raw: string, fallbackOrdinal: number, used: Set<string>): string {
+function allocateUniqueDiscoveryAgentId(
+  raw: string,
+  fallbackOrdinal: number,
+  used: Set<string>,
+): string {
   const base = sanitizeDiscoveryAgentId(raw, fallbackOrdinal);
   let candidate = base;
   let suffix = 2;
 
   while (used.has(candidate)) {
     const suffixText = `-${suffix}`;
-    const trimmedBase = base.slice(0, Math.max(1, MAX_DISCOVERY_AGENT_ID_LENGTH - suffixText.length));
+    const trimmedBase = base.slice(
+      0,
+      Math.max(1, MAX_DISCOVERY_AGENT_ID_LENGTH - suffixText.length),
+    );
     candidate = `${trimmedBase}${suffixText}`;
     suffix += 1;
   }
@@ -730,9 +753,7 @@ function extractBashCommand(toolInput: Record<string, unknown>): string {
       return value;
     }
     if (Array.isArray(value)) {
-      const joined = value
-        .filter((part): part is string => typeof part === "string")
-        .join(" ");
+      const joined = value.filter((part): part is string => typeof part === "string").join(" ");
       if (joined.trim().length > 0) {
         return joined;
       }
@@ -758,7 +779,7 @@ async function runGitCommand(cwd: string, args: string[]): Promise<string> {
       {
         cwd,
         windowsHide: true,
-        maxBuffer: 16 * 1024 * 1024
+        maxBuffer: 16 * 1024 * 1024,
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -767,7 +788,7 @@ async function runGitCommand(cwd: string, args: string[]): Promise<string> {
           return;
         }
         resolve(String(stdout ?? ""));
-      }
+      },
     );
   });
 }
@@ -779,7 +800,7 @@ async function readGitHeadCommit(cwd: string): Promise<string | null> {
       ["rev-parse", "HEAD"],
       {
         cwd,
-        windowsHide: true
+        windowsHide: true,
       },
       (error, stdout) => {
         if (error) {
@@ -787,12 +808,16 @@ async function readGitHeadCommit(cwd: string): Promise<string | null> {
           return;
         }
         resolve(String(stdout ?? "").trim() || null);
-      }
+      },
     );
   });
 }
 
-async function validateCommitPolicyForRange(cwd: string, range: string, context: string): Promise<void> {
+async function validateCommitPolicyForRange(
+  cwd: string,
+  range: string,
+  context: string,
+): Promise<void> {
   const output = await runGitCommand(cwd, ["log", "--format=%H%x1f%s%x1f%B%x1e", range]);
   const records = output
     .split("\x1e")
@@ -808,12 +833,12 @@ async function validateCommitPolicyForRange(cwd: string, range: string, context:
     const body = bodyParts.join("\x1f");
     if (!CONVENTIONAL_COMMIT_HEADER.test(subject.trim())) {
       throw new Error(
-        `Commit policy violation in ${context}: commit ${hash} is not Conventional Commit compliant.`
+        `Commit policy violation in ${context}: commit ${hash} is not Conventional Commit compliant.`,
       );
     }
     if (CLAUDE_COAUTHOR_TRAILER.test(body)) {
       throw new Error(
-        `Commit policy violation in ${context}: commit ${hash} includes forbidden Claude co-author trailer.`
+        `Commit policy violation in ${context}: commit ${hash} includes forbidden Claude co-author trailer.`,
       );
     }
   }
@@ -826,7 +851,7 @@ function summarizeArchitectureFindings(review: ArchitectureReview): string {
   return review.findings
     .map(
       (finding, index) =>
-        `${index + 1}. [${finding.severity}] (${finding.rule}) ${finding.location}: ${finding.message}`
+        `${index + 1}. [${finding.severity}] (${finding.rule}) ${finding.location}: ${finding.message}`,
     )
     .join("\n");
 }
@@ -835,12 +860,12 @@ const ARCHITECTURE_STATUS_RANK: Record<ArchitectureReview["status"], number> = {
   pass: 0,
   pass_with_notes: 1,
   needs_refactor: 2,
-  blocked: 3
+  blocked: 3,
 };
 
 function mostRestrictiveStatus(
   left: ArchitectureReview["status"],
-  right: ArchitectureReview["status"]
+  right: ArchitectureReview["status"],
 ): ArchitectureReview["status"] {
   return ARCHITECTURE_STATUS_RANK[left] >= ARCHITECTURE_STATUS_RANK[right] ? left : right;
 }
@@ -863,7 +888,7 @@ function enforceArchitectureQualityGate(review: ArchitectureReview): Architectur
   const hasCritical = review.findings.some((finding) => finding.severity === "critical");
   const hasHigh = review.findings.some((finding) => finding.severity === "high");
   const hasMediumQualityIssue = review.findings.some(
-    (finding) => finding.severity === "medium" && qualityRules.has(finding.rule)
+    (finding) => finding.severity === "medium" && qualityRules.has(finding.rule),
   );
   const hasQualityFinding = review.findings.some((finding) => qualityRules.has(finding.rule));
   const missingActions = review.findings.length > 0 && review.recommendedActions.length === 0;
@@ -899,7 +924,7 @@ function enforceArchitectureQualityGate(review: ArchitectureReview): Architectur
   return {
     ...review,
     status: enforcedStatus,
-    summary: `${review.summary} [quality gate enforced: ${enforcementNotes.join(", ")}]`
+    summary: `${review.summary} [quality gate enforced: ${enforcementNotes.join(", ")}]`,
   };
 }
 
@@ -918,7 +943,7 @@ const STACK_SPECIALIST_JOB: SpecialistJob = {
   title: "Stack analysis",
   objective:
     "Infer the real technology stack, core architecture style, and likely integration points from repository and context.",
-  producesStackProfile: true
+  producesStackProfile: true,
 };
 
 const FALLBACK_DYNAMIC_DISCOVERY_JOBS: SpecialistJob[] = [
@@ -927,15 +952,15 @@ const FALLBACK_DYNAMIC_DISCOVERY_JOBS: SpecialistJob[] = [
     title: "PRD goal analysis",
     objective:
       "Clarify product objective, success criteria, and ambiguous scope decisions required for a complete pre-PRD draft.",
-    producesStackProfile: false
+    producesStackProfile: false,
   },
   {
     id: "delivery-risk-analyst",
     title: "Delivery risk analysis",
     objective:
       "Identify implementation blockers, operational constraints, and unresolved decisions that can change technical execution.",
-    producesStackProfile: false
-  }
+    producesStackProfile: false,
+  },
 ];
 
 const DEFAULT_MODEL_BY_ROLE: Record<AgentRole, string> = {
@@ -944,7 +969,7 @@ const DEFAULT_MODEL_BY_ROLE: Record<AgentRole, string> = {
   task_execution: "claude-opus-4-6",
   architecture_specialist: "claude-sonnet-4-5",
   tester: "claude-sonnet-4-5",
-  committer: "claude-sonnet-4-5"
+  committer: "claude-sonnet-4-5",
 };
 
 export class RalphAgentService {
@@ -999,7 +1024,10 @@ export class RalphAgentService {
     }
   }
 
-  private async writeStackProfileCache(projectPath: string, report: SpecialistAnalysis): Promise<void> {
+  private async writeStackProfileCache(
+    projectPath: string,
+    report: SpecialistAnalysis,
+  ): Promise<void> {
     const payload = this.buildStackProfilePayload(report);
 
     if (this.stackProfileStore) {
@@ -1032,11 +1060,14 @@ export class RalphAgentService {
       stackSummary: report.summary,
       stackHints: report.stackHints,
       signals: report.signals,
-      confidence: report.confidence
+      confidence: report.confidence,
     };
   }
 
-  private shouldRefreshStackAnalysis(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
+  private shouldRefreshStackAnalysis(
+    additionalContext: string,
+    latestAnswers: DiscoveryAnswer[],
+  ): boolean {
     const combined = [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
       .filter((value) => value.trim().length > 0)
       .join("\n");
@@ -1052,7 +1083,10 @@ export class RalphAgentService {
     return STACK_CHANGE_HINT_PATTERN.test(combined);
   }
 
-  private shouldForceFullDiscoveryRefresh(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
+  private shouldForceFullDiscoveryRefresh(
+    additionalContext: string,
+    latestAnswers: DiscoveryAnswer[],
+  ): boolean {
     const combined = [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
       .filter((value) => value.trim().length > 0)
       .join("\n");
@@ -1100,7 +1134,7 @@ Goal:
       prompt,
       cwd,
       maxTurns: 8,
-      callbacks: args.callbacks
+      callbacks: args.callbacks,
     });
 
     await this.writeStackProfileCache(normalizedPath, result.report);
@@ -1108,7 +1142,8 @@ Goal:
   }
 
   async startDiscovery(args: StartDiscoveryArgs): Promise<DiscoveryOutput> {
-    const hasProjectPath = args.projectPath.trim().length > 0 && existsSync(args.projectPath.trim());
+    const hasProjectPath =
+      args.projectPath.trim().length > 0 && existsSync(args.projectPath.trim());
     const cwd = resolveQueryCwd(args.projectPath);
     const stackCache = await this.readStackProfileCache(args.projectPath);
     const includeStackSpecialist = stackCache === null;
@@ -1141,7 +1176,7 @@ Goal:
       stackCache,
       stackRefreshReason: includeStackSpecialist
         ? "No stack cache found; running stack analysis."
-        : null
+        : null,
     });
   }
 
@@ -1150,7 +1185,10 @@ Goal:
     const stackCache = await this.readStackProfileCache(args.projectPath);
     const refreshContext = args.stackRefreshContext ?? args.additionalContext;
     const refreshStack = this.shouldRefreshStackAnalysis(refreshContext, args.latestAnswers);
-    const forceFullRefresh = this.shouldForceFullDiscoveryRefresh(refreshContext, args.latestAnswers);
+    const forceFullRefresh = this.shouldForceFullDiscoveryRefresh(
+      refreshContext,
+      args.latestAnswers,
+    );
     const canReusePriorContext = Boolean(args.previousState) && !refreshStack && !forceFullRefresh;
     const includeStackSpecialist = stackCache === null || refreshStack;
     const stackRefreshReason = canReusePriorContext
@@ -1159,9 +1197,9 @@ Goal:
         ? "Detected stack-change signal in latest answers/context. Re-running stack specialist."
         : forceFullRefresh
           ? "Detected significant context change in latest answers/context. Re-running full discovery analyses."
-        : stackCache === null
-          ? "No stack cache found; running stack analysis."
-          : null;
+          : stackCache === null
+            ? "No stack cache found; running stack analysis."
+            : null;
 
     const prompt = `
 Discovery continuation context for PRD interview:
@@ -1196,7 +1234,7 @@ Goal:
       stackCache,
       stackRefreshReason,
       skipAnalysisRefresh: canReusePriorContext,
-      carryForwardState: args.previousState ?? null
+      carryForwardState: args.previousState ?? null,
     });
   }
 
@@ -1208,7 +1246,7 @@ Goal:
       jobs.push({
         ...STACK_SPECIALIST_JOB,
         id: allocateUniqueDiscoveryAgentId(STACK_SPECIALIST_JOB.id, 1, usedIds),
-        producesStackProfile: true
+        producesStackProfile: true,
       });
     }
 
@@ -1219,7 +1257,7 @@ Goal:
       jobs.push({
         ...fallbackJob,
         id: allocateUniqueDiscoveryAgentId(fallbackJob.id, jobs.length + 1, usedIds),
-        producesStackProfile: false
+        producesStackProfile: false,
       });
     }
 
@@ -1229,7 +1267,7 @@ Goal:
         title: "General discovery analysis",
         objective:
           "Identify unresolved product, scope, and delivery decisions needed to produce a complete pre-PRD draft.",
-        producesStackProfile: false
+        producesStackProfile: false,
       });
     }
 
@@ -1247,20 +1285,19 @@ Goal:
   }): Promise<{ jobs: SpecialistJob[]; rationale: string }> {
     const projectPath = input.projectPath?.trim() ?? "";
     const hasProjectPath = projectPath.length > 0 && existsSync(projectPath);
-    const stackCacheSummary =
-      input.stackCache
-        ? JSON.stringify(
-            {
-              stackSummary: input.stackCache.stackSummary,
-              stackHints: input.stackCache.stackHints,
-              signals: input.stackCache.signals,
-              confidence: input.stackCache.confidence,
-              updatedAt: input.stackCache.updatedAt
-            },
-            null,
-            2
-          )
-        : "none";
+    const stackCacheSummary = input.stackCache
+      ? JSON.stringify(
+          {
+            stackSummary: input.stackCache.stackSummary,
+            stackHints: input.stackCache.stackHints,
+            signals: input.stackCache.signals,
+            confidence: input.stackCache.confidence,
+            updatedAt: input.stackCache.updatedAt,
+          },
+          null,
+          2,
+        )
+      : "none";
 
     const plannerPrompt = `
 You are the master discovery orchestrator for Ralph mode.
@@ -1306,16 +1343,21 @@ Planning rules:
         maxTurns: Math.max(6, Math.ceil(input.maxTurns * 0.45)),
         outputFormat: {
           type: "json_schema",
-          schema: discoveryAgentPlanJsonSchema
-        }
-      }
+          schema: discoveryAgentPlanJsonSchema,
+        },
+      },
     })) {
-      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      const resultMessage = message as {
+        type?: string;
+        structured_output?: unknown;
+        result?: string;
+      };
       if (resultMessage.type === "result") {
         if (typeof resultMessage.result === "string") {
           resultText = resultMessage.result;
         }
-        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
+        structuredOutput =
+          resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -1329,7 +1371,7 @@ Planning rules:
       id: allocateUniqueDiscoveryAgentId(job.id, index + 1, usedIds),
       title: job.title.trim(),
       objective: job.objective.trim(),
-      producesStackProfile: Boolean(job.producesStackProfile)
+      producesStackProfile: Boolean(job.producesStackProfile),
     }));
 
     if (!input.includeStackSpecialist) {
@@ -1348,7 +1390,7 @@ Planning rules:
         const stackJob: SpecialistJob = {
           ...STACK_SPECIALIST_JOB,
           id: allocateUniqueDiscoveryAgentId(STACK_SPECIALIST_JOB.id, jobs.length + 1, usedIds),
-          producesStackProfile: true
+          producesStackProfile: true,
         };
         if (jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
           jobs[jobs.length - 1] = stackJob;
@@ -1360,13 +1402,16 @@ Planning rules:
 
     if (jobs.length < MIN_DYNAMIC_DISCOVERY_AGENTS) {
       for (const fallbackJob of FALLBACK_DYNAMIC_DISCOVERY_JOBS) {
-        if (jobs.length >= MIN_DYNAMIC_DISCOVERY_AGENTS || jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
+        if (
+          jobs.length >= MIN_DYNAMIC_DISCOVERY_AGENTS ||
+          jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS
+        ) {
           break;
         }
         jobs.push({
           ...fallbackJob,
           id: allocateUniqueDiscoveryAgentId(fallbackJob.id, jobs.length + 1, usedIds),
-          producesStackProfile: false
+          producesStackProfile: false,
         });
       }
     }
@@ -1383,8 +1428,12 @@ Planning rules:
       const usedTrimmedIds = new Set(jobs.map((job) => job.id));
       const stackJob: SpecialistJob = {
         ...STACK_SPECIALIST_JOB,
-        id: allocateUniqueDiscoveryAgentId(STACK_SPECIALIST_JOB.id, jobs.length + 1, usedTrimmedIds),
-        producesStackProfile: true
+        id: allocateUniqueDiscoveryAgentId(
+          STACK_SPECIALIST_JOB.id,
+          jobs.length + 1,
+          usedTrimmedIds,
+        ),
+        producesStackProfile: true,
       };
       if (jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
         jobs[jobs.length - 1] = stackJob;
@@ -1395,7 +1444,7 @@ Planning rules:
 
     return {
       jobs,
-      rationale: parsedPlan.rationale.trim()
+      rationale: parsedPlan.rationale.trim(),
     };
   }
 
@@ -1411,7 +1460,7 @@ Planning rules:
       stackRefreshReason?: string | null;
       skipAnalysisRefresh?: boolean;
       carryForwardState?: DiscoveryInterviewState | null;
-    }
+    },
   ): Promise<DiscoveryOutput> {
     const includeStackSpecialist = options?.includeStackSpecialist ?? true;
     const skipAnalysisRefresh = options?.skipAnalysisRefresh ?? false;
@@ -1421,7 +1470,7 @@ Planning rules:
       callbacks?.onEvent({
         type: "status",
         level: "info",
-        message: options.stackRefreshReason
+        message: options.stackRefreshReason,
       });
     }
 
@@ -1431,7 +1480,7 @@ Planning rules:
         level: "info",
         message: this.stackProfileStore
           ? `Using cached stack profile from project profile store (updated ${new Date(options.stackCache.updatedAt).toLocaleString()}).`
-          : `Using cached stack profile (${STACK_PROFILE_DIR}/${STACK_PROFILE_FILE}) from ${new Date(options.stackCache.updatedAt).toLocaleString()}.`
+          : `Using cached stack profile (${STACK_PROFILE_DIR}/${STACK_PROFILE_FILE}) from ${new Date(options.stackCache.updatedAt).toLocaleString()}.`,
       });
     }
 
@@ -1444,7 +1493,7 @@ Planning rules:
         type: "status",
         level: "info",
         message:
-          "No major context change detected. Reusing prior discovery context and skipping deep analysis refresh."
+          "No major context change detected. Reusing prior discovery context and skipping deep analysis refresh.",
       });
 
       const carryForwardSnapshot = {
@@ -1459,12 +1508,10 @@ Planning rules:
         stackHints: [carryForwardState.inferredContext.stack],
         documentationHints: [carryForwardState.inferredContext.documentation],
         questions: carryForwardState.missingCriticalInfo,
-        confidence: normalizeConfidencePercent(carryForwardState.readinessScore)
+        confidence: normalizeConfidencePercent(carryForwardState.readinessScore),
       };
 
-      const summaries = [
-        `### carried-context\n${JSON.stringify(carryForwardSnapshot, null, 2)}`
-      ];
+      const summaries = [`### carried-context\n${JSON.stringify(carryForwardSnapshot, null, 2)}`];
       if (options?.stackCache) {
         summaries.push(
           `### stack-cache\n` +
@@ -1479,11 +1526,11 @@ Planning rules:
                 stackHints: options.stackCache.stackHints,
                 documentationHints: [],
                 questions: [],
-                confidence: options.stackCache.confidence
+                confidence: options.stackCache.confidence,
               },
               null,
-              2
-            )
+              2,
+            ),
         );
       }
 
@@ -1492,7 +1539,7 @@ Planning rules:
       callbacks?.onEvent({
         type: "status",
         level: "info",
-        message: "Master orchestrator is planning discovery agents for this round..."
+        message: "Master orchestrator is planning discovery agents for this round...",
       });
 
       let selectedJobs: SpecialistJob[];
@@ -1504,18 +1551,18 @@ Planning rules:
           callbacks,
           includeStackSpecialist,
           stackCache: options?.stackCache,
-          projectPath: options?.projectPath
+          projectPath: options?.projectPath,
         });
         selectedJobs = planned.jobs;
         callbacks?.onEvent({
           type: "status",
           level: "info",
-          message: `Master orchestrator selected ${selectedJobs.length} dynamic analysis agents.`
+          message: `Master orchestrator selected ${selectedJobs.length} dynamic analysis agents.`,
         });
         callbacks?.onEvent({
           type: "log",
           level: "info",
-          message: `[orchestrator] ${planned.rationale}`
+          message: `[orchestrator] ${planned.rationale}`,
         });
       } catch (error) {
         selectedJobs = this.buildFallbackDiscoveryJobs(includeStackSpecialist);
@@ -1524,14 +1571,14 @@ Planning rules:
           type: "status",
           level: "error",
           message: "Dynamic agent planning failed; using fallback discovery agents.",
-          details
+          details,
         });
       }
 
       callbacks?.onEvent({
         type: "status",
         level: "info",
-        message: `Launching ${selectedJobs.length} discovery analyses in parallel...`
+        message: `Launching ${selectedJobs.length} discovery analyses in parallel...`,
       });
 
       const specialistTurns = Math.max(8, Math.ceil(maxTurns * 0.6));
@@ -1550,13 +1597,13 @@ Planning rules:
                 maxTurns: specialistTurns,
                 callbacks,
                 attempt,
-                maxAttempts: specialistMaxAttempts
+                maxAttempts: specialistMaxAttempts,
               });
               return {
                 job,
                 report: result.report,
                 error: null,
-                attemptsUsed: attempt
+                attemptsUsed: attempt,
               };
             } catch (error) {
               lastError = error instanceof Error ? error.message : String(error);
@@ -1565,7 +1612,7 @@ Planning rules:
                 level: "error",
                 message: `Specialist attempt failed: ${job.id} (${attempt}/${specialistMaxAttempts})`,
                 agent: job.id,
-                details: lastError
+                details: lastError,
               });
             }
           }
@@ -1574,14 +1621,15 @@ Planning rules:
             job,
             report: null,
             error: lastError,
-            attemptsUsed: specialistMaxAttempts
+            attemptsUsed: specialistMaxAttempts,
           };
-        })
+        }),
       );
 
-      const completedReports: Array<{ job: SpecialistJob; report: SpecialistAnalysis }> = specialistOutcomes
-        .filter((outcome) => outcome.report !== null)
-        .map((outcome) => ({ job: outcome.job, report: outcome.report as SpecialistAnalysis }));
+      const completedReports: { job: SpecialistJob; report: SpecialistAnalysis }[] =
+        specialistOutcomes
+          .filter((outcome) => outcome.report !== null)
+          .map((outcome) => ({ job: outcome.job, report: outcome.report as SpecialistAnalysis }));
       const failedReports = specialistOutcomes.filter((outcome) => outcome.report === null);
 
       if (completedReports.length === 0) {
@@ -1595,43 +1643,44 @@ Planning rules:
           message:
             `Discovery analyses finished with partial failures: ` +
             `${completedReports.length} succeeded, ${failedReports.length} failed. ` +
-            "Synthesizing PRD input with available analyses."
+            "Synthesizing PRD input with available analyses.",
         });
       } else {
         callbacks?.onEvent({
           type: "status",
           level: "info",
-          message: `All discovery analyses completed (${completedReports.length}/${selectedJobs.length}). Synthesizing final PRD input...`
+          message: `All discovery analyses completed (${completedReports.length}/${selectedJobs.length}). Synthesizing final PRD input...`,
         });
       }
 
-      stackReport = completedReports.find((entry) => entry.job.producesStackProfile)?.report ?? null;
+      stackReport =
+        completedReports.find((entry) => entry.job.producesStackProfile)?.report ?? null;
       if (stackReport && options?.projectPath) {
         await this.writeStackProfileCache(options.projectPath, stackReport);
       }
 
       const specialistSummaries = completedReports.map(
-          ({ job, report }) =>
-            `### ${job.id} (${job.title})\n` +
-            JSON.stringify(
-              {
-                objective: job.objective,
-                producesStackProfile: job.producesStackProfile,
-                summary: report.summary,
-                findings: report.findings,
-                signals: report.signals,
-                painPoints: report.painPoints,
-                constraints: report.constraints,
-                scopeHints: report.scopeHints,
-                stackHints: report.stackHints,
-                documentationHints: report.documentationHints,
-                questions: report.questions,
-                confidence: report.confidence
-              },
-              null,
-              2
-            )
-        );
+        ({ job, report }) =>
+          `### ${job.id} (${job.title})\n` +
+          JSON.stringify(
+            {
+              objective: job.objective,
+              producesStackProfile: job.producesStackProfile,
+              summary: report.summary,
+              findings: report.findings,
+              signals: report.signals,
+              painPoints: report.painPoints,
+              constraints: report.constraints,
+              scopeHints: report.scopeHints,
+              stackHints: report.stackHints,
+              documentationHints: report.documentationHints,
+              questions: report.questions,
+              confidence: report.confidence,
+            },
+            null,
+            2,
+          ),
+      );
 
       if (!stackReport && options?.stackCache) {
         specialistSummaries.push(
@@ -1647,11 +1696,11 @@ Planning rules:
                 stackHints: options.stackCache.stackHints,
                 documentationHints: [],
                 questions: [],
-                confidence: options.stackCache.confidence
+                confidence: options.stackCache.confidence,
               },
               null,
-              2
-            )
+              2,
+            ),
         );
       }
 
@@ -1659,7 +1708,10 @@ Planning rules:
       failedSpecialistSummary =
         failedReports.length > 0
           ? failedReports
-              .map((failed) => `- ${failed.job.id} (attempts: ${failed.attemptsUsed}): ${failed.error}`)
+              .map(
+                (failed) =>
+                  `- ${failed.job.id} (attempts: ${failed.attemptsUsed}): ${failed.error}`,
+              )
               .join("\n")
           : "none";
     }
@@ -1708,16 +1760,16 @@ Synthesis requirements:
         includePartialMessages: true,
         outputFormat: {
           type: "json_schema",
-          schema: discoveryOutputJsonSchema
-        }
-      }
+          schema: discoveryOutputJsonSchema,
+        },
+      },
     })) {
       const initMessage = message as { type?: string; subtype?: string };
       if (initMessage.type === "system" && initMessage.subtype === "init") {
         callbacks?.onEvent({
           type: "status",
           level: "info",
-          message: "Synthesis runtime initialized."
+          message: "Synthesis runtime initialized.",
         });
       }
 
@@ -1738,18 +1790,22 @@ Synthesis requirements:
             callbacks?.onEvent({
               type: "log",
               level: "info",
-              message: `[synth] ${part}`
+              message: `[synth] ${part}`,
             });
           }
         }
       }
 
-      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      const resultMessage = message as {
+        type?: string;
+        structured_output?: unknown;
+        result?: string;
+      };
       if (resultMessage.type === "result") {
         callbacks?.onEvent({
           type: "status",
           level: "info",
-          message: "Structured discovery output received. Validating..."
+          message: "Structured discovery output received. Validating...",
         });
         if (typeof resultMessage.result === "string") {
           resultText = resultMessage.result;
@@ -1766,7 +1822,7 @@ Synthesis requirements:
       callbacks?.onEvent({
         type: "log",
         level: "info",
-        message: `[synth] ${finalLog}`
+        message: `[synth] ${finalLog}`,
       });
     }
 
@@ -1782,14 +1838,14 @@ Synthesis requirements:
       callbacks?.onEvent({
         type: "log",
         level: "info",
-        message: `[synth] AI returned ${parsed.questions.length} questions; trimming to ${BATCH_SIZE}.`
+        message: `[synth] AI returned ${parsed.questions.length} questions; trimming to ${BATCH_SIZE}.`,
       });
       parsed.questions = parsed.questions.slice(0, BATCH_SIZE);
     } else if (parsed.questions.length < BATCH_SIZE) {
       callbacks?.onEvent({
         type: "log",
         level: "info",
-        message: `[synth] AI returned only ${parsed.questions.length} question(s); padding to ${BATCH_SIZE} with generic clarifiers.`
+        message: `[synth] AI returned only ${parsed.questions.length} question(s); padding to ${BATCH_SIZE} with generic clarifiers.`,
       });
       const FALLBACK_QUESTIONS: DiscoveryOutput["questions"] = [
         {
@@ -1801,10 +1857,10 @@ Synthesis requirements:
             "Small feature addition",
             "Medium feature set",
             "Large system overhaul",
-            "Greenfield application"
+            "Greenfield application",
           ],
           recommendedOption: "Medium feature set",
-          selectionMode: "single"
+          selectionMode: "single",
         },
         {
           id: "fallback-priority",
@@ -1815,10 +1871,10 @@ Synthesis requirements:
             "Speed of delivery",
             "Code quality and maintainability",
             "Feature completeness",
-            "User experience polish"
+            "User experience polish",
           ],
           recommendedOption: "Feature completeness",
-          selectionMode: "single"
+          selectionMode: "single",
         },
         {
           id: "fallback-constraints",
@@ -1829,11 +1885,11 @@ Synthesis requirements:
             "Must use existing tech stack only",
             "Strict deadline within 1–2 weeks",
             "Must maintain backward compatibility",
-            "No significant constraints"
+            "No significant constraints",
           ],
           recommendedOption: "No significant constraints",
-          selectionMode: "multi"
-        }
+          selectionMode: "multi",
+        },
       ];
       const existingIds = new Set(parsed.questions.map((q) => q.id));
       for (const fallback of FALLBACK_QUESTIONS) {
@@ -1863,7 +1919,7 @@ Synthesis requirements:
       level: "info",
       message: `Starting specialist agent: ${input.job.id}`,
       agent: input.job.id,
-      details: `${input.job.title} (attempt ${attempt}/${maxAttempts})`
+      details: `${input.job.title} (attempt ${attempt}/${maxAttempts})`,
     });
 
     const specialistPrompt = `
@@ -1898,9 +1954,9 @@ Output requirements:
         includePartialMessages: true,
         outputFormat: {
           type: "json_schema",
-          schema: specialistAnalysisJsonSchema
-        }
-      }
+          schema: specialistAnalysisJsonSchema,
+        },
+      },
     })) {
       const textChunk = extractTextDelta(message);
       if (textChunk) {
@@ -1920,13 +1976,17 @@ Output requirements:
               type: "log",
               level: "info",
               message: `[${input.job.id}] ${part}`,
-              agent: input.job.id
+              agent: input.job.id,
             });
           }
         }
       }
 
-      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      const resultMessage = message as {
+        type?: string;
+        structured_output?: unknown;
+        result?: string;
+      };
       if (resultMessage.type === "result") {
         if (typeof resultMessage.result === "string") {
           resultText = resultMessage.result;
@@ -1944,7 +2004,7 @@ Output requirements:
         type: "log",
         level: "info",
         message: `[${input.job.id}] ${finalLog}`,
-        agent: input.job.id
+        agent: input.job.id,
       });
     }
 
@@ -1955,18 +2015,18 @@ Output requirements:
     const parsedReport = specialistAnalysisSchema.parse(structuredOutput);
     const report: SpecialistAnalysis = {
       ...parsedReport,
-      confidence: normalizeConfidencePercent(parsedReport.confidence)
+      confidence: normalizeConfidencePercent(parsedReport.confidence),
     };
     input.callbacks?.onEvent({
       type: "agent",
       level: "info",
       message: `Completed specialist agent: ${input.job.id} (${report.confidence}% confidence)`,
-      agent: input.job.id
+      agent: input.job.id,
     });
 
     return {
       job: input.job,
-      report
+      report,
     };
   }
 
@@ -2028,25 +2088,31 @@ Instructions:
         maxTurns: 10,
         outputFormat: {
           type: "json_schema",
-          schema: inferStackJsonSchema
+          schema: inferStackJsonSchema,
         },
         agents: {
           "stack-architect": {
-            description: "Architecture specialist for stack selection and codebase stack inference.",
+            description:
+              "Architecture specialist for stack selection and codebase stack inference.",
             prompt: `
 You infer technology stacks from code artifacts and recommend pragmatic defaults.
 Prefer concrete evidence and practical tradeoffs.
-`
-          }
-        }
-      }
+`,
+          },
+        },
+      },
     })) {
-      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      const resultMessage = message as {
+        type?: string;
+        structured_output?: unknown;
+        result?: string;
+      };
       if (resultMessage.type === "result") {
         if (typeof resultMessage.result === "string") {
           resultText = resultMessage.result;
         }
-        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
+        structuredOutput =
+          resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -2063,7 +2129,7 @@ Prefer concrete evidence and practical tradeoffs.
         (step, index) =>
           `${index + 1}. [${step.stepId}] ${step.title}\nGoal: ${step.goal}\nAnswer: ${step.currentData}\nNote: ${
             step.note || "none"
-          }`
+          }`,
       )
       .join("\n\n");
 
@@ -2117,7 +2183,7 @@ Important:
         maxTurns: 8,
         outputFormat: {
           type: "json_schema",
-          schema: wizardGuidanceJsonSchema
+          schema: wizardGuidanceJsonSchema,
         },
         agents: {
           "prd-interviewer": {
@@ -2127,17 +2193,22 @@ Important:
 You are a PRD interviewing specialist.
 Given a current step and previous context, produce precise guidance that improves plan quality.
 Optimize for actionable, implementation-ready outcomes.
-`
-          }
-        }
-      }
+`,
+          },
+        },
+      },
     })) {
-      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      const resultMessage = message as {
+        type?: string;
+        structured_output?: unknown;
+        result?: string;
+      };
       if (resultMessage.type === "result") {
         if (typeof resultMessage.result === "string") {
           resultText = resultMessage.result;
         }
-        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
+        structuredOutput =
+          resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -2186,21 +2257,26 @@ Rules:
         maxTurns: 10,
         outputFormat: {
           type: "json_schema",
-          schema: technicalPackJsonSchema
-        }
-      }
+          schema: technicalPackJsonSchema,
+        },
+      },
     })) {
       const textChunk = extractTextDelta(message);
       if (textChunk) {
         args.onLog?.(textChunk);
       }
 
-      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      const resultMessage = message as {
+        type?: string;
+        structured_output?: unknown;
+        result?: string;
+      };
       if (resultMessage.type === "result") {
         if (typeof resultMessage.result === "string") {
           resultText = resultMessage.result;
         }
-        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
+        structuredOutput =
+          resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -2211,7 +2287,7 @@ Rules:
     const technicalPack = technicalPackSchema.parse(structuredOutput);
     return {
       summary: technicalPack.summary,
-      technicalPack
+      technicalPack,
     };
   }
 
@@ -2227,14 +2303,18 @@ Rules:
         ...baseOptions,
         model: taskModel,
         cwd,
-        maxTurns: 1
-      }
+        maxTurns: 1,
+      },
     });
 
     let clearSessionId: string | null = null;
     for await (const message of clearResponse) {
       const initMessage = message as { type?: string; subtype?: string; session_id?: string };
-      if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+      if (
+        initMessage.type === "system" &&
+        initMessage.subtype === "init" &&
+        initMessage.session_id
+      ) {
         clearSessionId = initMessage.session_id;
       }
     }
@@ -2264,13 +2344,13 @@ Rules:
 
       if (strictHeadGuard) {
         throw new Error(
-          `Runtime policy violation: git HEAD changed before committer stage (${stageLabel}). expected=${expectedHead}, current=${currentHead}.`
+          `Runtime policy violation: git HEAD changed before committer stage (${stageLabel}). expected=${expectedHead}, current=${currentHead}.`,
         );
       }
 
       args.callbacks.onLog(
         `\n[policy] Shared-checkout HEAD drift detected before committer stage (${stageLabel}). ` +
-        `expected=${expectedHead}, current=${currentHead}. Continuing and rebasing guard baseline.\n`
+          `expected=${expectedHead}, current=${currentHead}. Continuing and rebasing guard baseline.\n`,
       );
       expectedHead = currentHead;
     };
@@ -2296,7 +2376,7 @@ Rules:
         stage: input.stageName,
         agentRole,
         status: "started",
-        summary: `${input.stageName} started`
+        summary: `${input.stageName} started`,
       });
 
       try {
@@ -2320,7 +2400,7 @@ Rules:
                 behavior: "deny",
                 message:
                   `Runtime policy: ${input.stageName} cannot execute mutating git commands. ` +
-                  "Only the committer stage may perform git state mutations."
+                  "Only the committer stage may perform git state mutations.",
               };
             }
 
@@ -2329,12 +2409,12 @@ Rules:
                 behavior: "deny",
                 message:
                   "Runtime policy: committer task stage cannot run git merge. " +
-                  "Merges are only allowed in the dedicated phase-merge committer flow."
+                  "Merges are only allowed in the dedicated phase-merge committer flow.",
               };
             }
 
             return { behavior: "allow" };
-          }
+          },
         };
 
         if (input.agents) {
@@ -2344,13 +2424,13 @@ Rules:
         if (input.outputSchema) {
           options.outputFormat = {
             type: "json_schema",
-            schema: input.outputSchema
+            schema: input.outputSchema,
           };
         }
 
         const response = query({
           prompt: input.prompt,
-          options
+          options,
         });
 
         args.callbacks.onQuery(response);
@@ -2368,7 +2448,11 @@ Rules:
           }
 
           const initMessage = message as { type?: string; subtype?: string; session_id?: string };
-          if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+          if (
+            initMessage.type === "system" &&
+            initMessage.subtype === "init" &&
+            initMessage.session_id
+          ) {
             runSessionId = initMessage.session_id;
             args.callbacks.onSession(runSessionId);
           }
@@ -2390,14 +2474,18 @@ Rules:
               const invocation = parseTaskToolInvocation(block.input);
               if (invocation) {
                 args.callbacks.onLog(
-                  `\n[subagent-spawn] stage=${input.stageName} subagent=${invocation.subagentType} description=${JSON.stringify(invocation.description)}\n`
+                  `\n[subagent-spawn] stage=${input.stageName} subagent=${invocation.subagentType} description=${JSON.stringify(invocation.description)}\n`,
                 );
-                args.callbacks.onLog(`[subagent-spawn-prompt] ${JSON.stringify(invocation.prompt)}\n`);
+                args.callbacks.onLog(
+                  `[subagent-spawn-prompt] ${JSON.stringify(invocation.prompt)}\n`,
+                );
               }
 
               args.callbacks.onSubagent({
                 stage: input.stageName,
-                ...(typeof block.input === "object" && block.input ? (block.input as Record<string, unknown>) : {})
+                ...(typeof block.input === "object" && block.input
+                  ? (block.input as Record<string, unknown>)
+                  : {}),
               });
             }
           }
@@ -2436,7 +2524,7 @@ Rules:
           agentRole,
           status: "completed",
           summary: resultText.trim().slice(0, 400),
-          stopReason: stopReason ?? undefined
+          stopReason: stopReason ?? undefined,
         });
 
         return {
@@ -2444,7 +2532,7 @@ Rules:
           stopReason,
           durationMs: stageDurationMs,
           totalCostUsd: stageCostUsd,
-          structuredOutput
+          structuredOutput,
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -2453,7 +2541,7 @@ Rules:
           stage: input.stageName,
           agentRole,
           status: "failed",
-          summary: message.slice(0, 400)
+          summary: message.slice(0, 400),
         });
         throw error;
       }
@@ -2501,8 +2589,8 @@ ${args.task.technicalNotes}
 You implement only the requested task.
 Stay in scope, update code, and prepare for architecture review.
 Do NOT run git commit or git merge.
-`
-        }
+`,
+        },
       },
       prompt: `
 You are running stage: implementation.
@@ -2516,7 +2604,7 @@ Instructions:
 3) Keep code changes scoped and production-safe.
 4) Do NOT run git commit or git merge.
 5) Return concise changed-files summary.
-`
+`,
     });
     await ensureNoCommitYet("implementation");
 
@@ -2554,7 +2642,7 @@ Quality gate rules (strict):
 - Any high finding => needs_refactor or blocked.
 - Any medium finding on boundary/srp/duplication/solid => needs_refactor.
 - If findings exist, recommendedActions must be concrete and non-empty.
-`
+`,
       });
 
       const parsedReview = architectureReviewSchema.parse(reviewResult.structuredOutput);
@@ -2564,7 +2652,7 @@ Quality gate rules (strict):
         kind: "architecture_review",
         iteration: architectureReviewIteration,
         maxIterations: MAX_ARCH_REFACTOR_CYCLES,
-        review
+        review,
       });
 
       if (review.status === "pass" || review.status === "pass_with_notes") {
@@ -2573,13 +2661,13 @@ Quality gate rules (strict):
 
       if (review.status === "blocked") {
         throw new Error(
-          `Architecture review blocked execution: ${review.summary}\n${summarizeArchitectureFindings(review)}`
+          `Architecture review blocked execution: ${review.summary}\n${summarizeArchitectureFindings(review)}`,
         );
       }
 
       if (architectureReviewIteration >= MAX_ARCH_REFACTOR_CYCLES) {
         throw new Error(
-          `Architecture review still requires refactor after ${MAX_ARCH_REFACTOR_CYCLES} cycle(s): ${review.summary}`
+          `Architecture review still requires refactor after ${MAX_ARCH_REFACTOR_CYCLES} cycle(s): ${review.summary}`,
         );
       }
 
@@ -2595,8 +2683,8 @@ Quality gate rules (strict):
 Apply only targeted refactors from architecture findings.
 Do not widen scope.
 Do NOT run git commit or git merge.
-`
-          }
+`,
+          },
         },
         prompt: `
 You are running stage: architecture-refactor.
@@ -2613,7 +2701,7 @@ Instructions:
 2) Preserve task scope and behavior.
 3) Do NOT run git commit or git merge.
 4) Return concise summary of refactors.
-`
+`,
       });
       await ensureNoCommitYet(`architecture-refactor-${architectureReviewIteration}`);
     }
@@ -2634,7 +2722,7 @@ Testing policy (strict):
 3) Unit tests are fallback-only.
 4) Provide commands run and pass/fail evidence.
 5) Do NOT run git commit or git merge.
-`
+`,
     });
     await ensureNoCommitYet("tester");
 
@@ -2660,29 +2748,31 @@ Commit policy (strict):
 4) Never include "Co-authored-by" trailer mentioning Claude.
 5) Do NOT run git merge in this stage.
 6) Return commit hash(es) and commit message(s).
-`
+`,
     });
 
     const headAfterCommitter = await readGitHeadCommit(cwd);
     if (!headAfterCommitter || headAfterCommitter === headBeforeCommitter) {
-      throw new Error("Runtime policy violation: committer stage completed without creating a commit.");
+      throw new Error(
+        "Runtime policy violation: committer stage completed without creating a commit.",
+      );
     }
 
     await validateCommitPolicyForRange(
       cwd,
       `${headBeforeCommitter}..${headAfterCommitter}`,
-      `task ${args.task.id} committer stage`
+      `task ${args.task.id} committer stage`,
     );
 
     args.callbacks.onSubagent({
       kind: "committer_summary",
       headBefore: headBeforeCommitter,
-      headAfter: headAfterCommitter
+      headAfter: headAfterCommitter,
     });
 
     if (lastArchitectureReview) {
       finalSections.push(
-        `## architecture-gate-summary\nstatus: ${lastArchitectureReview.status}\nsummary: ${lastArchitectureReview.summary}`
+        `## architecture-gate-summary\nstatus: ${lastArchitectureReview.status}\nsummary: ${lastArchitectureReview.summary}`,
       );
     }
 
@@ -2691,7 +2781,7 @@ Commit policy (strict):
       resultText: finalSections.join("\n\n"),
       stopReason: committerResult.stopReason,
       durationMs: totalDurationMs > 0 ? totalDurationMs : null,
-      totalCostUsd: hasCost ? totalCostUsd : null
+      totalCostUsd: hasCost ? totalCostUsd : null,
     };
   }
 
@@ -2705,14 +2795,18 @@ Commit policy (strict):
         ...baseOptions,
         model: committerModel,
         cwd,
-        maxTurns: 1
-      }
+        maxTurns: 1,
+      },
     });
 
     let clearSessionId: string | null = null;
     for await (const message of clearResponse) {
       const initMessage = message as { type?: string; subtype?: string; session_id?: string };
-      if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+      if (
+        initMessage.type === "system" &&
+        initMessage.subtype === "init" &&
+        initMessage.session_id
+      ) {
         clearSessionId = initMessage.session_id;
       }
     }
@@ -2755,8 +2849,8 @@ You are the only agent allowed to run git merge in this step.
         cwd,
         resume: clearSessionId,
         includePartialMessages: true,
-        maxTurns: 30
-      }
+        maxTurns: 30,
+      },
     });
 
     args.callbacks.onQuery(mergeResponse);
@@ -2768,7 +2862,11 @@ You are the only agent allowed to run git merge in this step.
       }
 
       const initMessage = message as { type?: string; subtype?: string; session_id?: string };
-      if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+      if (
+        initMessage.type === "system" &&
+        initMessage.subtype === "init" &&
+        initMessage.session_id
+      ) {
         sessionId = initMessage.session_id;
       }
 
@@ -2786,7 +2884,7 @@ You are the only agent allowed to run git merge in this step.
     return {
       sessionId,
       resultText,
-      stopReason
+      stopReason,
     };
   }
 }

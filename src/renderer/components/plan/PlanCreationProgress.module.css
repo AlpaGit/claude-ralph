@@ -71,8 +71,12 @@
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(200%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
 }
 
 /* ── Phase steps ──────────────────────────────────────── */
@@ -96,7 +100,9 @@
   height: 8px;
   border-radius: var(--radius-circle);
   flex-shrink: 0;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .phaseLabel {
@@ -138,8 +144,13 @@
 }
 
 @keyframes phasePulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ── Phase description ────────────────────────────────── */

@@ -132,9 +132,7 @@ export function PlanCreationProgress({
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h3 className={styles.title}>
-          {error ? "Plan Creation Failed" : "Creating Plan"}
-        </h3>
+        <h3 className={styles.title}>{error ? "Plan Creation Failed" : "Creating Plan"}</h3>
         <span className={styles.elapsed}>{formatElapsed(elapsedSec)}</span>
       </div>
 
@@ -176,9 +174,7 @@ export function PlanCreationProgress({
           </div>
 
           {/* Current phase description */}
-          <p className={styles.phaseDescription}>
-            {currentPhase.description}
-          </p>
+          <p className={styles.phaseDescription}>{currentPhase.description}</p>
         </>
       )}
     </div>

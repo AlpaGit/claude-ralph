@@ -27,16 +27,16 @@ import {
   startDiscoveryInputSchema,
   unarchivePlanInputSchema,
   updateAppSettingsInputSchema,
-  updateModelConfigInputSchema
+  updateModelConfigInputSchema,
 } from "@shared/ipc";
 import type { IpcError, IpcZodIssue } from "@shared/types";
-import { TaskRunner } from "./runtime/task-runner";
+import type { TaskRunner } from "./runtime/task-runner";
 
 /**
  * true when running in electron-vite dev mode.
  * In production builds, import.meta.env.DEV is false.
  */
-const isDev: boolean = !!(import.meta.env?.DEV ?? (process.env.NODE_ENV !== "production"));
+const isDev = !!(import.meta.env?.DEV ?? process.env.NODE_ENV !== "production");
 
 /**
  * Build a structured IpcError from an unknown thrown value.
@@ -52,7 +52,7 @@ function formatIpcError(error: unknown): IpcError {
       const mapped: IpcZodIssue = {
         path: issue.path.map((p) => (typeof p === "symbol" ? String(p) : p)),
         message: issue.message,
-        code: issue.code
+        code: issue.code,
       };
       // Zod v4 invalid_type issues include expected type
       if ("expected" in issue && typeof issue.expected === "string") {
@@ -60,9 +60,8 @@ function formatIpcError(error: unknown): IpcError {
       }
       // Include the received input value as a string for dev diagnostics
       if (isDev && "input" in issue && issue.input !== undefined) {
-        mapped.received = typeof issue.input === "string"
-          ? issue.input
-          : JSON.stringify(issue.input);
+        mapped.received =
+          typeof issue.input === "string" ? issue.input : JSON.stringify(issue.input);
       }
       return mapped;
     });
@@ -73,7 +72,7 @@ function formatIpcError(error: unknown): IpcError {
         : "Invalid input.",
       code: "VALIDATION_ERROR",
       ...(isDev ? { details: issues } : {}),
-      ...(isDev && error.stack ? { stack: error.stack } : {})
+      ...(isDev && error.stack ? { stack: error.stack } : {}),
     };
     return result;
   }
@@ -83,7 +82,7 @@ function formatIpcError(error: unknown): IpcError {
     const result: IpcError = {
       message: isDev ? error.message : "An unexpected error occurred.",
       code: "INTERNAL_ERROR",
-      ...(isDev && error.stack ? { stack: error.stack } : {})
+      ...(isDev && error.stack ? { stack: error.stack } : {}),
     };
     return result;
   }
@@ -91,7 +90,7 @@ function formatIpcError(error: unknown): IpcError {
   // Unknown thrown values
   return {
     message: isDev ? String(error) : "An unexpected error occurred.",
-    code: "UNKNOWN_ERROR"
+    code: "UNKNOWN_ERROR",
   };
 }
 
@@ -361,7 +360,7 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
       const input = getRunEventsInputSchema.parse(rawInput);
       return taskRunner.getRunEvents(input.runId, {
         limit: input.limit,
-        afterId: input.afterId
+        afterId: input.afterId,
       });
     } catch (error) {
       throw createIpcError(error);

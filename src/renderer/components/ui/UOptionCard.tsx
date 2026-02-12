@@ -1,4 +1,12 @@
-import { useCallback, useRef, useState, useEffect, type JSX, type KeyboardEvent, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  useEffect,
+  type JSX,
+  type KeyboardEvent,
+  type ChangeEvent,
+} from "react";
 import styles from "./UOptionCard.module.css";
 
 /* ── Constants ────────────────────────────────────────── */
@@ -110,10 +118,7 @@ export function UOptionCard({
     >
       {/* Selection indicator */}
       <span
-        className={cn(
-          styles.indicator,
-          isRadio ? styles.indicatorRadio : styles.indicatorCheckbox,
-        )}
+        className={cn(styles.indicator, isRadio ? styles.indicatorRadio : styles.indicatorCheckbox)}
         aria-hidden="true"
       >
         <span className={styles.indicatorMark} />

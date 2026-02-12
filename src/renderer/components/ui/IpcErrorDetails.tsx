@@ -60,14 +60,13 @@ export function IpcErrorDetails({ error, className }: IpcErrorDetailsProps): Rea
                             expected: <strong>{issue.expected}</strong>
                             {issue.received ? (
                               <>
-                                {" "}| received: <strong>{issue.received}</strong>
+                                {" "}
+                                | received: <strong>{issue.received}</strong>
                               </>
                             ) : null}
                           </span>
                         ) : null}
-                        {issue.code ? (
-                          <span className={styles.issueCode}>{issue.code}</span>
-                        ) : null}
+                        {issue.code ? <span className={styles.issueCode}>{issue.code}</span> : null}
                       </li>
                     ))}
                   </ul>

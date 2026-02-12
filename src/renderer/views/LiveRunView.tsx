@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import type { RunEvent, TaskRun, TodoItem } from "@shared/types";
 import { usePlanStore } from "../stores/planStore";
 import { useRunStore, initRunEventSubscription } from "../stores/runStore";
-import { UStatusPill, USkeleton, ULogViewer } from "../components/ui";
+import { UStatusPill, ULogViewer } from "../components/ui";
 import styles from "./LiveRunView.module.css";
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -40,9 +40,7 @@ function formatDuration(ms: number | null): string {
 
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0
-    ? `${hours}h ${remainingMinutes}m`
-    : `${hours}h`;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 /**
@@ -131,7 +129,7 @@ function parseArchitectureReviewEvent(event: RunEvent): ArchitectureReviewSnapsh
       location: String(item.location ?? "unknown"),
       rule: String(item.rule ?? "other"),
       message: String(item.message ?? ""),
-      recommendedAction: String(item.recommendedAction ?? "")
+      recommendedAction: String(item.recommendedAction ?? ""),
     }));
 
   return {
@@ -142,7 +140,7 @@ function parseArchitectureReviewEvent(event: RunEvent): ArchitectureReviewSnapsh
     status: String(review.status ?? "unknown"),
     summary: String(review.summary ?? ""),
     confidence: typeof review.confidence === "number" ? review.confidence : null,
-    findings
+    findings,
   };
 }
 
@@ -246,9 +244,8 @@ export function LiveRunView(): JSX.Element {
     return () => clearInterval(interval);
   }, [cancelStartMs, cancelTimeoutMs]);
 
-  const cancelProgressPct = cancelTimeoutMs > 0
-    ? Math.round((cancelElapsedMs / cancelTimeoutMs) * 100)
-    : 0;
+  const cancelProgressPct =
+    cancelTimeoutMs > 0 ? Math.round((cancelElapsedMs / cancelTimeoutMs) * 100) : 0;
 
   /* ── Callbacks ───────────────────────────────────────── */
   const handleCancel = useCallback(async () => {
@@ -387,14 +384,10 @@ export function LiveRunView(): JSX.Element {
             <ul className={styles.todoList}>
               {todos.map((todo, index) => (
                 <li key={`${todo.content}-${index}`} className={styles.todoItem}>
-                  <span
-                    className={cn(styles.todoStatus, todoStatusClass(todo.status))}
-                  >
+                  <span className={cn(styles.todoStatus, todoStatusClass(todo.status))}>
                     {todo.status.replace(/_/g, " ")}
                   </span>
-                  <span className={styles.todoContent}>
-                    {todo.activeForm || todo.content}
-                  </span>
+                  <span className={styles.todoContent}>{todo.activeForm || todo.content}</span>
                 </li>
               ))}
             </ul>
@@ -422,7 +415,9 @@ export function LiveRunView(): JSX.Element {
                       {review.status}
                     </span>
                     {review.confidence !== null ? (
-                      <span className={styles.archConfidence}>confidence: {review.confidence}%</span>
+                      <span className={styles.archConfidence}>
+                        confidence: {review.confidence}%
+                      </span>
                     ) : null}
                   </div>
                   <p className={styles.archSummary}>{review.summary || "No summary."}</p>
@@ -431,9 +426,12 @@ export function LiveRunView(): JSX.Element {
                     <ul className={styles.archFindings}>
                       {review.findings.map((finding, index) => (
                         <li key={`${review.eventId}-${index}`} className={styles.archFinding}>
-                          <strong>[{finding.severity}]</strong> ({finding.rule}) {finding.location}: {finding.message}
+                          <strong>[{finding.severity}]</strong> ({finding.rule}) {finding.location}:{" "}
+                          {finding.message}
                           {finding.recommendedAction ? (
-                            <div className={styles.archAction}>Action: {finding.recommendedAction}</div>
+                            <div className={styles.archAction}>
+                              Action: {finding.recommendedAction}
+                            </div>
                           ) : null}
                         </li>
                       ))}

@@ -105,10 +105,7 @@ export function SettingsView(): JSX.Element {
 
       <div className={styles.sections}>
         {/* -- Model Configuration -- */}
-        <UCard
-          title="Model Configuration"
-          subtitle="Select which model to use for each agent role"
-        >
+        <UCard title="Model Configuration" subtitle="Select which model to use for each agent role">
           {loading ? (
             <div className={styles.loadingRow}>
               <USkeleton variant="text" lines={3} />
@@ -174,8 +171,8 @@ export function SettingsView(): JSX.Element {
               onChange={(event) => setDiscordWebhookUrl(event.target.value)}
             />
             <p className={styles.preferenceHint}>
-              When set, each specialist/stage agent posts what it is doing and what it found.
-              Leave empty to disable Discord notifications.
+              When set, each specialist/stage agent posts what it is doing and what it found. Leave
+              empty to disable Discord notifications.
             </p>
             <button
               type="button"

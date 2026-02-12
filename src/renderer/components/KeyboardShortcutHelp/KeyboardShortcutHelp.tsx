@@ -42,12 +42,7 @@ export function KeyboardShortcutHelp({
   }, [shortcuts]);
 
   return (
-    <UModal
-      open={open}
-      onClose={onClose}
-      title="Keyboard Shortcuts"
-      className={styles.dialog}
-    >
+    <UModal open={open} onClose={onClose} title="Keyboard Shortcuts" className={styles.dialog}>
       <div className={styles.content}>
         {groups.map(([category, items]) => (
           <div key={category} className={styles.group}>

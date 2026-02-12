@@ -37,8 +37,8 @@ export function PromptTemplateBuilder({
   return (
     <section>
       <p>
-        Discovery has moved to the <strong>/discovery</strong> route.
-        Use the sidebar navigation to access the full discovery interview flow.
+        Discovery has moved to the <strong>/discovery</strong> route. Use the sidebar navigation to
+        access the full discovery interview flow.
       </p>
     </section>
   );

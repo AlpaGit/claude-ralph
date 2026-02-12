@@ -28,7 +28,7 @@ function cn(...classes: (string | false | undefined | null)[]): string {
 
 export const UButton = forwardRef<HTMLButtonElement, UButtonProps>(function UButton(
   { variant = "primary", size = "md", loading = false, disabled, className, children, ...rest },
-  ref
+  ref,
 ) {
   return (
     <button
@@ -38,7 +38,7 @@ export const UButton = forwardRef<HTMLButtonElement, UButtonProps>(function UBut
         styles[variant],
         styles[size],
         loading && styles.loading,
-        className
+        className,
       )}
       disabled={disabled || loading}
       aria-busy={loading || undefined}

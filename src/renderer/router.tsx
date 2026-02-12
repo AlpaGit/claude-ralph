@@ -1,8 +1,4 @@
-import {
-  createHashRouter,
-  createRoutesFromElements,
-  Route,
-} from "react-router-dom";
+import { createHashRouter, createRoutesFromElements, Route } from "react-router-dom";
 import { AppShell } from "./components/AppShell/AppShell";
 import { RouteErrorBoundary } from "./components/layout/ErrorBoundary";
 import { PlanListView } from "./views/PlanListView";
@@ -28,12 +24,54 @@ import { SettingsView } from "./views/SettingsView";
 export const router = createHashRouter(
   createRoutesFromElements(
     <Route element={<AppShell />}>
-      <Route path="/" element={<RouteErrorBoundary><PlanListView /></RouteErrorBoundary>} />
-      <Route path="/plan/:planId" element={<RouteErrorBoundary><PlanDetailView /></RouteErrorBoundary>} />
-      <Route path="/discovery" element={<RouteErrorBoundary><DiscoveryView /></RouteErrorBoundary>} />
-      <Route path="/project-memory" element={<RouteErrorBoundary><ProjectMemoryView /></RouteErrorBoundary>} />
-      <Route path="/run/:runId" element={<RouteErrorBoundary><LiveRunView /></RouteErrorBoundary>} />
-      <Route path="/settings" element={<RouteErrorBoundary><SettingsView /></RouteErrorBoundary>} />
-    </Route>
-  )
+      <Route
+        path="/"
+        element={
+          <RouteErrorBoundary>
+            <PlanListView />
+          </RouteErrorBoundary>
+        }
+      />
+      <Route
+        path="/plan/:planId"
+        element={
+          <RouteErrorBoundary>
+            <PlanDetailView />
+          </RouteErrorBoundary>
+        }
+      />
+      <Route
+        path="/discovery"
+        element={
+          <RouteErrorBoundary>
+            <DiscoveryView />
+          </RouteErrorBoundary>
+        }
+      />
+      <Route
+        path="/project-memory"
+        element={
+          <RouteErrorBoundary>
+            <ProjectMemoryView />
+          </RouteErrorBoundary>
+        }
+      />
+      <Route
+        path="/run/:runId"
+        element={
+          <RouteErrorBoundary>
+            <LiveRunView />
+          </RouteErrorBoundary>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RouteErrorBoundary>
+            <SettingsView />
+          </RouteErrorBoundary>
+        }
+      />
+    </Route>,
+  ),
 );

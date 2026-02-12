@@ -5,11 +5,14 @@ import {
   useRef,
   type ChangeEvent,
   type JSX,
-  type TextareaHTMLAttributes
+  type TextareaHTMLAttributes,
 } from "react";
 import styles from "./UTextArea.module.css";
 
-export interface UTextAreaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "className"> {
+export interface UTextAreaProps extends Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "className"
+> {
   /** Label text rendered above the textarea. */
   label?: string;
   /** Error message. When set, the textarea adopts an error visual state. */

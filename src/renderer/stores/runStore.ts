@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-dynamic-delete -- Immer drafts use delete for key removal */
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { RunEvent, TodoItem } from "@shared/types";
@@ -240,7 +241,7 @@ export const useRunStore = create<RunState>()(
         }
       });
     },
-  }))
+  })),
 );
 
 /**
@@ -251,6 +252,7 @@ export function initRunEventSubscription(): () => void {
   const api = window.ralphApi;
   if (!api) {
     // In environments without the preload bridge (e.g. unit tests), skip.
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     return () => {};
   }
 

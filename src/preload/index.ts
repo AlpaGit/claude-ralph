@@ -44,7 +44,7 @@ import type {
   UnarchivePlanInput,
   UpdateModelConfigInput,
   UpdateAppSettingsInput,
-  WizardGuidanceResult
+  WizardGuidanceResult,
 } from "@shared/types";
 
 // Keep preload runtime minimal: do not import @shared/ipc here because it
@@ -80,7 +80,7 @@ const IPC_CHANNELS = {
   discoveryResume: "discovery:resume",
   discoveryAbandon: "discovery:abandon",
   discoveryCancel: "discovery:cancel",
-  getRunEvents: "run:getEvents"
+  getRunEvents: "run:getEvents",
 } as const;
 
 const api: RalphApi = {
@@ -220,7 +220,7 @@ const api: RalphApi = {
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.runEvent, listener);
     };
-  }
+  },
 };
 
 contextBridge.exposeInMainWorld("ralphApi", api);

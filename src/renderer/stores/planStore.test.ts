@@ -32,7 +32,7 @@ describe("mock-ralph-api (jsdom)", () => {
       summary: "Mock plan",
       status: "ready",
       tasks: [],
-      runs: []
+      runs: [],
     });
 
     const plan = await api.getPlan("mock-plan");

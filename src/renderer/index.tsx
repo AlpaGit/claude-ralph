@@ -15,6 +15,5 @@ createRoot(rootElement).render(
     <AppErrorBoundary>
       <RouterProvider router={router} />
     </AppErrorBoundary>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
-

@@ -22,10 +22,7 @@ interface AppErrorBoundaryState {
  * catastrophic errors that escape individual views. It shows a
  * full-page error card with an app restart (reload) button.
  */
-export class AppErrorBoundary extends Component<
-  { children: ReactNode },
-  AppErrorBoundaryState
-> {
+export class AppErrorBoundary extends Component<{ children: ReactNode }, AppErrorBoundaryState> {
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null, componentStack: null };
@@ -70,14 +67,12 @@ export class AppErrorBoundary extends Component<
             }
           >
             <p className={styles.description}>
-              A critical error occurred and the application cannot continue.
-              Restarting the app will reset the UI to its initial state.
+              A critical error occurred and the application cannot continue. Restarting the app will
+              reset the UI to its initial state.
             </p>
 
             {error ? (
-              <pre className={styles.errorMessage}>
-                {error.message || String(error)}
-              </pre>
+              <pre className={styles.errorMessage}>{error.message || String(error)}</pre>
             ) : null}
 
             {isDev && componentStack ? (
@@ -112,10 +107,7 @@ interface ViewErrorBoundaryState {
  * errors. It shows an error card with a retry button and an optional
  * link to navigate home. Other views remain functional.
  */
-export class ViewErrorBoundary extends Component<
-  ViewErrorBoundaryProps,
-  ViewErrorBoundaryState
-> {
+export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErrorBoundaryState> {
   constructor(props: ViewErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null, componentStack: null };
@@ -170,14 +162,12 @@ export class ViewErrorBoundary extends Component<
             }
           >
             <p className={styles.description}>
-              An error occurred while rendering this view. Other views should
-              still be accessible. You can retry or navigate home.
+              An error occurred while rendering this view. Other views should still be accessible.
+              You can retry or navigate home.
             </p>
 
             {error ? (
-              <pre className={styles.errorMessage}>
-                {error.message || String(error)}
-              </pre>
+              <pre className={styles.errorMessage}>{error.message || String(error)}</pre>
             ) : null}
 
             {isDev && componentStack ? (
@@ -208,9 +198,5 @@ export function RouteErrorBoundary({ children }: { children: ReactNode }): JSX.E
     navigate("/");
   };
 
-  return (
-    <ViewErrorBoundary onNavigateHome={handleNavigateHome}>
-      {children}
-    </ViewErrorBoundary>
-  );
+  return <ViewErrorBoundary onNavigateHome={handleNavigateHome}>{children}</ViewErrorBoundary>;
 }

@@ -3,10 +3,7 @@ import type { JSX } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { Sidebar } from "../layout/Sidebar";
-import {
-  useKeyboardShortcuts,
-  type ShortcutDefinition,
-} from "../../hooks/useKeyboardShortcuts";
+import { useKeyboardShortcuts, type ShortcutDefinition } from "../../hooks/useKeyboardShortcuts";
 import { KeyboardShortcutHelp } from "../KeyboardShortcutHelp/KeyboardShortcutHelp";
 import styles from "./AppShell.module.css";
 
@@ -73,7 +70,7 @@ export function AppShell(): JSX.Element {
     // We look for the search input by its aria-label since CSS module classes
     // are hashed and unreliable for selectors.
     const searchInput = document.querySelector<HTMLInputElement>(
-      'input[aria-label="Search plans"]'
+      'input[aria-label="Search plans"]',
     );
     if (searchInput) {
       searchInput.focus();
@@ -164,7 +161,7 @@ export function AppShell(): JSX.Element {
       handleFocusSearch,
       handleOpenSettings,
       openHelp,
-    ]
+    ],
   );
 
   useKeyboardShortcuts(shortcuts);
@@ -212,11 +209,7 @@ export function AppShell(): JSX.Element {
         }}
       />
 
-      <KeyboardShortcutHelp
-        open={helpOpen}
-        onClose={closeHelp}
-        shortcuts={shortcuts}
-      />
+      <KeyboardShortcutHelp open={helpOpen} onClose={closeHelp} shortcuts={shortcuts} />
     </div>
   );
 }
