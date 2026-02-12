@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { IPC_CHANNELS } from "@shared/ipc";
 import type {
   CancelRunInput,
   CancelRunResponse,
@@ -20,20 +21,6 @@ import type {
   StartDiscoveryInput,
   WizardGuidanceResult
 } from "@shared/types";
-
-const IPC_CHANNELS = {
-  createPlan: "plan:create",
-  getPlan: "plan:get",
-  runTask: "task:run",
-  runAll: "task:runAll",
-  cancelRun: "run:cancel",
-  startDiscovery: "discovery:start",
-  continueDiscovery: "discovery:continue",
-  discoveryEvent: "discovery:event",
-  wizardGuidance: "wizard:guidance",
-  inferStack: "wizard:inferStack",
-  runEvent: "run:event"
-} as const;
 
 const api: RalphApi = {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
