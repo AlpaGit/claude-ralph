@@ -1827,7 +1827,7 @@ Review objectives:
 
 Status policy:
 - pass: zero findings and no actionable quality issue.
-- pass_with_notes: only non-critical notes with no required code changes.
+- pass_with_notes: non-critical findings are present and still require targeted code changes before continuation.
 - needs_refactor: any structural/code-quality issue that should be fixed before testing.
 - blocked: critical issue that prevents safe continuation.
 
@@ -1849,8 +1849,14 @@ Quality gate rules (strict):
         review
       });
 
-      if (review.status === "pass" || review.status === "pass_with_notes") {
+      if (review.status === "pass") {
         break;
+      }
+
+      if (review.status === "pass_with_notes") {
+        args.callbacks.onLog(
+          "\n[policy] pass_with_notes is treated as changes required. Continuing with architecture refactor.\n"
+        );
       }
 
       if (review.status === "blocked") {
