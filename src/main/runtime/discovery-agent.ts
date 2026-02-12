@@ -25,7 +25,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
-  AgentRole,
   DiscoveryAnswer,
   DiscoveryInterviewState,
   InferStackInput,
@@ -38,6 +37,7 @@ import {
   FULL_DISCOVERY_REFRESH_TOKEN_PATTERN,
   MAX_DYNAMIC_DISCOVERY_AGENTS,
   MIN_DYNAMIC_DISCOVERY_AGENTS,
+  type ModelResolver,
   STACK_CHANGE_HINT_PATTERN,
   STACK_PROFILE_DIR,
   STACK_PROFILE_FILE,
@@ -141,8 +141,7 @@ export interface StackProfileStore {
   write(projectPath: string, profile: StackProfileCache): Promise<void> | void;
 }
 
-/** Function signature for resolving an agent role to a model ID. */
-export type ModelResolver = (role: AgentRole) => string;
+export type { ModelResolver } from "./agent-constants";
 
 // ---------------------------------------------------------------------------
 // DiscoveryAgent class

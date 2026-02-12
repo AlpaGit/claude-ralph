@@ -10,6 +10,13 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentRole } from "@shared/types";
 
 // ---------------------------------------------------------------------------
+// Shared type aliases
+// ---------------------------------------------------------------------------
+
+/** Callback signature for resolving an agent role to a model ID. */
+export type ModelResolver = (role: AgentRole) => string;
+
+// ---------------------------------------------------------------------------
 // Architecture review limits
 // ---------------------------------------------------------------------------
 
