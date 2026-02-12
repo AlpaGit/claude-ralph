@@ -1,0 +1,53 @@
+appId: com.claude-ralph.desktop
+productName: Claude Ralph Desktop
+copyright: Copyright © 2025 Claude Ralph
+
+# electron-vite outputs to out/
+directories:
+  buildResources: resources
+  output: release
+
+# Include the compiled output and resource files
+files:
+  - out/**/*
+  - "!out/**/*.map"
+
+# Extra resources bundled outside the asar (needed for native modules, migrations)
+extraResources:
+  - from: resources/migrations
+    to: migrations
+    filter:
+      - "**/*.sql"
+
+# ASAR archive with unpacking for native modules
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+# ── Windows NSIS Installer ──────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Claude Ralph Desktop
+
+# ── Auto-updater via GitHub Releases ────────────────────────────────
+publish:
+  provider: github
+  releaseType: release
+
+# ── Native module rebuild ───────────────────────────────────────────
+npmRebuild: true
+nodeGypRebuild: false
+buildDependenciesFromSource: false
