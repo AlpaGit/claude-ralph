@@ -651,3 +651,21 @@ p2-03: Implement PlanListView with full plan management   [DONE]
   - planStore already had all needed actions (loadPlanList, deletePlan, archivePlan, unarchivePlan)
     fully wired to real IPC from p2-01/p2-02 -- no store changes needed
   - Build and typecheck pass
+
+p2-04: Add model configuration DB table and migration   [DONE]
+  - resources/migrations/004_model_config.sql
+    - CREATE TABLE model_config: id TEXT PK, agent_role TEXT UNIQUE NOT NULL,
+      model_id TEXT NOT NULL, updated_at TEXT NOT NULL
+    - INSERT OR IGNORE seed data (idempotent):
+      discovery_specialist -> claude-sonnet-4-20250514
+      plan_synthesis       -> claude-sonnet-4-20250514
+      task_execution       -> claude-opus-4-20250514
+    - Migration numbering (004) accounts for 003 being discovery_sessions
+  - src/main/runtime/app-database.ts
+    - AgentRole type: "discovery_specialist" | "plan_synthesis" | "task_execution"
+    - ModelConfigRow interface (raw DB row shape)
+    - ModelConfigEntry interface (camelCase application shape)
+    - getModelConfig(): returns all rows from model_config, ordered by agent_role ASC
+    - updateModelForRole(role, modelId): updates model_id + updated_at for a given role,
+      throws if role does not exist (changes === 0 guard)
+  - Build and typecheck pass
