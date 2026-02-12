@@ -669,3 +669,43 @@ p2-04: Add model configuration DB table and migration   [DONE]
     - updateModelForRole(role, modelId): updates model_id + updated_at for a given role,
       throws if role does not exist (changes === 0 guard)
   - Build and typecheck pass
+
+p2-05: Add model config IPC and Settings UI   [DONE]
+  - src/shared/ipc.ts
+    - IPC_CHANNELS: added getModelConfig ("config:getModels"), updateModelConfig ("config:updateModel")
+    - updateModelConfigInputSchema: Zod schema with agentRole enum and modelId string
+  - src/shared/types.ts
+    - AgentRole type: "discovery_specialist" | "plan_synthesis" | "task_execution"
+    - ModelConfigEntry interface: id, agentRole, modelId, updatedAt
+    - UpdateModelConfigInput interface: agentRole, modelId
+    - RalphApi: added getModelConfig() and updateModelConfig() methods
+  - src/main/ipc.ts
+    - Registered ipcMain.handle for config:getModels (delegates to taskRunner.getModelConfig)
+    - Registered ipcMain.handle for config:updateModel (validates with Zod, delegates to taskRunner.updateModelForRole)
+  - src/main/runtime/task-runner.ts
+    - getModelConfig(): pass-through to AppDatabase.getModelConfig()
+    - updateModelForRole(role, modelId): pass-through to AppDatabase.updateModelForRole()
+    - Imports AgentRole and ModelConfigEntry from @shared/types
+  - src/preload/index.ts
+    - getModelConfig(): bridge method via ipcRenderer.invoke(config:getModels)
+    - updateModelConfig(input): bridge method via ipcRenderer.invoke(config:updateModel, input)
+    - Imports ModelConfigEntry and UpdateModelConfigInput from @shared/types
+  - src/renderer/stores/settingsStore.ts
+    - Replaced stub ModelRole with re-exported AgentRole from @shared/types
+    - AVAILABLE_MODELS constant: Claude Opus 4 (claude-opus-4-20250514), Claude Sonnet 4 (claude-sonnet-4-20250514)
+    - modelConfig state: Record<AgentRole, ModelConfigEntry | undefined>, keyed by DB agent_role
+    - loadSettings(): calls window.ralphApi.getModelConfig(), populates config map from entries
+    - updateModelForRole(role, modelId): calls window.ralphApi.updateModelConfig(), optimistic local update
+  - src/renderer/views/SettingsView.tsx
+    - AGENT_ROLES: ordered list of 3 DB agent roles for display
+    - ROLE_LABELS: human-readable names (Discovery Specialist, Plan Synthesis, Task Execution)
+    - ROLE_DESCRIPTIONS: descriptions for each role
+    - Model table: replaced read-only text + "(default)" hint with <select> dropdown per role
+    - handleModelChange: saves on change via updateModelForRole (no separate save button)
+    - Select uses AVAILABLE_MODELS for options, aria-label for accessibility
+  - src/renderer/views/SettingsView.module.css
+    - Removed .readOnlyHint class (no longer needed)
+    - .modelSelect: custom-styled select with appearance:none, 2px brutalist border, SVG arrow indicator
+    - Hover: accent-2 border color, focus-visible: 2px accent-2 outline with offset
+    - Responsive: max-width 100% on mobile
+  - Build and typecheck pass
