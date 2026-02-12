@@ -74,6 +74,7 @@ export function SettingsView(): JSX.Element {
   const updateModelForRole = useSettingsStore((s) => s.updateModelForRole);
   const updateAppSettings = useSettingsStore((s) => s.updateAppSettings);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
+  const [queueParallelEnabled, setQueueParallelEnabled] = useState(true);
 
   /* -- Load settings on mount -- */
   useEffect(() => {
@@ -82,7 +83,8 @@ export function SettingsView(): JSX.Element {
 
   useEffect(() => {
     setDiscordWebhookUrl(appSettings.discordWebhookUrl);
-  }, [appSettings.discordWebhookUrl]);
+    setQueueParallelEnabled(appSettings.queueParallelEnabled);
+  }, [appSettings.discordWebhookUrl, appSettings.queueParallelEnabled]);
 
   /**
    * Handle model select change. Saves immediately via IPC.
@@ -94,6 +96,7 @@ export function SettingsView(): JSX.Element {
   function handleSaveAppSettings(): void {
     void updateAppSettings({
       discordWebhookUrl: discordWebhookUrl.trim(),
+      queueParallelEnabled,
     });
   }
 
@@ -173,6 +176,18 @@ export function SettingsView(): JSX.Element {
             <p className={styles.preferenceHint}>
               When set, each specialist/stage agent posts what it is doing and what it found. Leave
               empty to disable Discord notifications.
+            </p>
+            <label className={styles.preferenceCheckboxRow}>
+              <input
+                className={styles.preferenceCheckbox}
+                type="checkbox"
+                checked={queueParallelEnabled}
+                onChange={(event) => setQueueParallelEnabled(event.target.checked)}
+              />
+              <span>Enable parallel queue execution</span>
+            </label>
+            <p className={styles.preferenceHint}>
+              Disable this to force `Run All` to execute tasks sequentially (one at a time).
             </p>
             <button
               type="button"

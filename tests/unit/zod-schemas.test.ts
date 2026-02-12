@@ -22,6 +22,7 @@ import {
   cancelRunInputSchema,
   retryTaskInputSchema,
   skipTaskInputSchema,
+  setTaskPendingInputSchema,
   approveTaskProposalInputSchema,
   dismissTaskProposalInputSchema,
   abortQueueInputSchema,
@@ -461,6 +462,36 @@ describe("skipTaskInputSchema", () => {
 
   it("rejects empty taskId", () => {
     const result = skipTaskInputSchema.safeParse({
+      planId: VALID_UUID,
+      taskId: ""
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setTaskPendingInputSchema
+// ---------------------------------------------------------------------------
+
+describe("setTaskPendingInputSchema", () => {
+  it("accepts valid input", () => {
+    const result = setTaskPendingInputSchema.safeParse({
+      planId: VALID_UUID,
+      taskId: "task-001"
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects non-UUID planId", () => {
+    const result = setTaskPendingInputSchema.safeParse({
+      planId: INVALID_UUID,
+      taskId: "task-001"
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects empty taskId", () => {
+    const result = setTaskPendingInputSchema.safeParse({
       planId: VALID_UUID,
       taskId: ""
     });
@@ -1047,21 +1078,24 @@ describe("updateModelConfigInputSchema", () => {
 describe("updateAppSettingsInputSchema", () => {
   it("accepts empty webhook URL (notifications disabled)", () => {
     const result = updateAppSettingsInputSchema.safeParse({
-      discordWebhookUrl: ""
+      discordWebhookUrl: "",
+      queueParallelEnabled: true
     });
     expect(result.success).toBe(true);
   });
 
   it("accepts valid webhook URL string", () => {
     const result = updateAppSettingsInputSchema.safeParse({
-      discordWebhookUrl: "https://discord.com/api/webhooks/abc/def"
+      discordWebhookUrl: "https://discord.com/api/webhooks/abc/def",
+      queueParallelEnabled: false
     });
     expect(result.success).toBe(true);
   });
 
   it("rejects non-url string webhook value", () => {
     const result = updateAppSettingsInputSchema.safeParse({
-      discordWebhookUrl: "not-a-url"
+      discordWebhookUrl: "not-a-url",
+      queueParallelEnabled: true
     });
     expect(result.success).toBe(false);
   });
@@ -1073,7 +1107,23 @@ describe("updateAppSettingsInputSchema", () => {
 
   it("rejects non-string discordWebhookUrl", () => {
     const result = updateAppSettingsInputSchema.safeParse({
-      discordWebhookUrl: 42
+      discordWebhookUrl: 42,
+      queueParallelEnabled: true
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing queueParallelEnabled", () => {
+    const result = updateAppSettingsInputSchema.safeParse({
+      discordWebhookUrl: ""
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-boolean queueParallelEnabled", () => {
+    const result = updateAppSettingsInputSchema.safeParse({
+      discordWebhookUrl: "",
+      queueParallelEnabled: "yes"
     });
     expect(result.success).toBe(false);
   });
@@ -1287,7 +1337,8 @@ describe("IPC handler validation (schema.parse rejects before handler)", () => {
   it("updateAppSettingsInputSchema.parse throws when discordWebhookUrl is not string", () => {
     expect(() =>
       updateAppSettingsInputSchema.parse({
-        discordWebhookUrl: { nested: "bad" }
+        discordWebhookUrl: { nested: "bad" },
+        queueParallelEnabled: true
       })
     ).toThrow();
   });

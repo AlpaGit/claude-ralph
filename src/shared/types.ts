@@ -237,6 +237,12 @@ export interface SkipTaskInput {
   taskId: string;
 }
 
+/** Input for resetting a completed task back to pending. */
+export interface SetTaskPendingInput {
+  planId: string;
+  taskId: string;
+}
+
 export interface ApproveTaskProposalInput {
   planId: string;
   proposalId: string;
@@ -429,11 +435,14 @@ export interface UpdateModelConfigInput {
 export interface AppSettings {
   /** Optional Discord webhook URL for agent runtime notifications. Empty disables notifications. */
   discordWebhookUrl: string;
+  /** Whether run-all executes runnable tasks in parallel phases. False forces sequential execution. */
+  queueParallelEnabled: boolean;
 }
 
 /** Input for updating persisted application settings. */
 export interface UpdateAppSettingsInput {
   discordWebhookUrl: string;
+  queueParallelEnabled: boolean;
 }
 
 /** Lightweight summary of a discovery session for the resume dialog. */
@@ -514,6 +523,7 @@ export interface RalphApi {
   cancelRun(input: CancelRunInput): Promise<CancelRunResponse>;
   retryTask(input: RetryTaskInput): Promise<RetryTaskResponse>;
   skipTask(input: SkipTaskInput): Promise<void>;
+  setTaskPending(input: SetTaskPendingInput): Promise<void>;
   approveTaskProposal(input: ApproveTaskProposalInput): Promise<ApproveTaskProposalResponse>;
   dismissTaskProposal(input: DismissTaskProposalInput): Promise<void>;
   abortQueue(input: AbortQueueInput): Promise<void>;

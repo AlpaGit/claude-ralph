@@ -160,6 +160,23 @@
   line-height: 1.45;
 }
 
+.preferenceCheckboxRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.preferenceCheckbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-accent-2);
+}
+
 .savePreferencesBtn {
   align-self: flex-start;
   border: 2px solid var(--color-panel-border);

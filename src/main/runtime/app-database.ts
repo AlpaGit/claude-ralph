@@ -72,6 +72,9 @@ interface AppSettingRow {
   updated_at: string;
 }
 
+const APP_SETTING_DISCORD_WEBHOOK_URL = "discord_webhook_url";
+const APP_SETTING_QUEUE_PARALLEL_ENABLED = "queue_parallel_enabled";
+
 interface PlanRow {
   id: string;
   project_path: string;
@@ -838,6 +841,7 @@ export class AppDatabase {
             updated_at = @updated_at,
             completed_at = CASE
               WHEN @status = 'completed' THEN @updated_at
+              WHEN @status = 'pending' THEN NULL
               ELSE completed_at
             END
         WHERE id = @id;
@@ -1502,14 +1506,27 @@ export class AppDatabase {
    * Return persisted application settings.
    */
   getAppSettings(): AppSettings {
-    const row = this.db
+    const rows = this.db
       .prepare(
-        "SELECT key, value, updated_at FROM app_settings WHERE key = 'discord_webhook_url' LIMIT 1;",
+        `
+        SELECT key, value, updated_at
+        FROM app_settings
+        WHERE key IN (@webhook_key, @queue_parallel_key);
+      `,
       )
-      .get() as AppSettingRow | undefined;
+      .all({
+        webhook_key: APP_SETTING_DISCORD_WEBHOOK_URL,
+        queue_parallel_key: APP_SETTING_QUEUE_PARALLEL_ENABLED,
+      }) as AppSettingRow[];
+
+    const settingsMap = new Map(rows.map((row) => [row.key, row.value]));
+    const queueParallelRaw = settingsMap.get(APP_SETTING_QUEUE_PARALLEL_ENABLED) ?? "1";
+    const queueParallelEnabled =
+      queueParallelRaw === "1" || queueParallelRaw.toLowerCase() === "true";
 
     return {
-      discordWebhookUrl: row?.value ?? "",
+      discordWebhookUrl: settingsMap.get(APP_SETTING_DISCORD_WEBHOOK_URL) ?? "",
+      queueParallelEnabled,
     };
   }
 
@@ -1517,20 +1534,32 @@ export class AppDatabase {
    * Update persisted application settings.
    */
   updateAppSettings(input: UpdateAppSettingsInput): void {
-    this.db
+    const upsert = this.db
       .prepare(
         `
         INSERT INTO app_settings (key, value, updated_at)
-        VALUES ('discord_webhook_url', @value, @updated_at)
+        VALUES (@key, @value, @updated_at)
         ON CONFLICT(key) DO UPDATE SET
           value = excluded.value,
           updated_at = excluded.updated_at;
       `,
-      )
-      .run({
+      );
+
+    const transaction = this.db.transaction(() => {
+      const updatedAt = nowIso();
+      upsert.run({
+        key: APP_SETTING_DISCORD_WEBHOOK_URL,
         value: input.discordWebhookUrl,
-        updated_at: nowIso(),
+        updated_at: updatedAt,
       });
+      upsert.run({
+        key: APP_SETTING_QUEUE_PARALLEL_ENABLED,
+        value: input.queueParallelEnabled ? "1" : "0",
+        updated_at: updatedAt,
+      });
+    });
+
+    transaction();
   }
 
   // ---------------------------------------------------------------------------

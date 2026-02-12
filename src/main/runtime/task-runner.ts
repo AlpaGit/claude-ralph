@@ -41,6 +41,7 @@ import type {
   RunEvent,
   RunTaskInput,
   RunTaskResponse,
+  SetTaskPendingInput,
   SkipTaskInput,
   StartDiscoveryInput,
   TestDiscordWebhookInput,
@@ -71,6 +72,15 @@ interface QueueGitContext {
   mergeTargetBranch: string;
   originalBranch: string | null;
   worktreeRoot: string;
+}
+
+interface QueueExecutionOptions {
+  maxParallelTasks: number;
+}
+
+interface SequentialQueueContext {
+  repoRoot: string;
+  originalBranch: string | null;
 }
 
 interface ArchitectureReviewFindingSnapshot {
@@ -992,24 +1002,48 @@ export class TaskRunner {
 
     this.runningPlanQueues.add(input.planId);
 
-    let gitContext: QueueGitContext;
-    try {
-      gitContext = await this.prepareQueueGitContext(plan);
-    } catch (error) {
-      this.runningPlanQueues.delete(input.planId);
-      const message = error instanceof Error ? error.message : "Unknown queue startup failure.";
-      this.db.updatePlanStatus(input.planId, "failed");
-      const reason = `Queue execution failed: ${message}`;
-      this.emitQueueInfo(input.planId, reason, "error");
-      return {
-        queued: 0,
-        reason
-      };
-    }
+    const appSettings = this.db.getAppSettings();
+    if (appSettings.queueParallelEnabled) {
+      let gitContext: QueueGitContext;
+      try {
+        gitContext = await this.prepareQueueGitContext(plan);
+      } catch (error) {
+        this.runningPlanQueues.delete(input.planId);
+        const message = error instanceof Error ? error.message : "Unknown queue startup failure.";
+        this.db.updatePlanStatus(input.planId, "failed");
+        const reason = `Queue execution failed: ${message}`;
+        this.emitQueueInfo(input.planId, reason, "error");
+        return {
+          queued: 0,
+          reason
+        };
+      }
 
-    void this.executeQueue(input.planId, gitContext).finally(() => {
-      this.runningPlanQueues.delete(input.planId);
-    });
+      void this.executeQueue(input.planId, gitContext, {
+        maxParallelTasks: MAX_QUEUE_PHASE_PARALLEL_TASKS
+      }).finally(() => {
+        this.runningPlanQueues.delete(input.planId);
+      });
+    } else {
+      let sequentialContext: SequentialQueueContext;
+      try {
+        sequentialContext = await this.prepareSequentialQueueContext(plan);
+      } catch (error) {
+        this.runningPlanQueues.delete(input.planId);
+        const message = error instanceof Error ? error.message : "Unknown queue startup failure.";
+        this.db.updatePlanStatus(input.planId, "failed");
+        const reason = `Queue execution failed: ${message}`;
+        this.emitQueueInfo(input.planId, reason, "error");
+        return {
+          queued: 0,
+          reason
+        };
+      }
+
+      void this.executeSequentialQueue(input.planId, sequentialContext).finally(() => {
+        this.runningPlanQueues.delete(input.planId);
+      });
+    }
 
     return {
       queued: estimated
@@ -1209,6 +1243,47 @@ export class TaskRunner {
     });
   }
 
+  /**
+   * Reset a completed task back to pending so it can be picked up by run-all again.
+   */
+  setTaskPending(input: SetTaskPendingInput): void {
+    const plan = this.db.getPlan(input.planId);
+    if (!plan) {
+      throw new Error(`Plan not found: ${input.planId}`);
+    }
+
+    const task = plan.tasks.find((candidate) => candidate.id === input.taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${input.taskId}`);
+    }
+
+    if (task.status !== "completed") {
+      throw new Error(
+        `Task ${input.taskId} is not in a completed state (current: ${task.status}). Only completed tasks can be reset to pending.`
+      );
+    }
+
+    const hasInProgressRuns = plan.runs.some((run) => run.status === "in_progress");
+    if (hasInProgressRuns) {
+      throw new Error("Cannot reset a task while a run is in progress for this plan.");
+    }
+
+    this.db.updateTaskStatus(input.taskId, "pending");
+    this.db.updatePlanStatus(input.planId, "ready");
+
+    this.emitEvent({
+      runId: "",
+      planId: input.planId,
+      taskId: input.taskId,
+      type: "task_status",
+      level: "info",
+      payload: {
+        status: "pending",
+        message: `Task ${input.taskId} reset to pending by user.`
+      }
+    });
+  }
+
   approveTaskProposal(input: ApproveTaskProposalInput): ApproveTaskProposalResponse {
     const plan = this.db.getPlan(input.planId);
     if (!plan) {
@@ -1310,7 +1385,7 @@ export class TaskRunner {
     });
   }
 
-  private getRunnablePhaseTasks(planId: string): {
+  private getRunnablePhaseTasks(planId: string, maxParallelTasks: number): {
     selectedTasks: RalphTask[];
     totalRunnable: number;
   } {
@@ -1329,7 +1404,7 @@ export class TaskRunner {
     });
 
     return {
-      selectedTasks: runnable.slice(0, MAX_QUEUE_PHASE_PARALLEL_TASKS),
+      selectedTasks: runnable.slice(0, Math.max(1, maxParallelTasks)),
       totalRunnable: runnable.length
     };
   }
@@ -1347,7 +1422,14 @@ export class TaskRunner {
     });
   }
 
-  private async executeQueue(planId: string, initialGitContext?: QueueGitContext): Promise<void> {
+  private async executeQueue(
+    planId: string,
+    initialGitContext?: QueueGitContext,
+    executionOptions?: QueueExecutionOptions
+  ): Promise<void> {
+    const options: QueueExecutionOptions = executionOptions ?? {
+      maxParallelTasks: MAX_QUEUE_PHASE_PARALLEL_TASKS
+    };
     let gitContext: QueueGitContext | null = initialGitContext ?? null;
 
     try {
@@ -1368,7 +1450,7 @@ export class TaskRunner {
 
       this.emitQueueInfo(
         planId,
-        `Queue started. Runnable phases execute in parallel worktrees, merge into a phase integration branch as tasks complete, then promote to ${gitContext.mergeTargetBranch} after each phase.`
+        `Queue started in parallel mode. Runnable phases execute in parallel worktrees, merge into a phase integration branch as tasks complete, then promote to ${gitContext.mergeTargetBranch} after each phase.`
       );
 
       let phaseNumber = 0;
@@ -1378,7 +1460,7 @@ export class TaskRunner {
           break;
         }
 
-        const phaseSelection = this.getRunnablePhaseTasks(planId);
+        const phaseSelection = this.getRunnablePhaseTasks(planId, options.maxParallelTasks);
         const phaseTasks = phaseSelection.selectedTasks;
         if (phaseTasks.length === 0) {
           break;
@@ -1388,7 +1470,7 @@ export class TaskRunner {
         if (phaseSelection.totalRunnable > phaseTasks.length) {
           this.emitQueueInfo(
             planId,
-            `Phase ${phaseNumber} concurrency capped at ${phaseTasks.length}/${phaseSelection.totalRunnable} runnable task(s) (RALPH_QUEUE_MAX_PARALLEL_TASKS=${MAX_QUEUE_PHASE_PARALLEL_TASKS}).`
+            `Phase ${phaseNumber} concurrency capped at ${phaseTasks.length}/${phaseSelection.totalRunnable} runnable task(s) (effective max parallel tasks=${options.maxParallelTasks}).`
           );
         }
         this.emitQueueInfo(
@@ -1597,6 +1679,129 @@ export class TaskRunner {
       if (gitContext) {
         await this.tryRestoreBranch(gitContext, planId);
         await rm(gitContext.worktreeRoot, { recursive: true, force: true }).catch(() => undefined);
+      }
+
+      this.abortedPlanQueues.delete(planId);
+    }
+  }
+
+  private async prepareSequentialQueueContext(plan: RalphPlan): Promise<SequentialQueueContext> {
+    const repoRootResult = await this.runGitCommand(["rev-parse", "--show-toplevel"], plan.projectPath);
+    const repoRoot = repoRootResult.stdout.trim();
+    if (!repoRoot) {
+      throw new Error("Unable to resolve repository root for queue execution.");
+    }
+
+    await this.autoCleanWorkspaceForQueue(plan.id, repoRoot);
+
+    const statusResult = await this.runGitCommand(["status", "--porcelain"], repoRoot);
+    if (statusResult.stdout.trim().length > 0) {
+      throw new Error(
+        "Repository still has uncommitted changes after automatic queue cleanup."
+      );
+    }
+
+    const branchResult = await this.runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
+    const originalBranchRaw = branchResult.stdout.trim();
+    const originalBranch = originalBranchRaw === "HEAD" ? null : originalBranchRaw;
+
+    return {
+      repoRoot,
+      originalBranch
+    };
+  }
+
+  private async executeSequentialQueue(
+    planId: string,
+    context: SequentialQueueContext
+  ): Promise<void> {
+    try {
+      const plan = this.db.getPlan(planId);
+      if (!plan) {
+        throw new Error(`Plan not found: ${planId}`);
+      }
+
+      this.emitQueueInfo(
+        planId,
+        "Queue started in sequential mode. Running one task at a time on the main checkout (no worktrees or phase merges)."
+      );
+
+      let taskCount = 0;
+      while (true) {
+        if (this.abortedPlanQueues.has(planId)) {
+          break;
+        }
+
+        const selection = this.getRunnablePhaseTasks(planId, 1);
+        const task = selection.selectedTasks[0];
+        if (!task) {
+          break;
+        }
+
+        const preTaskStatus = await this.runGitCommand(["status", "--porcelain"], context.repoRoot);
+        if (preTaskStatus.stdout.trim().length > 0) {
+          this.emitQueueInfo(
+            planId,
+            `Sequential queue detected local changes before task ${task.id}. Running automatic cleanup/commit.`
+          );
+          await this.autoCleanWorkspaceForQueue(planId, context.repoRoot);
+        }
+
+        taskCount += 1;
+        this.emitQueueInfo(
+          planId,
+          `Sequential task ${taskCount}: starting ${task.id} (${task.title}).`
+        );
+
+        const run = await this.startTaskExecution({
+          planId,
+          taskId: task.id,
+          startedMessage: `Task execution started in sequential queue (task ${taskCount}).`,
+          executionContext: {
+            workingDirectory: context.repoRoot
+          }
+        });
+
+        await this.waitForRun(run.runId);
+        const runState = this.db.getRun(run.runId);
+        if (!runState || runState.status !== "completed") {
+          this.emitQueueInfo(
+            planId,
+            `Sequential queue stopped because task ${runState?.taskId ?? task.id} ended with status ${runState?.status ?? "unknown"}.`,
+            "error"
+          );
+          break;
+        }
+
+        this.emitQueueInfo(
+          planId,
+          `Sequential task ${taskCount}: completed ${runState.taskId}.`
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown queue failure.";
+      this.db.updatePlanStatus(planId, "failed");
+      this.emitQueueInfo(planId, `Queue execution failed: ${message}`, "error");
+    } finally {
+      if (context.originalBranch) {
+        const currentBranchResult = await this.safeRunGitCommand(
+          ["rev-parse", "--abbrev-ref", "HEAD"],
+          context.repoRoot
+        );
+        const currentBranch = currentBranchResult.ok ? currentBranchResult.stdout.trim() : "";
+        if (currentBranch && currentBranch !== context.originalBranch) {
+          const restoreResult = await this.safeRunGitCommand(
+            ["checkout", context.originalBranch],
+            context.repoRoot
+          );
+          if (!restoreResult.ok) {
+            this.emitQueueInfo(
+              planId,
+              `Queue finished, but switching back to "${context.originalBranch}" failed: ${restoreResult.stderr}`,
+              "error"
+            );
+          }
+        }
       }
 
       this.abortedPlanQueues.delete(planId);

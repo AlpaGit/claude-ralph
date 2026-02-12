@@ -228,7 +228,8 @@ describe("TaskRunner.testDiscordWebhook", () => {
   it("does not read webhook URL from database (uses provided input URL)", async () => {
     // Set a different URL in the database
     db.updateAppSettings({
-      discordWebhookUrl: "https://different-url.com/webhook"
+      discordWebhookUrl: "https://different-url.com/webhook",
+      queueParallelEnabled: true
     });
 
     const fetchMock = mockFetchOk();

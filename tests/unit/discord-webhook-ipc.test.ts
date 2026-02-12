@@ -50,7 +50,7 @@ const settingsInitialState = {
     committer: undefined,
   },
   loading: false,
-  appSettings: { discordWebhookUrl: "" },
+  appSettings: { discordWebhookUrl: "", queueParallelEnabled: true },
   error: null,
 };
 
@@ -119,6 +119,7 @@ describe("Discord webhook test — settingsStore integration", () => {
     api.getModelConfig.mockResolvedValue([]);
     api.getAppSettings.mockResolvedValue({
       discordWebhookUrl: "https://discord.com/api/webhooks/saved/url",
+      queueParallelEnabled: true,
     });
 
     await useSettingsStore.getState().loadSettings();
@@ -134,10 +135,12 @@ describe("Discord webhook test — settingsStore integration", () => {
 
     await useSettingsStore.getState().updateAppSettings({
       discordWebhookUrl: "https://discord.com/api/webhooks/new/url",
+      queueParallelEnabled: true,
     });
 
     expect(api.updateAppSettings).toHaveBeenCalledWith({
       discordWebhookUrl: "https://discord.com/api/webhooks/new/url",
+      queueParallelEnabled: true,
     });
     expect(useSettingsStore.getState().appSettings.discordWebhookUrl).toBe(
       "https://discord.com/api/webhooks/new/url"
@@ -169,6 +172,7 @@ describe("Discord webhook test — simulated UI flow", () => {
     api.getModelConfig.mockResolvedValue([]);
     api.getAppSettings.mockResolvedValue({
       discordWebhookUrl: "https://discord.com/api/webhooks/existing/url",
+      queueParallelEnabled: true,
     });
     await useSettingsStore.getState().loadSettings();
 
@@ -190,7 +194,7 @@ describe("Discord webhook test — simulated UI flow", () => {
   it("simulates test-webhook with unsaved URL (user typed but didn't save)", async () => {
     // Settings has empty URL
     api.getModelConfig.mockResolvedValue([]);
-    api.getAppSettings.mockResolvedValue({ discordWebhookUrl: "" });
+    api.getAppSettings.mockResolvedValue({ discordWebhookUrl: "", queueParallelEnabled: true });
     await useSettingsStore.getState().loadSettings();
 
     // User types a new URL (local state in component, not saved yet)

@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   cancelRun: "run:cancel",
   retryTask: "task:retry",
   skipTask: "task:skip",
+  setTaskPending: "task:setPending",
   approveTaskProposal: "proposal:approve",
   dismissTaskProposal: "proposal:dismiss",
   abortQueue: "queue:abort",
@@ -98,6 +99,11 @@ export const skipTaskInputSchema = z.object({
   taskId: z.string().min(1),
 });
 
+export const setTaskPendingInputSchema = z.object({
+  planId: z.string().uuid(),
+  taskId: z.string().min(1),
+});
+
 export const approveTaskProposalInputSchema = z.object({
   planId: z.string().uuid(),
   proposalId: z.string().uuid(),
@@ -173,6 +179,7 @@ export const updateAppSettingsInputSchema = z.object({
       (value) => value.length === 0 || /^https?:\/\//i.test(value),
       "discordWebhookUrl must be empty or a valid URL.",
     ),
+  queueParallelEnabled: z.boolean(),
 });
 
 export const discoveryResumeInputSchema = z.object({
