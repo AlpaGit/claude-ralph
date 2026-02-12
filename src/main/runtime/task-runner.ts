@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { BrowserWindow } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
+import { STALE_RUN_THRESHOLD_MS } from "./repositories";
 import type {
   AbortQueueInput,
   AgentRole,
@@ -196,8 +197,6 @@ const QUEUE_MERGE_VALIDATION_COMMANDS = (() => {
     .filter((command) => command.length > 0);
 })();
 
-/** Stale run threshold: runs in_progress for longer than this (ms) with no active tracking are cleaned up. */
-const STALE_RUN_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
 const CLAUDE_COAUTHOR_TRAILER = /co-authored-by:\s*.*claude/i;
 

@@ -70,6 +70,15 @@ export interface RunRow {
   retry_count: number;
 }
 
+export interface RunEventRow {
+  id: string;
+  run_id: string;
+  ts: string;
+  level: "info" | "error";
+  event_type: string;
+  payload_json: string;
+}
+
 export interface PlanProgressEntryRow {
   id: string;
   plan_id: string;

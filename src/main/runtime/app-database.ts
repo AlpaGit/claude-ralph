@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { normalize } from "node:path";
 import Database from "better-sqlite3";
 import type {
@@ -16,7 +16,6 @@ import type {
   RalphPlan,
   RalphTask,
   RunEvent,
-  RunStatus,
   TaskFollowupProposal,
   TaskFollowupProposalStatus,
   TaskRun,
@@ -27,6 +26,8 @@ import type {
 } from "@shared/types";
 import { MigrationRunner } from "./migrations/migration-runner";
 import { PlanRepository } from "./repositories/plan-repository";
+import { RunRepository } from "./repositories/run-repository";
+import type { CreateRunInput, UpdateRunInput } from "./repositories/run-repository";
 import { TaskRepository } from "./repositories/task-repository";
 import {
   type CreatePlanInput,
@@ -82,34 +83,9 @@ interface AppSettingRow {
 const APP_SETTING_DISCORD_WEBHOOK_URL = "discord_webhook_url";
 const APP_SETTING_QUEUE_PARALLEL_ENABLED = "queue_parallel_enabled";
 
-// PlanRow, PlanListRow, and TaskRow are now defined in ./repositories/row-mappers.ts
-
-interface RunRow {
-  id: string;
-  plan_id: string;
-  task_id: string;
-  session_id: string | null;
-  status: RunStatus;
-  started_at: string;
-  ended_at: string | null;
-  duration_ms: number | null;
-  total_cost_usd: number | null;
-  result_text: string | null;
-  stop_reason: string | null;
-  error_text: string | null;
-  retry_count: number;
-}
-
-interface RunEventRow {
-  id: string;
-  run_id: string;
-  ts: string;
-  level: "info" | "error";
-  event_type: string;
-  payload_json: string;
-}
-
+// PlanRow, PlanListRow, TaskRow, RunRow, and RunEventRow are now defined in ./repositories/row-mappers.ts
 // PlanProgressEntryRow and TaskFollowupProposalRow are now defined in ./repositories/row-mappers.ts
+// CreateRunInput and UpdateRunInput are now defined in ./repositories/run-repository.ts
 
 interface DiscoverySessionRow {
   id: string;
@@ -173,26 +149,6 @@ interface ProjectRow {
   created_at: string;
   updated_at: string;
   last_stack_refresh_at: string | null;
-}
-
-interface CreateRunInput {
-  id: string;
-  planId: string;
-  taskId: string;
-  status: RunStatus;
-  retryCount?: number;
-}
-
-interface UpdateRunInput {
-  runId: string;
-  status: RunStatus;
-  sessionId?: string | null;
-  endedAt?: string | null;
-  durationMs?: number | null;
-  totalCostUsd?: number | null;
-  resultText?: string | null;
-  stopReason?: string | null;
-  errorText?: string | null;
 }
 
 const nowIso = (): string => new Date().toISOString();
@@ -262,6 +218,7 @@ export class AppDatabase {
   private readonly db: Database.Database;
   private readonly planRepo: PlanRepository;
   private readonly taskRepo: TaskRepository;
+  private readonly runRepo: RunRepository;
 
   constructor(dbPath: string, migrationsDir: string) {
     this.db = new Database(dbPath);
@@ -276,6 +233,7 @@ export class AppDatabase {
     const touchProjectBound = this.touchProject.bind(this);
     this.planRepo = new PlanRepository(this.db, touchProjectBound);
     this.taskRepo = new TaskRepository(this.db);
+    this.runRepo = new RunRepository(this.db);
   }
 
   private parseProjectStackProfile(raw: string | null): ProjectStackProfile | null {
@@ -549,195 +507,30 @@ export class AppDatabase {
   }
 
   createRun(input: CreateRunInput): void {
-    this.db
-      .prepare(
-        `
-        INSERT INTO runs (
-          id, plan_id, task_id, session_id, status, started_at, ended_at, duration_ms, total_cost_usd, result_text, stop_reason, error_text, retry_count
-        ) VALUES (
-          @id, @plan_id, @task_id, NULL, @status, @started_at, NULL, NULL, NULL, NULL, NULL, NULL, @retry_count
-        );
-      `,
-      )
-      .run({
-        id: input.id,
-        plan_id: input.planId,
-        task_id: input.taskId,
-        status: input.status,
-        started_at: nowIso(),
-        retry_count: input.retryCount ?? 0,
-      });
+    this.runRepo.createRun(input);
   }
 
   updateRun(input: UpdateRunInput): void {
-    this.db
-      .prepare(
-        `
-        UPDATE runs
-        SET status = @status,
-            session_id = COALESCE(@session_id, session_id),
-            ended_at = COALESCE(@ended_at, ended_at),
-            duration_ms = COALESCE(@duration_ms, duration_ms),
-            total_cost_usd = COALESCE(@total_cost_usd, total_cost_usd),
-            result_text = COALESCE(@result_text, result_text),
-            stop_reason = COALESCE(@stop_reason, stop_reason),
-            error_text = COALESCE(@error_text, error_text)
-        WHERE id = @run_id;
-      `,
-      )
-      .run({
-        run_id: input.runId,
-        status: input.status,
-        session_id: input.sessionId ?? null,
-        ended_at: input.endedAt ?? null,
-        duration_ms: input.durationMs ?? null,
-        total_cost_usd: input.totalCostUsd ?? null,
-        result_text: input.resultText ?? null,
-        stop_reason: input.stopReason ?? null,
-        error_text: input.errorText ?? null,
-      });
+    this.runRepo.updateRun(input);
   }
 
   getRun(runId: string): TaskRun | null {
-    const row = this.db.prepare("SELECT * FROM runs WHERE id = ? LIMIT 1;").get(runId) as
-      | RunRow
-      | undefined;
-    if (!row) {
-      return null;
-    }
-
-    return {
-      id: row.id,
-      planId: row.plan_id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      status: row.status,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      durationMs: row.duration_ms,
-      totalCostUsd: row.total_cost_usd,
-      resultText: row.result_text,
-      stopReason: row.stop_reason,
-      errorText: row.error_text,
-      retryCount: row.retry_count ?? 0,
-    };
+    return this.runRepo.getRun(runId);
   }
 
   appendRunEvent(event: RunEvent): void {
-    this.db
-      .prepare(
-        `
-        INSERT INTO run_events (id, run_id, ts, level, event_type, payload_json)
-        VALUES (@id, @run_id, @ts, @level, @event_type, @payload_json);
-      `,
-      )
-      .run({
-        id: event.id,
-        run_id: event.runId,
-        ts: event.ts,
-        level: event.level,
-        event_type: event.type,
-        payload_json: JSON.stringify(event.payload ?? {}),
-      });
+    this.runRepo.appendRunEvent(event);
   }
 
-  /**
-   * Retrieve run events for a given run with cursor-based pagination.
-   * Returns up to `limit` events ordered by ts ASC.
-   * When `afterId` is provided, only events with id > afterId (by ts ordering) are returned.
-   */
   getRunEvents(
     runId: string,
     options: { limit?: number; afterId?: string } = {},
   ): { events: RunEvent[]; hasMore: boolean } {
-    const limit = options.limit ?? 100;
-
-    let rows: RunEventRow[];
-
-    if (options.afterId) {
-      // Cursor-based: get the ts of the cursor event, then fetch events after it.
-      // Use (ts, id) > (cursorTs, cursorId) for stable ordering when ts values collide.
-      const cursorRow = this.db
-        .prepare("SELECT ts FROM run_events WHERE id = ? LIMIT 1;")
-        .get(options.afterId) as { ts: string } | undefined;
-
-      if (!cursorRow) {
-        // Cursor event not found -- return from the beginning
-        rows = this.db
-          .prepare("SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;")
-          .all(runId, limit + 1) as RunEventRow[];
-      } else {
-        rows = this.db
-          .prepare(
-            `SELECT * FROM run_events
-             WHERE run_id = ? AND (ts > ? OR (ts = ? AND id > ?))
-             ORDER BY ts ASC, id ASC
-             LIMIT ?;`,
-          )
-          .all(runId, cursorRow.ts, cursorRow.ts, options.afterId, limit + 1) as RunEventRow[];
-      }
-    } else {
-      rows = this.db
-        .prepare("SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;")
-        .all(runId, limit + 1) as RunEventRow[];
-    }
-
-    const hasMore = rows.length > limit;
-    const resultRows = hasMore ? rows.slice(0, limit) : rows;
-
-    // Look up the parent run to populate planId and taskId on each event.
-    const runRow = this.db
-      .prepare("SELECT plan_id, task_id FROM runs WHERE id = ? LIMIT 1;")
-      .get(runId) as { plan_id: string; task_id: string } | undefined;
-    const planId = runRow?.plan_id ?? "";
-    const taskId = runRow?.task_id ?? "";
-
-    const events: RunEvent[] = resultRows.map((row) => {
-      let payload: unknown = {};
-      try {
-        payload = JSON.parse(row.payload_json);
-      } catch {
-        // keep empty object
-      }
-
-      return {
-        id: row.id,
-        ts: row.ts,
-        runId: row.run_id,
-        planId,
-        taskId,
-        type: row.event_type as RunEvent["type"],
-        level: row.level,
-        payload,
-      };
-    });
-
-    return { events, hasMore };
+    return this.runRepo.getRunEvents(runId, options);
   }
 
   addTodoSnapshot(runId: string, todos: TodoItem[]): void {
-    const total = todos.length;
-    const pending = todos.filter((todo) => todo.status === "pending").length;
-    const inProgress = todos.filter((todo) => todo.status === "in_progress").length;
-    const completed = todos.filter((todo) => todo.status === "completed").length;
-
-    this.db
-      .prepare(
-        `
-        INSERT INTO todo_snapshots (id, run_id, ts, total, pending, in_progress, completed, todos_json)
-        VALUES (@id, @run_id, @ts, @total, @pending, @in_progress, @completed, @todos_json);
-      `,
-      )
-      .run({
-        id: randomUUID(),
-        run_id: runId,
-        ts: nowIso(),
-        total,
-        pending,
-        in_progress: inProgress,
-        completed,
-        todos_json: JSON.stringify(todos),
-      });
+    this.runRepo.addTodoSnapshot(runId, todos);
   }
 
   appendPlanProgressEntry(input: {
@@ -812,31 +605,7 @@ export class AppDatabase {
    * Used by the retry flow to extract previous error context.
    */
   getLatestFailedRun(planId: string, taskId: string): TaskRun | null {
-    const row = this.db
-      .prepare(
-        "SELECT * FROM runs WHERE plan_id = ? AND task_id = ? AND status = 'failed' ORDER BY started_at DESC LIMIT 1;",
-      )
-      .get(planId, taskId) as RunRow | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    return {
-      id: row.id,
-      planId: row.plan_id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      status: row.status,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      durationMs: row.duration_ms,
-      totalCostUsd: row.total_cost_usd,
-      resultText: row.result_text,
-      stopReason: row.stop_reason,
-      errorText: row.error_text,
-      retryCount: row.retry_count ?? 0,
-    };
+    return this.runRepo.getLatestFailedRun(planId, taskId);
   }
 
   /**
@@ -1131,27 +900,7 @@ export class AppDatabase {
    * lost their in-memory ActiveRun tracking (e.g. after app restart).
    */
   getStaleInProgressRuns(olderThan: string): TaskRun[] {
-    const rows = this.db
-      .prepare(
-        "SELECT * FROM runs WHERE status = 'in_progress' AND started_at < ? ORDER BY started_at ASC;",
-      )
-      .all(olderThan) as RunRow[];
-
-    return rows.map((row) => ({
-      id: row.id,
-      planId: row.plan_id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      status: row.status,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      durationMs: row.duration_ms,
-      totalCostUsd: row.total_cost_usd,
-      resultText: row.result_text,
-      stopReason: row.stop_reason,
-      errorText: row.error_text,
-      retryCount: row.retry_count ?? 0,
-    }));
+    return this.runRepo.getStaleInProgressRuns(olderThan);
   }
 
   close(): void {
