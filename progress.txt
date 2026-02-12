@@ -203,3 +203,42 @@ p1-09: Install react-router-dom and create route structure   [DONE]
   - src/renderer/views/SettingsView.tsx -- stub view for settings (route: /settings)
   - src/renderer/index.tsx -- updated to render RouterProvider with hash router instead of App
   - Build and typecheck pass
+
+p1-10: Create Sidebar component with plan list navigation   [DONE]
+  - src/renderer/components/layout/Sidebar.tsx
+    - Extracted sidebar from AppShell into dedicated Sidebar component
+    - NavLink navigation with active state highlighting (Plans, Discovery, Settings)
+    - Nav items use icon-letter badges (mono font, bordered square) + labels
+    - Collapsible plan list below Plans link, reads from planStore.plansList
+    - Plan items link to /plan/:planId with UStatusPill status badges
+    - Plan summary truncated to 40 chars with ellipsis
+    - Relative timestamps via timeAgo() helper (e.g. "2h ago", "3d ago")
+    - Collapsible toggle: chevron button with rotation animation
+    - "New Plan" button navigates to plan list view
+    - Sidebar collapse/expand: 280px expanded, 60px collapsed
+    - Collapsed mode: icon-only nav links, status-dot-only plan items (max 5)
+    - Loads plansList on mount via useEffect
+    - Exports SidebarProps type
+  - src/renderer/components/layout/Sidebar.module.css
+    - Brutalist theme: warm panel background, 2px solid borders, bold typography
+    - Width transition: 150ms ease-in-out between expanded/collapsed states
+    - Brand section: square badge with accent border, bold title
+    - Nav links: flex row with icon + label, 2px transparent border for active state
+    - Active link: wizard-green background and border highlight
+    - Plan section: left border rail, collapsible list with max-height scroll
+    - Plan items: summary + meta row (status pill + timestamp)
+    - New Plan button: accent background, 2px border, hover translateY micro-interaction
+    - Collapse toggle: muted border, rotate-180 icon flip when collapsed
+    - Responsive: horizontal layout below 768px, hides plan list and collapse toggle
+    - focus-visible outlines on all interactive elements for accessibility
+    - All values reference tokens.css custom properties
+  - src/renderer/components/AppShell/AppShell.tsx
+    - Replaced inline sidebar markup with <Sidebar /> component
+    - Removed NavLink, NavItem, cn() helper, NAV_ITEMS (moved to Sidebar)
+    - Shell layout changed from CSS grid to flexbox for dynamic sidebar width
+  - src/renderer/components/AppShell/AppShell.module.css
+    - Simplified: removed all sidebar/nav/brand styles (now in Sidebar.module.css)
+    - Layout changed from grid (220px + 1fr) to flex row
+    - Content area uses flex: 1 to fill remaining width
+    - Responsive: flex-direction column below 768px
+  - Build and typecheck pass
