@@ -23,7 +23,7 @@ import type {
   TaskStatus,
   TechnicalPack,
   TodoItem,
-  UpdateAppSettingsInput
+  UpdateAppSettingsInput,
 } from "@shared/types";
 import { MigrationRunner } from "./migrations/migration-runner";
 
@@ -35,7 +35,7 @@ export class PlanParseError extends Error {
   constructor(
     public readonly field: string,
     public readonly entityId: string,
-    public readonly cause: unknown
+    public readonly cause: unknown,
   ) {
     const causeMsg = cause instanceof Error ? cause.message : String(cause);
     super(`Failed to parse ${field} for plan ${entityId}: ${causeMsg}`);
@@ -259,7 +259,9 @@ function normalizeProjectKey(projectPath: string): string {
     return "";
   }
 
-  const normalized = normalize(trimmed).replace(/[\\/]+/g, "/").trim();
+  const normalized = normalize(trimmed)
+    .replace(/[\\/]+/g, "/")
+    .trim();
   if (normalized.length === 0) {
     return "";
   }
@@ -292,7 +294,11 @@ function deriveProjectDisplayName(projectPath: string): string {
  * @param field  - Column name (for error context).
  * @param entityId - The plan or task ID that owns the row (for error context).
  */
-const parseJsonArray = (value: string | null | undefined, field: string, entityId: string): string[] => {
+const parseJsonArray = (
+  value: string | null | undefined,
+  field: string,
+  entityId: string,
+): string[] => {
   if (!value) {
     return [];
   }
@@ -301,7 +307,9 @@ const parseJsonArray = (value: string | null | undefined, field: string, entityI
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
   } catch (error: unknown) {
-    console.error(`[AppDatabase] Failed to parse ${field} for entity ${entityId}: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `[AppDatabase] Failed to parse ${field} for entity ${entityId}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     throw new PlanParseError(field, entityId, error);
   }
 };
@@ -366,7 +374,7 @@ export class AppDatabase {
       status: row.status,
       projectPath: row.project_path,
       createdAt: row.created_at,
-      archivedAt: row.archived_at
+      archivedAt: row.archived_at,
     };
   }
 
@@ -387,28 +395,30 @@ export class AppDatabase {
       acceptanceCriteria: parseJsonArray(
         row.acceptance_criteria_json,
         "acceptance_criteria_json",
-        row.id
+        row.id,
       ),
       technicalNotes: row.technical_notes,
       status: row.status,
       approvedTaskId: row.approved_task_id,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 
   private mapProjectMemoryRow(row: ProjectRow, limitPlans: number): ProjectMemoryItem {
     const planRows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at
         FROM plans
         WHERE project_id = @project_id
         ORDER BY created_at DESC
         LIMIT @limit;
-      `)
+      `,
+      )
       .all({
         project_id: row.id,
-        limit: limitPlans
+        limit: limitPlans,
       }) as PlanListRow[];
 
     return {
@@ -421,11 +431,13 @@ export class AppDatabase {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       lastStackRefreshAt: row.last_stack_refresh_at,
-      recentPlans: planRows.map((planRow) => this.mapPlanListRow(planRow))
+      recentPlans: planRows.map((planRow) => this.mapPlanListRow(planRow)),
     };
   }
 
-  private touchProject(projectPath: string): { projectId: string; projectKey: string; canonicalPath: string } | null {
+  private touchProject(
+    projectPath: string,
+  ): { projectId: string; projectKey: string; canonicalPath: string } | null {
     const projectKey = normalizeProjectKey(projectPath);
     if (projectKey.length === 0) {
       return null;
@@ -437,7 +449,8 @@ export class AppDatabase {
     const stableProjectId = buildStableProjectId(projectKey);
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO projects (
           id, project_key, canonical_path, display_name, metadata_json,
           stack_profile_json, created_at, updated_at, last_stack_refresh_at
@@ -452,18 +465,21 @@ export class AppDatabase {
             ELSE projects.display_name
           END,
           updated_at = excluded.updated_at;
-      `)
+      `,
+      )
       .run({
         id: stableProjectId,
         project_key: projectKey,
         canonical_path: canonicalPath,
         display_name: displayName,
         created_at: timestamp,
-        updated_at: timestamp
+        updated_at: timestamp,
       });
 
     const row = this.db
-      .prepare("SELECT id, project_key, canonical_path FROM projects WHERE project_key = ? LIMIT 1;")
+      .prepare(
+        "SELECT id, project_key, canonical_path FROM projects WHERE project_key = ? LIMIT 1;",
+      )
       .get(projectKey) as { id: string; project_key: string; canonical_path: string } | undefined;
 
     if (!row) {
@@ -471,33 +487,37 @@ export class AppDatabase {
     }
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE plans
         SET project_id = @project_id
         WHERE project_key = @project_key
           AND (project_id IS NULL OR project_id = '');
-      `)
+      `,
+      )
       .run({
         project_id: row.id,
-        project_key: projectKey
+        project_key: projectKey,
       });
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE discovery_sessions
         SET project_id = @project_id
         WHERE project_key = @project_key
           AND (project_id IS NULL OR project_id = '');
-      `)
+      `,
+      )
       .run({
         project_id: row.id,
-        project_key: projectKey
+        project_key: projectKey,
       });
 
     return {
       projectId: row.id,
       projectKey: row.project_key,
-      canonicalPath: row.canonical_path
+      canonicalPath: row.canonical_path,
     };
   }
 
@@ -521,18 +541,20 @@ export class AppDatabase {
     }
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE projects
         SET stack_profile_json = @stack_profile_json,
             updated_at = @updated_at,
             last_stack_refresh_at = @last_stack_refresh_at
         WHERE id = @project_id;
-      `)
+      `,
+      )
       .run({
         project_id: project.projectId,
         stack_profile_json: JSON.stringify(profile),
         updated_at: nowIso(),
-        last_stack_refresh_at: profile.updatedAt
+        last_stack_refresh_at: profile.updatedAt,
       });
   }
 
@@ -543,16 +565,18 @@ export class AppDatabase {
     }
 
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at
         FROM plans
         WHERE project_id = @project_id
         ORDER BY created_at DESC
         LIMIT @limit;
-      `)
+      `,
+      )
       .all({
         project_id: project.projectId,
-        limit
+        limit,
       }) as PlanListRow[];
 
     return rows.map((row) => this.mapPlanListRow(row));
@@ -571,12 +595,14 @@ export class AppDatabase {
 
     const where = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT id, project_key, canonical_path, display_name, metadata_json, stack_profile_json, created_at, updated_at, last_stack_refresh_at
         FROM projects
         ${where}
         ORDER BY updated_at DESC;
-      `)
+      `,
+      )
       .all(params) as ProjectRow[];
 
     return rows.map((row) => this.mapProjectMemoryRow(row, limitPlans));
@@ -584,12 +610,14 @@ export class AppDatabase {
 
   getProjectMemoryItemById(projectId: string, limitPlans = 6): ProjectMemoryItem | null {
     const row = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT id, project_key, canonical_path, display_name, metadata_json, stack_profile_json, created_at, updated_at, last_stack_refresh_at
         FROM projects
         WHERE id = ?
         LIMIT 1;
-      `)
+      `,
+      )
       .get(projectId) as ProjectRow | undefined;
 
     if (!row) {
@@ -630,7 +658,7 @@ export class AppDatabase {
         technical_pack_json: JSON.stringify(input.technicalPack),
         status: "ready",
         created_at: createdAt,
-        updated_at: createdAt
+        updated_at: createdAt,
       });
 
       for (const task of input.tasks) {
@@ -645,7 +673,7 @@ export class AppDatabase {
           technical_notes: task.technicalNotes,
           status: "pending",
           created_at: createdAt,
-          updated_at: createdAt
+          updated_at: createdAt,
         });
       }
     });
@@ -654,7 +682,9 @@ export class AppDatabase {
   }
 
   getPlan(planId: string): RalphPlan | null {
-    const planRow = this.db.prepare("SELECT * FROM plans WHERE id = ?;").get(planId) as PlanRow | undefined;
+    const planRow = this.db.prepare("SELECT * FROM plans WHERE id = ?;").get(planId) as
+      | PlanRow
+      | undefined;
     if (!planRow) {
       return null;
     }
@@ -667,7 +697,8 @@ export class AppDatabase {
       .prepare("SELECT * FROM runs WHERE plan_id = ? ORDER BY started_at DESC;")
       .all(planId) as RunRow[];
     const proposalRows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           id, plan_id, source_run_id, source_task_id, finding_key,
           title, description, severity, rule, location, message, recommended_action,
@@ -676,14 +707,17 @@ export class AppDatabase {
         FROM task_followup_proposals
         WHERE plan_id = ?
         ORDER BY created_at DESC;
-      `)
+      `,
+      )
       .all(planId) as TaskFollowupProposalRow[];
 
     let technicalPack: TechnicalPack;
     try {
       technicalPack = JSON.parse(planRow.technical_pack_json) as TechnicalPack;
     } catch (error: unknown) {
-      console.error(`[AppDatabase] Failed to parse technical_pack_json for plan ${planId}: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `[AppDatabase] Failed to parse technical_pack_json for plan ${planId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw new PlanParseError("technical_pack_json", planId, error);
     }
 
@@ -694,12 +728,16 @@ export class AppDatabase {
       title: row.title,
       description: row.description,
       dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
-      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json, "acceptance_criteria_json", row.id),
+      acceptanceCriteria: parseJsonArray(
+        row.acceptance_criteria_json,
+        "acceptance_criteria_json",
+        row.id,
+      ),
       technicalNotes: row.technical_notes,
       status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      completedAt: row.completed_at
+      completedAt: row.completed_at,
     }));
 
     const runs: TaskRun[] = runRows.map((row) => ({
@@ -715,7 +753,7 @@ export class AppDatabase {
       resultText: row.result_text,
       stopReason: row.stop_reason,
       errorText: row.error_text,
-      retryCount: row.retry_count ?? 0
+      retryCount: row.retry_count ?? 0,
     }));
     const taskProposals = proposalRows.map((row) => this.mapTaskFollowupProposalRow(row));
 
@@ -731,7 +769,7 @@ export class AppDatabase {
       archivedAt: planRow.archived_at,
       tasks,
       runs,
-      taskProposals
+      taskProposals,
     };
   }
 
@@ -751,12 +789,16 @@ export class AppDatabase {
       title: row.title,
       description: row.description,
       dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
-      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json, "acceptance_criteria_json", row.id),
+      acceptanceCriteria: parseJsonArray(
+        row.acceptance_criteria_json,
+        "acceptance_criteria_json",
+        row.id,
+      ),
       technicalNotes: row.technical_notes,
       status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      completedAt: row.completed_at
+      completedAt: row.completed_at,
     };
   }
 
@@ -772,12 +814,16 @@ export class AppDatabase {
       title: row.title,
       description: row.description,
       dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
-      acceptanceCriteria: parseJsonArray(row.acceptance_criteria_json, "acceptance_criteria_json", row.id),
+      acceptanceCriteria: parseJsonArray(
+        row.acceptance_criteria_json,
+        "acceptance_criteria_json",
+        row.id,
+      ),
       technicalNotes: row.technical_notes,
       status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      completedAt: row.completed_at
+      completedAt: row.completed_at,
     }));
   }
 
@@ -785,7 +831,8 @@ export class AppDatabase {
     const timestamp = nowIso();
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE tasks
         SET status = @status,
             updated_at = @updated_at,
@@ -794,11 +841,12 @@ export class AppDatabase {
               ELSE completed_at
             END
         WHERE id = @id;
-      `)
+      `,
+      )
       .run({
         id: taskId,
         status,
-        updated_at: timestamp
+        updated_at: timestamp,
       });
   }
 
@@ -810,26 +858,29 @@ export class AppDatabase {
 
   createRun(input: CreateRunInput): void {
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO runs (
           id, plan_id, task_id, session_id, status, started_at, ended_at, duration_ms, total_cost_usd, result_text, stop_reason, error_text, retry_count
         ) VALUES (
           @id, @plan_id, @task_id, NULL, @status, @started_at, NULL, NULL, NULL, NULL, NULL, NULL, @retry_count
         );
-      `)
+      `,
+      )
       .run({
         id: input.id,
         plan_id: input.planId,
         task_id: input.taskId,
         status: input.status,
         started_at: nowIso(),
-        retry_count: input.retryCount ?? 0
+        retry_count: input.retryCount ?? 0,
       });
   }
 
   updateRun(input: UpdateRunInput): void {
     this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE runs
         SET status = @status,
             session_id = COALESCE(@session_id, session_id),
@@ -840,7 +891,8 @@ export class AppDatabase {
             stop_reason = COALESCE(@stop_reason, stop_reason),
             error_text = COALESCE(@error_text, error_text)
         WHERE id = @run_id;
-      `)
+      `,
+      )
       .run({
         run_id: input.runId,
         status: input.status,
@@ -850,12 +902,14 @@ export class AppDatabase {
         total_cost_usd: input.totalCostUsd ?? null,
         result_text: input.resultText ?? null,
         stop_reason: input.stopReason ?? null,
-        error_text: input.errorText ?? null
+        error_text: input.errorText ?? null,
       });
   }
 
   getRun(runId: string): TaskRun | null {
-    const row = this.db.prepare("SELECT * FROM runs WHERE id = ? LIMIT 1;").get(runId) as RunRow | undefined;
+    const row = this.db.prepare("SELECT * FROM runs WHERE id = ? LIMIT 1;").get(runId) as
+      | RunRow
+      | undefined;
     if (!row) {
       return null;
     }
@@ -873,23 +927,25 @@ export class AppDatabase {
       resultText: row.result_text,
       stopReason: row.stop_reason,
       errorText: row.error_text,
-      retryCount: row.retry_count ?? 0
+      retryCount: row.retry_count ?? 0,
     };
   }
 
   appendRunEvent(event: RunEvent): void {
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO run_events (id, run_id, ts, level, event_type, payload_json)
         VALUES (@id, @run_id, @ts, @level, @event_type, @payload_json);
-      `)
+      `,
+      )
       .run({
         id: event.id,
         run_id: event.runId,
         ts: event.ts,
         level: event.level,
         event_type: event.type,
-        payload_json: JSON.stringify(event.payload ?? {})
+        payload_json: JSON.stringify(event.payload ?? {}),
       });
   }
 
@@ -900,7 +956,7 @@ export class AppDatabase {
    */
   getRunEvents(
     runId: string,
-    options: { limit?: number; afterId?: string } = {}
+    options: { limit?: number; afterId?: string } = {},
   ): { events: RunEvent[]; hasMore: boolean } {
     const limit = options.limit ?? 100;
 
@@ -916,9 +972,7 @@ export class AppDatabase {
       if (!cursorRow) {
         // Cursor event not found -- return from the beginning
         rows = this.db
-          .prepare(
-            "SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;"
-          )
+          .prepare("SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;")
           .all(runId, limit + 1) as RunEventRow[];
       } else {
         rows = this.db
@@ -926,15 +980,13 @@ export class AppDatabase {
             `SELECT * FROM run_events
              WHERE run_id = ? AND (ts > ? OR (ts = ? AND id > ?))
              ORDER BY ts ASC, id ASC
-             LIMIT ?;`
+             LIMIT ?;`,
           )
           .all(runId, cursorRow.ts, cursorRow.ts, options.afterId, limit + 1) as RunEventRow[];
       }
     } else {
       rows = this.db
-        .prepare(
-          "SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;"
-        )
+        .prepare("SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;")
         .all(runId, limit + 1) as RunEventRow[];
     }
 
@@ -964,7 +1016,7 @@ export class AppDatabase {
         taskId,
         type: row.event_type as RunEvent["type"],
         level: row.level,
-        payload
+        payload,
       };
     });
 
@@ -978,10 +1030,12 @@ export class AppDatabase {
     const completed = todos.filter((todo) => todo.status === "completed").length;
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO todo_snapshots (id, run_id, ts, total, pending, in_progress, completed, todos_json)
         VALUES (@id, @run_id, @ts, @total, @pending, @in_progress, @completed, @todos_json);
-      `)
+      `,
+      )
       .run({
         id: randomUUID(),
         run_id: runId,
@@ -990,7 +1044,7 @@ export class AppDatabase {
         pending,
         in_progress: inProgress,
         completed,
-        todos_json: JSON.stringify(todos)
+        todos_json: JSON.stringify(todos),
       });
   }
 
@@ -1010,46 +1064,50 @@ export class AppDatabase {
       trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed;
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO plan_progress_entries (
           id, plan_id, run_id, status, entry_text, created_at
         ) VALUES (
           @id, @plan_id, @run_id, @status, @entry_text, @created_at
         );
-      `)
+      `,
+      )
       .run({
         id: randomUUID(),
         plan_id: input.planId,
         run_id: input.runId ?? null,
         status: input.status,
         entry_text: truncated,
-        created_at: nowIso()
+        created_at: nowIso(),
       });
   }
 
   listPlanProgressEntries(
     planId: string,
-    limit = 12
-  ): Array<{
+    limit = 12,
+  ): {
     id: string;
     planId: string;
     runId: string | null;
     status: "completed" | "failed" | "cancelled";
     entryText: string;
     createdAt: string;
-  }> {
+  }[] {
     const boundedLimit = Math.min(Math.max(limit, 1), 100);
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT id, plan_id, run_id, status, entry_text, created_at
         FROM plan_progress_entries
         WHERE plan_id = @plan_id
         ORDER BY created_at DESC
         LIMIT @limit;
-      `)
+      `,
+      )
       .all({
         plan_id: planId,
-        limit: boundedLimit
+        limit: boundedLimit,
       }) as PlanProgressEntryRow[];
 
     return rows.map((row) => ({
@@ -1058,7 +1116,7 @@ export class AppDatabase {
       runId: row.run_id,
       status: row.status,
       entryText: row.entry_text,
-      createdAt: row.created_at
+      createdAt: row.created_at,
     }));
   }
 
@@ -1079,7 +1137,8 @@ export class AppDatabase {
   }): boolean {
     const now = nowIso();
     const result = this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO task_followup_proposals (
           id, plan_id, source_run_id, source_task_id, finding_key,
           title, description, severity, rule, location, message, recommended_action,
@@ -1092,7 +1151,8 @@ export class AppDatabase {
           'proposed', NULL, @created_at, @updated_at
         )
         ON CONFLICT(plan_id, finding_key) DO NOTHING;
-      `)
+      `,
+      )
       .run({
         id: randomUUID(),
         plan_id: input.planId,
@@ -1109,7 +1169,7 @@ export class AppDatabase {
         acceptance_criteria_json: JSON.stringify(input.acceptanceCriteria),
         technical_notes: input.technicalNotes,
         created_at: now,
-        updated_at: now
+        updated_at: now,
       });
 
     return result.changes > 0;
@@ -1117,10 +1177,11 @@ export class AppDatabase {
 
   listTaskFollowupProposals(
     planId: string,
-    statuses?: TaskFollowupProposalStatus[]
+    statuses?: TaskFollowupProposalStatus[],
   ): TaskFollowupProposal[] {
     const rows = this.db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           id, plan_id, source_run_id, source_task_id, finding_key,
           title, description, severity, rule, location, message, recommended_action,
@@ -1129,9 +1190,10 @@ export class AppDatabase {
         FROM task_followup_proposals
         WHERE plan_id = @plan_id
         ORDER BY created_at DESC;
-      `)
+      `,
+      )
       .all({
-        plan_id: planId
+        plan_id: planId,
       }) as TaskFollowupProposalRow[];
 
     const filteredRows =
@@ -1146,7 +1208,8 @@ export class AppDatabase {
   }): { taskId: string } | null {
     const transaction = this.db.transaction(() => {
       const proposal = this.db
-        .prepare(`
+        .prepare(
+          `
           SELECT
             id, plan_id, source_run_id, source_task_id, finding_key,
             title, description, severity, rule, location, message, recommended_action,
@@ -1155,10 +1218,11 @@ export class AppDatabase {
           FROM task_followup_proposals
           WHERE id = @id AND plan_id = @plan_id
           LIMIT 1;
-        `)
+        `,
+        )
         .get({
           id: input.proposalId,
-          plan_id: input.planId
+          plan_id: input.planId,
         }) as TaskFollowupProposalRow | undefined;
 
       if (!proposal || proposal.status !== "proposed") {
@@ -1168,28 +1232,31 @@ export class AppDatabase {
       const maxOrdinalRow = this.db
         .prepare("SELECT MAX(ordinal) AS max_ordinal FROM tasks WHERE plan_id = @plan_id;")
         .get({
-          plan_id: input.planId
+          plan_id: input.planId,
         }) as { max_ordinal: number | null } | undefined;
       const nextOrdinal = (maxOrdinalRow?.max_ordinal ?? 0) + 1;
 
       const taskId = randomUUID();
       const now = nowIso();
       const sourceTaskExists = this.db
-        .prepare(`
+        .prepare(
+          `
           SELECT 1
           FROM tasks
           WHERE id = @task_id
             AND plan_id = @plan_id
           LIMIT 1;
-        `)
+        `,
+        )
         .get({
           task_id: proposal.source_task_id,
-          plan_id: input.planId
+          plan_id: input.planId,
         }) as { 1: number } | undefined;
       const dependencies = sourceTaskExists ? [proposal.source_task_id] : [];
 
       this.db
-        .prepare(`
+        .prepare(
+          `
           INSERT INTO tasks (
             id, plan_id, ordinal, title, description,
             dependencies_json, acceptance_criteria_json, technical_notes,
@@ -1199,7 +1266,8 @@ export class AppDatabase {
             @dependencies_json, @acceptance_criteria_json, @technical_notes,
             'pending', @created_at, @updated_at, NULL
           );
-        `)
+        `,
+        )
         .run({
           id: taskId,
           plan_id: input.planId,
@@ -1210,11 +1278,12 @@ export class AppDatabase {
           acceptance_criteria_json: proposal.acceptance_criteria_json,
           technical_notes: `${proposal.technical_notes}\n\nApproved from proposal ${proposal.id}.`,
           created_at: now,
-          updated_at: now
+          updated_at: now,
         });
 
       const updateResult = this.db
-        .prepare(`
+        .prepare(
+          `
           UPDATE task_followup_proposals
           SET status = 'approved',
               approved_task_id = @approved_task_id,
@@ -1222,24 +1291,23 @@ export class AppDatabase {
           WHERE id = @id
             AND plan_id = @plan_id
             AND status = 'proposed';
-        `)
+        `,
+        )
         .run({
           id: input.proposalId,
           plan_id: input.planId,
           approved_task_id: taskId,
-          updated_at: now
+          updated_at: now,
         });
 
       if (updateResult.changes === 0) {
         throw new Error(`Proposal approval race detected for proposal ${input.proposalId}.`);
       }
 
-      this.db
-        .prepare("UPDATE plans SET updated_at = @updated_at WHERE id = @plan_id;")
-        .run({
-          plan_id: input.planId,
-          updated_at: now
-        });
+      this.db.prepare("UPDATE plans SET updated_at = @updated_at WHERE id = @plan_id;").run({
+        plan_id: input.planId,
+        updated_at: now,
+      });
 
       return { taskId };
     });
@@ -1247,23 +1315,22 @@ export class AppDatabase {
     return transaction();
   }
 
-  dismissTaskFollowupProposal(input: {
-    planId: string;
-    proposalId: string;
-  }): boolean {
+  dismissTaskFollowupProposal(input: { planId: string; proposalId: string }): boolean {
     const result = this.db
-      .prepare(`
+      .prepare(
+        `
         UPDATE task_followup_proposals
         SET status = 'dismissed',
             updated_at = @updated_at
         WHERE id = @id
           AND plan_id = @plan_id
           AND status = 'proposed';
-      `)
+      `,
+      )
       .run({
         id: input.proposalId,
         plan_id: input.planId,
-        updated_at: nowIso()
+        updated_at: nowIso(),
       });
 
     return result.changes > 0;
@@ -1314,7 +1381,7 @@ export class AppDatabase {
   getLatestFailedRun(planId: string, taskId: string): TaskRun | null {
     const row = this.db
       .prepare(
-        "SELECT * FROM runs WHERE plan_id = ? AND task_id = ? AND status = 'failed' ORDER BY started_at DESC LIMIT 1;"
+        "SELECT * FROM runs WHERE plan_id = ? AND task_id = ? AND status = 'failed' ORDER BY started_at DESC LIMIT 1;",
       )
       .get(planId, taskId) as RunRow | undefined;
 
@@ -1335,7 +1402,7 @@ export class AppDatabase {
       resultText: row.result_text,
       stopReason: row.stop_reason,
       errorText: row.error_text,
-      retryCount: row.retry_count ?? 0
+      retryCount: row.retry_count ?? 0,
     };
   }
 
@@ -1369,7 +1436,7 @@ export class AppDatabase {
       status: row.status,
       projectPath: row.project_path,
       createdAt: row.created_at,
-      archivedAt: row.archived_at
+      archivedAt: row.archived_at,
     }));
   }
 
@@ -1404,14 +1471,16 @@ export class AppDatabase {
    */
   getModelConfig(): ModelConfigEntry[] {
     const rows = this.db
-      .prepare("SELECT id, agent_role, model_id, updated_at FROM model_config ORDER BY agent_role ASC;")
+      .prepare(
+        "SELECT id, agent_role, model_id, updated_at FROM model_config ORDER BY agent_role ASC;",
+      )
       .all() as ModelConfigRow[];
 
     return rows.map((row) => ({
       id: row.id,
       agentRole: row.agent_role,
       modelId: row.model_id,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     }));
   }
 
@@ -1434,11 +1503,13 @@ export class AppDatabase {
    */
   getAppSettings(): AppSettings {
     const row = this.db
-      .prepare("SELECT key, value, updated_at FROM app_settings WHERE key = 'discord_webhook_url' LIMIT 1;")
+      .prepare(
+        "SELECT key, value, updated_at FROM app_settings WHERE key = 'discord_webhook_url' LIMIT 1;",
+      )
       .get() as AppSettingRow | undefined;
 
     return {
-      discordWebhookUrl: row?.value ?? ""
+      discordWebhookUrl: row?.value ?? "",
     };
   }
 
@@ -1447,16 +1518,18 @@ export class AppDatabase {
    */
   updateAppSettings(input: UpdateAppSettingsInput): void {
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO app_settings (key, value, updated_at)
         VALUES ('discord_webhook_url', @value, @updated_at)
         ON CONFLICT(key) DO UPDATE SET
           value = excluded.value,
           updated_at = excluded.updated_at;
-      `)
+      `,
+      )
       .run({
         value: input.discordWebhookUrl,
-        updated_at: nowIso()
+        updated_at: nowIso(),
       });
   }
 
@@ -1473,7 +1546,8 @@ export class AppDatabase {
     const project = this.touchProject(input.projectPath);
 
     this.db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO discovery_sessions (
           id, project_path, project_id, project_key, seed_sentence, additional_context,
           answer_history_json, round_number, latest_state_json,
@@ -1483,7 +1557,8 @@ export class AppDatabase {
           @answer_history_json, @round_number, @latest_state_json,
           @status, @created_at, @updated_at
         );
-      `)
+      `,
+      )
       .run({
         id: input.id,
         project_path: input.projectPath,
@@ -1496,7 +1571,7 @@ export class AppDatabase {
         latest_state_json: JSON.stringify(input.latestState),
         status: "active",
         created_at: now,
-        updated_at: now
+        updated_at: now,
       });
 
     return {
@@ -1509,7 +1584,7 @@ export class AppDatabase {
       latestState: input.latestState,
       status: "active",
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
   }
 
@@ -1521,7 +1596,7 @@ export class AppDatabase {
     const sets: string[] = ["updated_at = @updated_at"];
     const params: Record<string, unknown> = {
       id: input.id,
-      updated_at: nowIso()
+      updated_at: nowIso(),
     };
 
     if (input.answerHistory !== undefined) {
@@ -1592,7 +1667,9 @@ export class AppDatabase {
       const parsed = JSON.parse(row.answer_history_json);
       answerHistory = Array.isArray(parsed) ? parsed : [];
     } catch {
-      console.error(`[AppDatabase] Failed to parse answer_history_json for discovery session ${row.id}`);
+      console.error(
+        `[AppDatabase] Failed to parse answer_history_json for discovery session ${row.id}`,
+      );
       answerHistory = [];
     }
 
@@ -1600,7 +1677,9 @@ export class AppDatabase {
     try {
       latestState = JSON.parse(row.latest_state_json) as DiscoveryInterviewState;
     } catch (error: unknown) {
-      console.error(`[AppDatabase] Failed to parse latest_state_json for discovery session ${row.id}: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(
+        `[AppDatabase] Failed to parse latest_state_json for discovery session ${row.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw new PlanParseError("latest_state_json", row.id, error);
     }
 
@@ -1614,7 +1693,7 @@ export class AppDatabase {
       latestState,
       status: row.status,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 
@@ -1626,7 +1705,7 @@ export class AppDatabase {
   getStaleInProgressRuns(olderThan: string): TaskRun[] {
     const rows = this.db
       .prepare(
-        "SELECT * FROM runs WHERE status = 'in_progress' AND started_at < ? ORDER BY started_at ASC;"
+        "SELECT * FROM runs WHERE status = 'in_progress' AND started_at < ? ORDER BY started_at ASC;",
       )
       .all(olderThan) as RunRow[];
 
@@ -1643,7 +1722,7 @@ export class AppDatabase {
       resultText: row.result_text,
       stopReason: row.stop_reason,
       errorText: row.error_text,
-      retryCount: row.retry_count ?? 0
+      retryCount: row.retry_count ?? 0,
     }));
   }
 
