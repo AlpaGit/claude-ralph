@@ -495,3 +495,18 @@ p1-17: Fix bug: Remove hardcoded 'dotnet build' from task execution prompt   [DO
       Cargo.toml, Makefile, etc.) or as specified in the plan's technical notes."
     - No other dotnet references found in the file
   - Build and typecheck pass
+
+p1-18: Fix bug: taskRunMap shows latest run per task   [DONE]
+  - src/renderer/App.tsx
+    - taskRunMap(): added explicit sort by startedAt DESC before first-match loop
+    - Previously relied on implicit DB ordering (plan.runs from getPlan)
+    - Now copies array with spread, sorts newest-first, then picks first per taskId
+    - Added JSDoc comment documenting the sorting guarantee
+  - src/renderer/views/PlanDetailView.tsx
+    - buildTaskRunMap(): same explicit sort by startedAt DESC added
+    - Updated JSDoc: removed "runs are ordered newest-first from the backend" assumption
+    - Now self-contained: correct regardless of input array ordering
+  - src/main/runtime/app-database.ts
+    - getPlan() already had ORDER BY started_at DESC on runs query (no change needed)
+    - DB ordering is now a performance optimization, not a correctness requirement
+  - Build and typecheck pass
