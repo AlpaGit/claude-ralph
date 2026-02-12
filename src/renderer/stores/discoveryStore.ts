@@ -3,39 +3,73 @@ import type {
   DiscoveryAnswer,
   DiscoveryEvent,
   DiscoveryInterviewState,
+  StartDiscoveryInput,
+  ContinueDiscoveryInput,
 } from "@shared/types";
 
+/* ── Answer map: questionId -> answer text ─────────────── */
+
+export type AnswerMap = Record<string, string>;
+
+/* ── State interface ───────────────────────────────────── */
+
 interface DiscoveryState {
+  // ── Input fields ─────────────────────────────────────
+  /** Seed sentence describing the project goal. */
+  seedSentence: string;
+  /** Optional additional context (business context, constraints, etc.). */
+  additionalContext: string;
+
+  // ── Interview state ──────────────────────────────────
   /** The current interview state returned by the backend. */
   interview: DiscoveryInterviewState | null;
-
-  /** Accumulated answers given across all rounds. */
-  answers: DiscoveryAnswer[];
-
-  /** Streamed discovery events (status, logs, agent messages). */
+  /** Answer map: questionId -> answer text for the current round. */
+  answerMap: AnswerMap;
+  /** Accumulated answers submitted across all rounds (DiscoveryAnswer[]). */
+  submittedAnswers: DiscoveryAnswer[];
+  /** Streamed discovery events (status, logs, agent messages). Newest first. */
   events: DiscoveryEvent[];
 
+  // ── Loading / error ──────────────────────────────────
   /** Whether a discovery call is currently in flight. */
   loading: boolean;
-
   /** Last error message from any discovery operation. */
   error: string | null;
 
-  // ── Actions ──────────────────────────────────────────────
+  // ── Timing ───────────────────────────────────────────
+  /** Epoch ms when current thinking started (null when idle). */
+  thinkingStartedAtMs: number | null;
+  /** Epoch ms of last received discovery event (null before first event). */
+  lastEventAtMs: number | null;
+  /** Duration in seconds of the last completed discovery cycle. */
+  lastDiscoveryDurationSec: number | null;
+  /** ISO string of when interview was last ready. */
+  lastReadyAtIso: string | null;
+
+  // ── Notifications ────────────────────────────────────
+  /** Transient copy / status notice shown to the user. */
+  copyNotice: string | null;
+
+  // ── Actions ──────────────────────────────────────────
+
+  /** Update the seed sentence input. */
+  setSeedSentence: (value: string) => void;
+  /** Update the additional context input. */
+  setAdditionalContext: (value: string) => void;
+  /** Update a single answer in the answer map. */
+  setAnswer: (questionId: string, answer: string) => void;
+  /** Set the copy notice. */
+  setCopyNotice: (notice: string | null) => void;
 
   /** Start a new discovery interview session. */
-  startDiscovery: (
-    projectPath: string,
-    seedSentence: string,
-    additionalContext: string
-  ) => Promise<void>;
-
-  /** Continue the interview by submitting answers to the current round. */
-  continueDiscovery: (answers: DiscoveryAnswer[]) => Promise<void>;
-
+  startDiscovery: (projectPath: string) => Promise<void>;
+  /** Continue the interview by submitting current answers. */
+  continueDiscovery: () => Promise<void>;
   /** Reset the store to its initial state. */
   reset: () => void;
 }
+
+/* ── Helpers ───────────────────────────────────────────── */
 
 function getApi(): typeof window.ralphApi {
   const api = window.ralphApi;
@@ -45,82 +79,183 @@ function getApi(): typeof window.ralphApi {
   return api;
 }
 
+/* ── Initial state (data-only, no actions) ─────────────── */
+
 const initialState = {
+  seedSentence: "",
+  additionalContext: "",
   interview: null,
-  answers: [],
-  events: [],
+  answerMap: {} as AnswerMap,
+  submittedAnswers: [] as DiscoveryAnswer[],
+  events: [] as DiscoveryEvent[],
   loading: false,
-  error: null,
+  error: null as string | null,
+  thinkingStartedAtMs: null as number | null,
+  lastEventAtMs: null as number | null,
+  lastDiscoveryDurationSec: null as number | null,
+  lastReadyAtIso: null as string | null,
+  copyNotice: null as string | null,
 };
+
+/* ── Store ─────────────────────────────────────────────── */
 
 export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
   ...initialState,
 
-  startDiscovery: async (
-    projectPath: string,
-    seedSentence: string,
-    additionalContext: string
-  ): Promise<void> => {
-    set({ loading: true, error: null, answers: [], events: [] });
+  // ── Simple setters ──────────────────────────────────
+
+  setSeedSentence: (value: string) => set({ seedSentence: value }),
+  setAdditionalContext: (value: string) => set({ additionalContext: value }),
+  setAnswer: (questionId: string, answer: string) =>
+    set((state) => ({ answerMap: { ...state.answerMap, [questionId]: answer } })),
+  setCopyNotice: (notice: string | null) => set({ copyNotice: notice }),
+
+  // ── Start discovery ─────────────────────────────────
+
+  startDiscovery: async (projectPath: string): Promise<void> => {
+    const { seedSentence, additionalContext } = get();
+    const brief = seedSentence.trim();
+
+    if (brief.length < 5) {
+      set({ error: "Please enter a short goal sentence (at least 5 characters)." });
+      return;
+    }
+
+    const startedAt = Date.now();
+    set({
+      loading: true,
+      error: null,
+      copyNotice: null,
+      submittedAnswers: [],
+      events: [],
+      thinkingStartedAtMs: startedAt,
+      lastDiscoveryDurationSec: null,
+      lastEventAtMs: null,
+    });
+
     try {
       const api = getApi();
 
       // Subscribe to discovery events for this session.
       const unsubscribe = api.onDiscoveryEvent((event: DiscoveryEvent) => {
-        set((state) => ({ events: [...state.events, event] }));
+        const parsedTs = Date.parse(event.ts);
+        const eventMs = Number.isNaN(parsedTs) ? Date.now() : parsedTs;
+        set((state) => ({
+          events: [event, ...state.events].slice(0, 120),
+          lastEventAtMs: eventMs,
+        }));
       });
 
-      const result = await api.startDiscovery({
+      const payload: StartDiscoveryInput = {
         projectPath,
-        seedSentence,
-        additionalContext,
+        seedSentence: brief,
+        additionalContext: additionalContext.trim(),
+      };
+      const result = await api.startDiscovery(payload);
+
+      // Build initial answer map from the returned questions.
+      const newAnswerMap: AnswerMap = {};
+      for (const q of result.questions) {
+        newAnswerMap[q.id] = "";
+      }
+
+      set({
+        interview: result,
+        answerMap: newAnswerMap,
+        lastReadyAtIso: new Date().toISOString(),
+        copyNotice: "Discovery output is ready. PRD Input has been updated.",
       });
 
-      set({ interview: result });
-
-      // Store the unsubscribe function so we can clean up on reset.
-      // We stash it as a closure side-effect since zustand state should
-      // remain serializable.
       _discoveryUnsubscribe = unsubscribe;
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Failed to start discovery.";
       set({ error: message });
     } finally {
-      set({ loading: false });
+      set((state) => ({
+        loading: false,
+        thinkingStartedAtMs: null,
+        lastDiscoveryDurationSec: Math.max(
+          0,
+          Math.floor((Date.now() - startedAt) / 1000)
+        ),
+      }));
     }
   },
 
-  continueDiscovery: async (answers: DiscoveryAnswer[]): Promise<void> => {
-    const { interview } = get();
+  // ── Continue discovery ──────────────────────────────
+
+  continueDiscovery: async (): Promise<void> => {
+    const { interview, answerMap } = get();
     if (!interview) {
       set({ error: "No active discovery session." });
       return;
     }
 
-    set({ loading: true, error: null });
+    // Build answer payload from current answer map.
+    const answerPayload: DiscoveryAnswer[] = interview.questions
+      .map((q) => ({
+        questionId: q.id,
+        answer: (answerMap[q.id] ?? "").trim(),
+      }))
+      .filter((item) => item.answer.length > 0);
+
+    if (answerPayload.length === 0) {
+      set({ error: "Answer at least one question before continuing." });
+      return;
+    }
+
+    const startedAt = Date.now();
+    set({
+      loading: true,
+      error: null,
+      copyNotice: null,
+      thinkingStartedAtMs: startedAt,
+      lastDiscoveryDurationSec: null,
+    });
+
     try {
       const api = getApi();
-      const result = await api.continueDiscovery({
+      const payload: ContinueDiscoveryInput = {
         sessionId: interview.sessionId,
-        answers,
-      });
+        answers: answerPayload,
+      };
+      const nextState = await api.continueDiscovery(payload);
+
+      // Merge new question IDs into answer map, keep existing answers.
+      const mergedMap: AnswerMap = { ...answerMap };
+      for (const q of nextState.questions) {
+        if (!(q.id in mergedMap)) {
+          mergedMap[q.id] = "";
+        }
+      }
 
       set((state) => ({
-        interview: result,
-        answers: [...state.answers, ...answers],
+        interview: nextState,
+        answerMap: mergedMap,
+        submittedAnswers: [...state.submittedAnswers, ...answerPayload],
+        lastReadyAtIso: new Date().toISOString(),
+        copyNotice: "Discovery updated. PRD Input has been refreshed.",
       }));
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Failed to continue discovery.";
       set({ error: message });
     } finally {
-      set({ loading: false });
+      set((state) => ({
+        loading: false,
+        thinkingStartedAtMs: null,
+        lastDiscoveryDurationSec: Math.max(
+          0,
+          Math.floor((Date.now() - startedAt) / 1000)
+        ),
+      }));
     }
   },
 
+  // ── Reset ───────────────────────────────────────────
+
   reset: (): void => {
-    // Clean up event subscription if one exists.
     if (_discoveryUnsubscribe) {
       _discoveryUnsubscribe();
       _discoveryUnsubscribe = null;

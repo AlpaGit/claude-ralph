@@ -1,0 +1,368 @@
+/* DiscoveryView -- AI discovery interview flow */
+
+.view {
+  padding: var(--space-lg);
+  max-width: var(--max-width-app);
+  margin: 0 auto;
+}
+
+/* ── Section grid ─────────────────────────────────────── */
+
+.sections {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+.headerNotice {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Input area ───────────────────────────────────────── */
+
+.inputSection {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.advancedToggle {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--color-muted);
+  padding: var(--space-xs) 0;
+}
+
+.advancedToggle:hover {
+  color: var(--color-text);
+}
+
+.advancedContent {
+  padding-top: var(--space-sm);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+/* ── Error notice ─────────────────────────────────────── */
+
+.errorText {
+  color: var(--color-error);
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ── AI Feedback panel ────────────────────────────────── */
+
+.feedbackCard {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.feedbackHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.feedbackHeader h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.thinkingIndicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.thinkingPulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-circle);
+  background: var(--color-accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.thinkingDots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.thinkingDots span {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-circle);
+  background: var(--color-muted);
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+.thinkingDots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinkingDots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.statusText {
+  font-size: 0.88rem;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.warningText {
+  color: var(--color-warning);
+}
+
+.logBox {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-log-border);
+  background: var(--color-log-bg);
+  color: var(--color-log-text);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+/* ── Discovery output ─────────────────────────────────── */
+
+.outputHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.outputHeader h3 {
+  margin: 0;
+}
+
+.readyTimestamp {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Status card ──────────────────────────────────────── */
+
+.statusCard {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.statusHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.statusHeader h3 {
+  margin: 0;
+}
+
+.directionText {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+/* ── Inferred context ─────────────────────────────────── */
+
+.contextCard {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.contextCard h3 {
+  margin: 0;
+}
+
+.contextCard h4 {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.9rem;
+}
+
+.contextField {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.contextList {
+  margin: 0.2rem 0 0;
+  padding-left: var(--space-lg);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+/* ── Question cards ───────────────────────────────────── */
+
+.questionsCard {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-md);
+}
+
+.questionsCard h3 {
+  margin: 0;
+}
+
+.questionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-md);
+}
+
+.questionItem {
+  border: 1px dashed var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.questionText {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.questionReason {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.noQuestions {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* ── Missing critical info ────────────────────────────── */
+
+.missingCard {
+  border: 2px solid var(--color-warning);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.missingCard h3 {
+  margin: 0;
+  color: var(--color-warning);
+}
+
+.missingList {
+  margin: 0;
+  padding-left: var(--space-lg);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+/* ── Bottom actions ───────────────────────────────────── */
+
+.bottomActions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.copyNotice {
+  color: var(--color-accent-2);
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+/* ── PRD Preview ──────────────────────────────────────── */
+
+.prdPreviewToggle {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--color-muted);
+  padding: var(--space-xs) 0;
+}
+
+.prdPreviewToggle:hover {
+  color: var(--color-text);
+}
+
+.prdPreview {
+  margin: var(--space-sm) 0 0;
+  max-height: 400px;
+  overflow: auto;
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-log-border);
+  background: var(--color-log-bg);
+  color: var(--color-log-text);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
