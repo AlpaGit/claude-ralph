@@ -37,6 +37,7 @@
   gap: var(--space-sm);
   margin-bottom: var(--space-lg);
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .brandBadge {
@@ -88,6 +89,7 @@
   transition: background var(--transition-fast), border-color var(--transition-fast);
   white-space: nowrap;
   overflow: hidden;
+  -webkit-app-region: no-drag;
 }
 
 .navLink:hover {
@@ -149,6 +151,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   transition: color var(--transition-fast);
+  -webkit-app-region: no-drag;
 }
 
 .planToggle:hover {
@@ -199,6 +202,7 @@
   color: var(--color-text);
   border: 1px solid transparent;
   transition: background var(--transition-fast), border-color var(--transition-fast);
+  -webkit-app-region: no-drag;
 }
 
 .planItem:hover {
@@ -289,6 +293,7 @@
   white-space: nowrap;
   flex-shrink: 0;
   margin-bottom: var(--space-sm);
+  -webkit-app-region: no-drag;
 }
 
 .newPlanBtn:hover {
@@ -330,6 +335,7 @@
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
 }
 
 .collapseBtn:hover {

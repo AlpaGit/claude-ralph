@@ -5,13 +5,30 @@
   min-height: 100vh;
 }
 
+/* ── Drag region strip ───────────────────────────────── */
+/* Thin draggable strip across the top of the content area so the user can
+   drag-to-move the window from the main content side (not just the sidebar).
+   Height matches the Windows titleBarOverlay height (36px). */
+
+.dragStrip {
+  -webkit-app-region: drag;
+  height: 36px;
+  flex-shrink: 0;
+}
+
 /* ── Main content ────────────────────────────────────── */
 
 .content {
   flex: 1;
-  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   max-height: 100vh;
+}
+
+.contentInner {
+  flex: 1;
+  padding: var(--space-xl);
 }
 
 /* ── Responsive ──────────────────────────────────────── */

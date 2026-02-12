@@ -12,12 +12,26 @@ let database: AppDatabase | null = null;
 let taskRunner: TaskRunner | null = null;
 
 function createWindow(): BrowserWindow {
+  const isMac = process.platform === "darwin";
+
   const win = new BrowserWindow({
     width: 1480,
     height: 980,
     minWidth: 1040,
     minHeight: 740,
-    titleBarStyle: "hiddenInset",
+    // macOS: "hiddenInset" hides the title bar and insets the traffic lights.
+    // Windows: "hidden" removes the default title bar; titleBarOverlay renders
+    // native window-control buttons (minimize / maximize / close) on top.
+    titleBarStyle: isMac ? "hiddenInset" : "hidden",
+    ...(isMac
+      ? {}
+      : {
+          titleBarOverlay: {
+            color: "#1a1a1a",
+            symbolColor: "#e0e0e0",
+            height: 36
+          }
+        }),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
