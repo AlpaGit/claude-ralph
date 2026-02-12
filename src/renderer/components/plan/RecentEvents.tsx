@@ -23,7 +23,8 @@ export function RecentEvents({ events }: RecentEventsProps): JSX.Element {
             <li key={event.id} className={styles.row}>
               <span className={styles.ts}>{formatTs(event.ts)}</span>
               <span className={styles.type}>{event.type}</span>
-              <span className={styles.taskId}>{event.taskId}</span>
+              <span className={styles.taskId}>{event.taskId || "queue"}</span>
+              <span className={styles.message}>{extractEventMessage(event)}</span>
             </li>
           ))}
         </ul>
@@ -52,4 +53,23 @@ function formatTs(ts: string): string {
   } catch {
     return ts;
   }
+}
+
+function extractEventMessage(event: RunEvent): string {
+  const payload =
+    event.payload && typeof event.payload === "object"
+      ? (event.payload as Record<string, unknown>)
+      : null;
+
+  const message = payload && typeof payload.message === "string" ? payload.message.trim() : "";
+  if (message.length > 0) {
+    return message;
+  }
+
+  const line = payload && typeof payload.line === "string" ? payload.line.trim() : "";
+  if (line.length > 0) {
+    return line;
+  }
+
+  return "-";
 }

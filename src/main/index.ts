@@ -49,9 +49,14 @@ async function bootstrap(): Promise<void> {
   // E2E tests pass TEST_DB_PATH to use an isolated temporary database.
   const dbPath = process.env.TEST_DB_PATH
     ?? join(app.getPath("userData"), "ralph-desktop.sqlite");
+  const subagentSpawnLogPath =
+    process.env.SUBAGENT_SPAWN_LOG_PATH
+    ?? join(app.getPath("userData"), "logs", "subagent-spawns.log");
 
   database = new AppDatabase(dbPath, migrationsDir);
-  taskRunner = new TaskRunner(database, () => mainWindow);
+  taskRunner = new TaskRunner(database, () => mainWindow, {
+    subagentSpawnLogPath
+  });
   registerIpcHandlers(taskRunner);
 
   mainWindow = createWindow();

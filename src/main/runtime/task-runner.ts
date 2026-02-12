@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, rm } from "node:fs/promises";
+import { appendFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { BrowserWindow } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
@@ -118,6 +118,10 @@ interface DiscordNotificationInput {
   footer?: string;
 }
 
+interface TaskRunnerOptions {
+  subagentSpawnLogPath?: string;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -160,10 +164,49 @@ export class TaskRunner {
 
   constructor(
     private readonly db: AppDatabase,
-    private readonly getWindow: () => BrowserWindow | null
+    private readonly getWindow: () => BrowserWindow | null,
+    private readonly options: TaskRunnerOptions = {}
   ) {
     this.agentService = this.createAgentService();
     this.cleanupStaleRuns();
+  }
+
+  private async writeSubagentSpawnLog(input: {
+    runId: string;
+    planId: string;
+    taskId: string;
+    payload: Record<string, unknown>;
+  }): Promise<void> {
+    const logPath = this.options.subagentSpawnLogPath?.trim();
+    if (!logPath) {
+      return;
+    }
+
+    const subagentType =
+      typeof input.payload.subagent_type === "string" && input.payload.subagent_type.trim().length > 0
+        ? input.payload.subagent_type.trim()
+        : "unknown";
+    const stage =
+      typeof input.payload.stage === "string" && input.payload.stage.trim().length > 0
+        ? input.payload.stage.trim()
+        : "unknown";
+    const description = typeof input.payload.description === "string" ? input.payload.description : "";
+    const prompt = typeof input.payload.prompt === "string" ? input.payload.prompt : "";
+
+    const entry =
+      `[${nowIso()}] run=${input.runId} plan=${input.planId} task=${input.taskId} stage=${stage} ` +
+      `subagent=${subagentType} description=${JSON.stringify(description)}\n` +
+      "[prompt-begin]\n" +
+      `${prompt}\n` +
+      "[prompt-end]\n\n";
+
+    try {
+      await mkdir(dirname(logPath), { recursive: true });
+      await appendFile(logPath, entry, "utf8");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[TaskRunner] Failed to append subagent spawn log at ${logPath}: ${message}`);
+    }
   }
 
   /**
@@ -789,9 +832,11 @@ export class TaskRunner {
 
   async runAll(input: RunAllInput): Promise<RunAllResponse> {
     if (this.runningPlanQueues.has(input.planId)) {
-      this.emitQueueInfo(input.planId, "Queue is already running for this plan.");
+      const reason = "Queue is already running for this plan.";
+      this.emitQueueInfo(input.planId, reason);
       return {
-        queued: 0
+        queued: 0,
+        reason
       };
     }
 
@@ -805,13 +850,16 @@ export class TaskRunner {
     const orphanedRuns = inProgressRuns.filter((run) => !this.activeRuns.has(run.id));
 
     if (trackedActiveRuns.length > 0) {
+      const reason =
+        "A task run is already in progress. Wait for it to finish or cancel it before starting the queue.";
       this.emitQueueInfo(
         input.planId,
-        "A task run is already in progress. Wait for it to finish or cancel it before starting the queue.",
+        reason,
         "error"
       );
       return {
-        queued: 0
+        queued: 0,
+        reason
       };
     }
 
@@ -834,14 +882,32 @@ export class TaskRunner {
 
     const estimated = this.db.countRunnableTasks(input.planId);
     if (estimated === 0) {
-      this.emitQueueInfo(input.planId, "No runnable pending tasks available for queue start.");
+      const reason = "No runnable pending tasks available for queue start.";
+      this.emitQueueInfo(input.planId, reason);
       return {
-        queued: 0
+        queued: 0,
+        reason
       };
     }
 
     this.runningPlanQueues.add(input.planId);
-    void this.executeQueue(input.planId).finally(() => {
+
+    let gitContext: QueueGitContext;
+    try {
+      gitContext = await this.prepareQueueGitContext(plan);
+    } catch (error) {
+      this.runningPlanQueues.delete(input.planId);
+      const message = error instanceof Error ? error.message : "Unknown queue startup failure.";
+      this.db.updatePlanStatus(input.planId, "failed");
+      const reason = `Queue execution failed: ${message}`;
+      this.emitQueueInfo(input.planId, reason, "error");
+      return {
+        queued: 0,
+        reason
+      };
+    }
+
+    void this.executeQueue(input.planId, gitContext).finally(() => {
       this.runningPlanQueues.delete(input.planId);
     });
 
@@ -1173,8 +1239,8 @@ export class TaskRunner {
     });
   }
 
-  private async executeQueue(planId: string): Promise<void> {
-    let gitContext: QueueGitContext | null = null;
+  private async executeQueue(planId: string, initialGitContext?: QueueGitContext): Promise<void> {
+    let gitContext: QueueGitContext | null = initialGitContext ?? null;
 
     try {
       const plan = this.db.getPlan(planId);
@@ -1182,7 +1248,9 @@ export class TaskRunner {
         throw new Error(`Plan not found: ${planId}`);
       }
 
-      gitContext = await this.prepareQueueGitContext(plan);
+      if (!gitContext) {
+        gitContext = await this.prepareQueueGitContext(plan);
+      }
       if (gitContext.mergeTargetBranch !== "main") {
         this.emitQueueInfo(
           planId,
@@ -1878,6 +1946,19 @@ export class TaskRunner {
           onSubagent: (payload) => {
             const record =
               payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+            if (
+              record &&
+              (typeof record.subagent_type === "string" ||
+                typeof record.prompt === "string" ||
+                typeof record.description === "string")
+            ) {
+              void this.writeSubagentSpawnLog({
+                runId: input.runId,
+                planId: input.plan.id,
+                taskId: input.task.id,
+                payload: record
+              });
+            }
             const kind = typeof record?.kind === "string" ? record.kind : null;
             const parsedArchitectureReview = this.parseArchitectureReviewPayload(payload);
             if (parsedArchitectureReview) {

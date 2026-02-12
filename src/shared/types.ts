@@ -209,6 +209,7 @@ export interface RunAllInput {
 
 export interface RunAllResponse {
   queued: number;
+  reason?: string;
 }
 
 export interface CancelRunInput {

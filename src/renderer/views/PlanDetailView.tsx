@@ -249,7 +249,7 @@ export function PlanDetailView(): JSX.Element {
     try {
       const result = await api.runAll({ planId: plan.id });
       if (result.queued === 0) {
-        toastService.warning("No task was queued. Check Recent Events for the queue reason.");
+        toastService.warning(result.reason ?? "No task was queued.");
       } else {
         toastService.success(`Queue started with ${result.queued} task(s) ready.`);
       }

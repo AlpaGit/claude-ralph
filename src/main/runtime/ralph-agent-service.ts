@@ -90,6 +90,12 @@ interface MergePhaseResult {
   stopReason: string | null;
 }
 
+interface TaskToolInvocation {
+  subagentType: string;
+  description: string;
+  prompt: string;
+}
+
 interface DiscoveryOutput {
   directionSummary: string;
   inferredContext: DiscoveryInferredContext;
@@ -605,6 +611,27 @@ function extractAssistantToolBlocks(
   }
 
   return maybe.message.content;
+}
+
+function parseTaskToolInvocation(input: unknown): TaskToolInvocation | null {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const record = input as Record<string, unknown>;
+  const subagentTypeRaw = typeof record.subagent_type === "string" ? record.subagent_type.trim() : "";
+  const description = typeof record.description === "string" ? record.description : "";
+  const prompt = typeof record.prompt === "string" ? record.prompt : "";
+
+  if (subagentTypeRaw.length === 0 && description.trim().length === 0 && prompt.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    subagentType: subagentTypeRaw.length > 0 ? subagentTypeRaw : "unknown",
+    description,
+    prompt
+  };
 }
 
 function tryParseStructuredOutputFromText(text: string): unknown | null {
@@ -2360,6 +2387,14 @@ Rules:
             }
 
             if (block.name === "Task") {
+              const invocation = parseTaskToolInvocation(block.input);
+              if (invocation) {
+                args.callbacks.onLog(
+                  `\n[subagent-spawn] stage=${input.stageName} subagent=${invocation.subagentType} description=${JSON.stringify(invocation.description)}\n`
+                );
+                args.callbacks.onLog(`[subagent-spawn-prompt] ${JSON.stringify(invocation.prompt)}\n`);
+              }
+
               args.callbacks.onSubagent({
                 stage: input.stageName,
                 ...(typeof block.input === "object" && block.input ? (block.input as Record<string, unknown>) : {})
