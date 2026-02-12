@@ -162,6 +162,30 @@ const QUEUE_RUN_TIMEOUT_MS = (() => {
   return parsed;
 })();
 
+const MAX_QUEUE_PHASE_PARALLEL_TASKS = (() => {
+  const raw = process.env.RALPH_QUEUE_MAX_PARALLEL_TASKS;
+  if (!raw) {
+    return 4;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 4;
+  }
+  return Math.min(parsed, 64);
+})();
+
+const QUEUE_MERGE_VALIDATION_COMMANDS = (() => {
+  const raw = process.env.RALPH_QUEUE_MERGE_VALIDATION_COMMANDS;
+  if (raw === undefined) {
+    return ["npm run test:unit"];
+  }
+
+  return raw
+    .split(/\r?\n|;;/g)
+    .map((command) => command.trim())
+    .filter((command) => command.length > 0);
+})();
+
 /** Stale run threshold: runs in_progress for longer than this (ms) with no active tracking are cleaned up. */
 const STALE_RUN_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
@@ -1286,11 +1310,14 @@ export class TaskRunner {
     });
   }
 
-  private getRunnablePhaseTasks(planId: string): RalphTask[] {
-    const tasks = this.db.getTasks(planId);
+  private getRunnablePhaseTasks(planId: string): {
+    selectedTasks: RalphTask[];
+    totalRunnable: number;
+  } {
+    const tasks = [...this.db.getTasks(planId)].sort((a, b) => a.ordinal - b.ordinal);
     const statusById = new Map(tasks.map((task) => [task.id, task.status]));
 
-    return tasks.filter((task) => {
+    const runnable = tasks.filter((task) => {
       if (task.status !== "pending") {
         return false;
       }
@@ -1300,6 +1327,11 @@ export class TaskRunner {
         return dependencyStatus === "completed" || dependencyStatus === "skipped";
       });
     });
+
+    return {
+      selectedTasks: runnable.slice(0, MAX_QUEUE_PHASE_PARALLEL_TASKS),
+      totalRunnable: runnable.length
+    };
   }
 
   private emitQueueInfo(planId: string, message: string, level: "info" | "error" = "info"): void {
@@ -1336,7 +1368,7 @@ export class TaskRunner {
 
       this.emitQueueInfo(
         planId,
-        `Queue started. Runnable phases execute in parallel worktrees and merge into ${gitContext.mergeTargetBranch} after each phase.`
+        `Queue started. Runnable phases execute in parallel worktrees, merge into a phase integration branch as tasks complete, then promote to ${gitContext.mergeTargetBranch} after each phase.`
       );
 
       let phaseNumber = 0;
@@ -1346,130 +1378,84 @@ export class TaskRunner {
           break;
         }
 
-        const phaseTasks = this.getRunnablePhaseTasks(planId);
+        const phaseSelection = this.getRunnablePhaseTasks(planId);
+        const phaseTasks = phaseSelection.selectedTasks;
         if (phaseTasks.length === 0) {
           break;
         }
 
         phaseNumber += 1;
+        if (phaseSelection.totalRunnable > phaseTasks.length) {
+          this.emitQueueInfo(
+            planId,
+            `Phase ${phaseNumber} concurrency capped at ${phaseTasks.length}/${phaseSelection.totalRunnable} runnable task(s) (RALPH_QUEUE_MAX_PARALLEL_TASKS=${MAX_QUEUE_PHASE_PARALLEL_TASKS}).`
+          );
+        }
         this.emitQueueInfo(
           planId,
           `Starting phase ${phaseNumber} with ${phaseTasks.length} parallel task(s).`
         );
 
-        const phaseWorktrees = await this.createPhaseWorktrees(plan, phaseNumber, phaseTasks, gitContext);
-        const worktreeByTaskId = new Map(phaseWorktrees.map((worktree) => [worktree.taskId, worktree]));
-        const worktreeByRunId = new Map<string, PhaseWorktree>();
-        const unmergedWorktrees = new Map(phaseWorktrees.map((worktree) => [worktree.taskId, worktree]));
-        const phaseRuns: Array<{ runId: string; taskId: string }> = [];
-        const activeRunIds = new Set<string>();
-        let phaseFailed = false;
-
+        const phaseIntegrationBranch = await this.createPhaseIntegrationBranch(
+          planId,
+          phaseNumber,
+          gitContext
+        );
         try {
-          for (const task of phaseTasks) {
-            const worktree = worktreeByTaskId.get(task.id);
-            if (!worktree) {
-              throw new Error(`Missing worktree context for task ${task.id}.`);
-            }
-
-            const run = await this.startTaskExecution({
-              planId,
-              taskId: task.id,
-              startedMessage: `Task execution started in phase ${phaseNumber}.`,
-              executionContext: {
-                workingDirectory: worktree.path,
-                branchName: worktree.branchName,
-                phaseNumber
-              }
-            });
-
-            phaseRuns.push({
-              runId: run.runId,
-              taskId: task.id
-            });
-            worktreeByRunId.set(run.runId, worktree);
-            activeRunIds.add(run.runId);
-          }
-        } catch (error) {
-          if (phaseRuns.length > 0) {
-            await Promise.all(
-              phaseRuns.map(async (run) => {
-                await this.cancelRun({ runId: run.runId }).catch(() => ({ ok: false }));
-                await this.waitForRun(run.runId);
-              })
-            );
-          }
-
-          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
-          throw error;
-        }
-
-        while (activeRunIds.size > 0) {
-          if (this.abortedPlanQueues.has(planId)) {
-            await Promise.all(
-              [...activeRunIds].map(async (runId) => {
-                await this.cancelRun({ runId }).catch(() => ({ ok: false }));
-                await this.waitForRun(runId);
-              })
-            );
-            activeRunIds.clear();
-            await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
-            break;
-          }
-
-          const completedRunId = await Promise.race(
-            [...activeRunIds].map(async (runId) => {
-              await this.waitForRun(runId);
-              return runId;
-            })
-          );
-
-          activeRunIds.delete(completedRunId);
-          const runState = this.db.getRun(completedRunId);
-          const completedWorktree = worktreeByRunId.get(completedRunId);
-
-          if (!completedWorktree) {
-            throw new Error(`Missing worktree metadata for completed run ${completedRunId}.`);
-          }
-
-          if (!runState || runState.status !== "completed") {
-            phaseFailed = true;
-            this.emitQueueInfo(
-              planId,
-              `Phase ${phaseNumber} stopped because task ${runState?.taskId ?? completedWorktree.taskId} ended with status ${runState?.status ?? "unknown"}.`,
-              "error"
-            );
-
-            if (activeRunIds.size > 0) {
-              await Promise.all(
-                [...activeRunIds].map(async (runId) => {
-                  await this.cancelRun({ runId }).catch(() => ({ ok: false }));
-                  await this.waitForRun(runId);
-                })
-              );
-              activeRunIds.clear();
-            }
-
-            await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
-            break;
-          }
+          const phaseWorktrees = await this.createPhaseWorktrees(plan, phaseNumber, phaseTasks, gitContext);
+          const worktreeByTaskId = new Map(phaseWorktrees.map((worktree) => [worktree.taskId, worktree]));
+          const phaseTaskById = new Map(phaseTasks.map((task) => [task.id, task]));
+          const worktreeByRunId = new Map<string, PhaseWorktree>();
+          const unmergedWorktrees = new Map(phaseWorktrees.map((worktree) => [worktree.taskId, worktree]));
+          const phaseRuns: Array<{ runId: string; taskId: string }> = [];
+          const mergedTaskNotes: string[] = [];
+          const activeRunIds = new Set<string>();
+          let phaseFailed = false;
+          let phaseAborted = false;
+          let integrationHasMergedTasks = false;
 
           try {
-            await this.validatePhaseBranchCommits(planId, phaseNumber, [completedWorktree], gitContext);
-            await this.mergePhaseBranches(
-              planId,
-              phaseNumber,
-              [completedWorktree.branchName],
-              gitContext
-            );
-            await this.cleanupPhaseWorktrees(gitContext, [completedWorktree], true);
-            unmergedWorktrees.delete(completedWorktree.taskId);
-            this.emitQueueInfo(
-              planId,
-              `Phase ${phaseNumber}: merged completed task ${runState.taskId} and removed its worktree.`
-            );
+            for (const task of phaseTasks) {
+              const worktree = worktreeByTaskId.get(task.id);
+              if (!worktree) {
+                throw new Error(`Missing worktree context for task ${task.id}.`);
+              }
+
+              const run = await this.startTaskExecution({
+                planId,
+                taskId: task.id,
+                startedMessage: `Task execution started in phase ${phaseNumber}.`,
+                executionContext: {
+                  workingDirectory: worktree.path,
+                  branchName: worktree.branchName,
+                  phaseNumber
+                }
+              });
+
+              phaseRuns.push({
+                runId: run.runId,
+                taskId: task.id
+              });
+              worktreeByRunId.set(run.runId, worktree);
+              activeRunIds.add(run.runId);
+            }
           } catch (error) {
-            if (activeRunIds.size > 0) {
+            if (phaseRuns.length > 0) {
+              await Promise.all(
+                phaseRuns.map(async (run) => {
+                  await this.cancelRun({ runId: run.runId }).catch(() => ({ ok: false }));
+                  await this.waitForRun(run.runId);
+                })
+              );
+            }
+
+            await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
+            throw error;
+          }
+
+          while (activeRunIds.size > 0) {
+            if (this.abortedPlanQueues.has(planId)) {
+              phaseAborted = true;
               await Promise.all(
                 [...activeRunIds].map(async (runId) => {
                   await this.cancelRun({ runId }).catch(() => ({ ok: false }));
@@ -1477,24 +1463,131 @@ export class TaskRunner {
                 })
               );
               activeRunIds.clear();
+              await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
+              break;
             }
-            await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
-            throw error;
+
+            const completedRunId = await Promise.race(
+              [...activeRunIds].map(async (runId) => {
+                await this.waitForRun(runId);
+                return runId;
+              })
+            );
+
+            activeRunIds.delete(completedRunId);
+            const runState = this.db.getRun(completedRunId);
+            const completedWorktree = worktreeByRunId.get(completedRunId);
+
+            if (!completedWorktree) {
+              throw new Error(`Missing worktree metadata for completed run ${completedRunId}.`);
+            }
+
+            if (!runState || runState.status !== "completed") {
+              phaseFailed = true;
+              this.emitQueueInfo(
+                planId,
+                `Phase ${phaseNumber} stopped because task ${runState?.taskId ?? completedWorktree.taskId} ended with status ${runState?.status ?? "unknown"}.`,
+                "error"
+              );
+
+              if (activeRunIds.size > 0) {
+                await Promise.all(
+                  [...activeRunIds].map(async (runId) => {
+                    await this.cancelRun({ runId }).catch(() => ({ ok: false }));
+                    await this.waitForRun(runId);
+                  })
+                );
+                activeRunIds.clear();
+              }
+
+              await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
+              break;
+            }
+
+            try {
+              const completedTask = phaseTaskById.get(completedWorktree.taskId) ?? null;
+              const mergeContext = this.buildMergeContextSummary(
+                plan,
+                phaseNumber,
+                completedTask,
+                runState,
+                mergedTaskNotes
+              );
+              await this.validatePhaseBranchCommits(planId, phaseNumber, [completedWorktree], gitContext);
+              await this.mergePhaseBranches(
+                planId,
+                phaseNumber,
+                [completedWorktree.branchName],
+                gitContext,
+                phaseIntegrationBranch,
+                mergeContext
+              );
+              integrationHasMergedTasks = true;
+              if (completedTask) {
+                mergedTaskNotes.push(this.buildMergedTaskNote(completedTask, runState));
+                if (mergedTaskNotes.length > 8) {
+                  mergedTaskNotes.shift();
+                }
+              }
+              await this.cleanupPhaseWorktrees(gitContext, [completedWorktree], true);
+              unmergedWorktrees.delete(completedWorktree.taskId);
+              this.emitQueueInfo(
+                planId,
+                `Phase ${phaseNumber}: merged completed task ${runState.taskId} into ${phaseIntegrationBranch} and removed its worktree.`
+              );
+            } catch (error) {
+              if (activeRunIds.size > 0) {
+                await Promise.all(
+                  [...activeRunIds].map(async (runId) => {
+                    await this.cancelRun({ runId }).catch(() => ({ ok: false }));
+                    await this.waitForRun(runId);
+                  })
+                );
+                activeRunIds.clear();
+              }
+              await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
+              throw error;
+            }
           }
-        }
 
-        if (this.abortedPlanQueues.has(planId)) {
-          break;
-        }
+          if (!phaseAborted && !phaseFailed && integrationHasMergedTasks) {
+            const phaseContextSummary = this.buildPhaseStabilizationContext(
+              plan,
+              phaseNumber,
+              phaseTasks,
+              mergedTaskNotes
+            );
+            await this.stabilizePhaseIntegrationWithCommitter(
+              planId,
+              phaseNumber,
+              phaseIntegrationBranch,
+              gitContext,
+              phaseContextSummary
+            );
+            await this.promotePhaseIntegrationBranch(
+              planId,
+              phaseNumber,
+              phaseIntegrationBranch,
+              gitContext
+            );
+          }
 
-        if (phaseFailed) {
-          break;
-        }
+          if (phaseAborted || this.abortedPlanQueues.has(planId) || phaseFailed) {
+            break;
+          }
 
-        this.emitQueueInfo(
-          planId,
-          `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`
-        );
+          this.emitQueueInfo(
+            planId,
+            `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`
+          );
+        } finally {
+          await this.deletePhaseIntegrationBranch(
+            planId,
+            phaseNumber,
+            phaseIntegrationBranch,
+            gitContext
+          );
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown queue failure.";
@@ -1695,23 +1788,341 @@ export class TaskRunner {
     }
   }
 
-  private async mergePhaseBranches(
+  private truncateForMergeContext(value: string, maxLength = 1200): string {
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    return `${normalized.slice(0, maxLength - 3)}...`;
+  }
+
+  private buildMergedTaskNote(
+    task: RalphTask,
+    runState: { resultText?: string | null; stopReason?: string | null } | null
+  ): string {
+    const summary =
+      typeof runState?.resultText === "string" && runState.resultText.trim().length > 0
+        ? this.truncateForMergeContext(runState.resultText, 240)
+        : "No execution summary was recorded.";
+    const stopReason =
+      typeof runState?.stopReason === "string" && runState.stopReason.trim().length > 0
+        ? ` stopReason=${runState.stopReason.trim()}`
+        : "";
+
+    return `${task.id}: ${task.title} | ${summary}${stopReason}`;
+  }
+
+  private buildMergeContextSummary(
+    plan: RalphPlan,
+    phaseNumber: number,
+    task: RalphTask | null,
+    runState: { resultText?: string | null; stopReason?: string | null } | null,
+    previouslyMergedTaskNotes: string[]
+  ): string {
+    const planSummary = this.truncateForMergeContext(plan.summary || "No plan summary provided.", 300);
+
+    const taskSection = task
+      ? [
+          `Task ID: ${task.id}`,
+          `Task Title: ${task.title}`,
+          `Task Description: ${this.truncateForMergeContext(task.description || "No description.", 800)}`,
+          `Task Technical Notes: ${this.truncateForMergeContext(task.technicalNotes || "None.", 800)}`,
+          `Task Acceptance Criteria: ${
+            task.acceptanceCriteria.length > 0
+              ? task.acceptanceCriteria.map((criterion) => this.truncateForMergeContext(criterion, 220)).join(" | ")
+              : "None."
+          }`,
+          `Task Dependencies: ${task.dependencies.length > 0 ? task.dependencies.join(", ") : "None."}`
+        ]
+      : ["Task metadata unavailable."];
+
+    const executionSummary =
+      typeof runState?.resultText === "string" && runState.resultText.trim().length > 0
+        ? this.truncateForMergeContext(runState.resultText, 2000)
+        : "No execution summary was recorded.";
+    const stopReason =
+      typeof runState?.stopReason === "string" && runState.stopReason.trim().length > 0
+        ? runState.stopReason.trim()
+        : "n/a";
+
+    const priorNotes =
+      previouslyMergedTaskNotes.length > 0
+        ? previouslyMergedTaskNotes.slice(-6).map((note, index) => `${index + 1}. ${note}`).join("\n")
+        : "None yet.";
+
+    return [
+      `Plan ID: ${plan.id}`,
+      `Phase: ${phaseNumber}`,
+      `Plan Summary: ${planSummary}`,
+      "",
+      "Current task intent:",
+      ...taskSection,
+      "",
+      "Current task execution outcome:",
+      `Stop reason: ${stopReason}`,
+      executionSummary,
+      "",
+      "Already-merged tasks this phase (latest first):",
+      priorNotes
+    ].join("\n");
+  }
+
+  private buildPhaseStabilizationContext(
+    plan: RalphPlan,
+    phaseNumber: number,
+    phaseTasks: RalphTask[],
+    mergedTaskNotes: string[]
+  ): string {
+    const tasksSummary = phaseTasks
+      .map(
+        (task) =>
+          `${task.id}: ${task.title} | acceptance=${task.acceptanceCriteria.length} dependencyCount=${task.dependencies.length}`
+      )
+      .join("\n");
+    const mergedSummary =
+      mergedTaskNotes.length > 0 ? mergedTaskNotes.map((note, index) => `${index + 1}. ${note}`).join("\n") : "None.";
+
+    return [
+      `Plan ID: ${plan.id}`,
+      `Phase: ${phaseNumber}`,
+      `Plan Summary: ${this.truncateForMergeContext(plan.summary || "No plan summary provided.", 400)}`,
+      "",
+      "Tasks in this phase:",
+      tasksSummary || "None.",
+      "",
+      "Merged task execution notes:",
+      mergedSummary
+    ].join("\n");
+  }
+
+  private async stabilizePhaseIntegrationWithCommitter(
     planId: string,
     phaseNumber: number,
-    branches: string[],
+    integrationBranch: string,
+    gitContext: QueueGitContext,
+    phaseContextSummary: string
+  ): Promise<void> {
+    this.emitQueueInfo(
+      planId,
+      `Committer is stabilizing phase ${phaseNumber} integration branch ${integrationBranch}.`
+    );
+
+    await this.agentService.stabilizePhaseIntegrationWithCommitter({
+      repoRoot: gitContext.repoRoot,
+      targetBranch: gitContext.mergeTargetBranch,
+      integrationBranch,
+      phaseNumber,
+      phaseContextSummary,
+      validationCommands: QUEUE_MERGE_VALIDATION_COMMANDS,
+      callbacks: {
+        onLog: (line) => this.emitQueueInfo(planId, `[committer] ${line}`),
+        onQuery: () => undefined
+      }
+    });
+
+    const status = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
+    if (status.stdout.trim().length > 0) {
+      throw new Error(
+        `Phase ${phaseNumber} stabilization left uncommitted changes in the main checkout.`
+      );
+    }
+  }
+
+  private buildPhaseIntegrationBranchName(planId: string, phaseNumber: number): string {
+    const planToken = this.sanitizeToken(planId, 12);
+    return `ralph/${planToken}/phase-${phaseNumber}-integration`;
+  }
+
+  private async createPhaseIntegrationBranch(
+    planId: string,
+    phaseNumber: number,
+    gitContext: QueueGitContext
+  ): Promise<string> {
+    const integrationBranch = this.buildPhaseIntegrationBranchName(planId, phaseNumber);
+
+    const currentBranch = (
+      await this.runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], gitContext.repoRoot)
+    ).stdout.trim();
+    if (currentBranch !== gitContext.mergeTargetBranch) {
+      await this.runGitCommand(["checkout", gitContext.mergeTargetBranch], gitContext.repoRoot);
+    }
+
+    const existingBranch = (
+      await this.safeRunGitCommand(
+        ["show-ref", "--verify", "--quiet", `refs/heads/${integrationBranch}`],
+        gitContext.repoRoot
+      )
+    ).ok;
+    if (existingBranch) {
+      await this.runGitCommand(["branch", "-D", integrationBranch], gitContext.repoRoot);
+    }
+
+    await this.runGitCommand(
+      ["branch", integrationBranch, gitContext.mergeTargetBranch],
+      gitContext.repoRoot
+    );
+    this.emitQueueInfo(
+      planId,
+      `Phase ${phaseNumber}: created integration branch ${integrationBranch} from ${gitContext.mergeTargetBranch}.`
+    );
+
+    return integrationBranch;
+  }
+
+  private async promotePhaseIntegrationBranch(
+    planId: string,
+    phaseNumber: number,
+    integrationBranch: string,
     gitContext: QueueGitContext
   ): Promise<void> {
     let cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
     if (cleanResult.stdout.trim().length > 0) {
       this.emitQueueInfo(
         planId,
-        `Main checkout became dirty before phase ${phaseNumber} merge. Running automatic cleanup/commit.`
+        `Main checkout became dirty before phase ${phaseNumber} promotion. Running automatic cleanup/commit.`
       );
       await this.autoCleanWorkspaceForQueue(planId, gitContext.repoRoot);
       cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
       if (cleanResult.stdout.trim().length > 0) {
         throw new Error(
-          `Cannot merge phase ${phaseNumber}: main checkout still contains uncommitted changes after automatic cleanup.`
+          `Cannot promote phase ${phaseNumber}: main checkout still contains uncommitted changes after automatic cleanup.`
+        );
+      }
+    }
+
+    await this.runQueueMergeValidationCommands(
+      planId,
+      phaseNumber,
+      integrationBranch,
+      gitContext.repoRoot
+    );
+
+    const currentBranch = (
+      await this.runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], gitContext.repoRoot)
+    ).stdout.trim();
+    if (currentBranch !== gitContext.mergeTargetBranch) {
+      await this.runGitCommand(["checkout", gitContext.mergeTargetBranch], gitContext.repoRoot);
+    }
+
+    const beforeHead = (
+      await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
+    ).stdout.trim();
+
+    this.emitQueueInfo(
+      planId,
+      `Promoting phase ${phaseNumber} integration branch ${integrationBranch} into ${gitContext.mergeTargetBranch}.`
+    );
+    await this.runGitCommand(
+      ["merge", "--ff-only", integrationBranch],
+      gitContext.repoRoot
+    );
+
+    const afterHead = (
+      await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
+    ).stdout.trim();
+    if (beforeHead === afterHead) {
+      throw new Error(
+        `Phase ${phaseNumber} promotion did not advance ${gitContext.mergeTargetBranch}.`
+      );
+    }
+
+    await this.validateCommitRangePolicy(
+      gitContext.repoRoot,
+      `${beforeHead}..${afterHead}`,
+      `phase ${phaseNumber} promotion`
+    );
+  }
+
+  private async deletePhaseIntegrationBranch(
+    planId: string,
+    phaseNumber: number,
+    integrationBranch: string,
+    gitContext: QueueGitContext
+  ): Promise<void> {
+    const currentBranch = (
+      await this.runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], gitContext.repoRoot)
+    ).stdout.trim();
+    if (currentBranch === integrationBranch) {
+      await this.runGitCommand(["checkout", gitContext.mergeTargetBranch], gitContext.repoRoot);
+    }
+
+    const deleted = await this.safeRunGitCommand(["branch", "-D", integrationBranch], gitContext.repoRoot);
+    if (!deleted.ok) {
+      this.emitQueueInfo(
+        planId,
+        `Phase ${phaseNumber}: failed to delete integration branch ${integrationBranch}: ${deleted.stderr}`,
+        "error"
+      );
+      return;
+    }
+
+    this.emitQueueInfo(
+      planId,
+      `Phase ${phaseNumber}: deleted integration branch ${integrationBranch}.`
+    );
+  }
+
+  private async runQueueMergeValidationCommands(
+    planId: string,
+    phaseNumber: number,
+    integrationBranch: string,
+    repoRoot: string
+  ): Promise<void> {
+    if (QUEUE_MERGE_VALIDATION_COMMANDS.length === 0) {
+      this.emitQueueInfo(
+        planId,
+        `Phase ${phaseNumber}: no merge validation commands configured (RALPH_QUEUE_MERGE_VALIDATION_COMMANDS is empty).`
+      );
+      return;
+    }
+
+    const currentBranch = (
+      await this.runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot)
+    ).stdout.trim();
+    if (currentBranch !== integrationBranch) {
+      await this.runGitCommand(["checkout", integrationBranch], repoRoot);
+    }
+
+    for (const command of QUEUE_MERGE_VALIDATION_COMMANDS) {
+      this.emitQueueInfo(
+        planId,
+        `Phase ${phaseNumber}: running validation command on ${integrationBranch}: ${command}`
+      );
+      await this.runShellCommand(command, repoRoot);
+      this.emitQueueInfo(
+        planId,
+        `Phase ${phaseNumber}: validation command passed: ${command}`
+      );
+    }
+
+    const status = await this.runGitCommand(["status", "--porcelain"], repoRoot);
+    if (status.stdout.trim().length > 0) {
+      throw new Error(
+        `Validation commands left uncommitted changes on ${integrationBranch}. Merge promotion aborted.`
+      );
+    }
+  }
+
+  private async mergePhaseBranches(
+    planId: string,
+    phaseNumber: number,
+    branches: string[],
+    gitContext: QueueGitContext,
+    targetBranch: string = gitContext.mergeTargetBranch,
+    mergeContextSummary = ""
+  ): Promise<void> {
+    let cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
+    if (cleanResult.stdout.trim().length > 0) {
+      this.emitQueueInfo(
+        planId,
+        `Main checkout became dirty before phase ${phaseNumber} merge into ${targetBranch}. Running automatic cleanup/commit.`
+      );
+      await this.autoCleanWorkspaceForQueue(planId, gitContext.repoRoot);
+      cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
+      if (cleanResult.stdout.trim().length > 0) {
+        throw new Error(
+          `Cannot merge phase ${phaseNumber} into ${targetBranch}: main checkout still contains uncommitted changes after automatic cleanup.`
         );
       }
     }
@@ -1721,13 +2132,13 @@ export class TaskRunner {
       gitContext.repoRoot
     );
     const currentBranch = currentBranchResult.stdout.trim();
-    if (currentBranch !== gitContext.mergeTargetBranch) {
-      await this.runGitCommand(["checkout", gitContext.mergeTargetBranch], gitContext.repoRoot);
+    if (currentBranch !== targetBranch) {
+      await this.runGitCommand(["checkout", targetBranch], gitContext.repoRoot);
     }
 
     this.emitQueueInfo(
       planId,
-      `Committer is merging phase ${phaseNumber} into ${gitContext.mergeTargetBranch} (${branches.length} branch(es)).`
+      `Committer is merging phase ${phaseNumber} into ${targetBranch} (${branches.length} branch(es)).`
     );
     void this.postDiscordNotification(
       {
@@ -1737,21 +2148,23 @@ export class TaskRunner {
         level: "info",
         fields: [
           { name: "Plan", value: planId, inline: true },
-          { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
+          { name: "Target", value: targetBranch, inline: true },
           { name: "Branches", value: branches.join("\n") || "(none)" }
         ]
       }
     );
 
     const beforeHead = (
-      await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
+      await this.runGitCommand(["rev-parse", targetBranch], gitContext.repoRoot)
     ).stdout.trim();
 
     await this.agentService.mergePhaseWithCommitter({
       repoRoot: gitContext.repoRoot,
-      targetBranch: gitContext.mergeTargetBranch,
+      targetBranch,
       branches,
       phaseNumber,
+      mergeContextSummary,
+      validationCommands: [],
       callbacks: {
         onLog: (line) => this.emitQueueInfo(planId, `[committer] ${line}`),
         onQuery: () => undefined
@@ -1759,22 +2172,22 @@ export class TaskRunner {
     });
 
     const afterHead = (
-      await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
+      await this.runGitCommand(["rev-parse", targetBranch], gitContext.repoRoot)
     ).stdout.trim();
     if (beforeHead === afterHead) {
       throw new Error(
-        `Committer merge for phase ${phaseNumber} did not create any new commit on ${gitContext.mergeTargetBranch}.`
+        `Committer merge for phase ${phaseNumber} did not create any new commit on ${targetBranch}.`
       );
     }
 
     for (const branch of branches) {
       const merged = await this.safeRunGitCommand(
-        ["merge-base", "--is-ancestor", branch, gitContext.mergeTargetBranch],
+        ["merge-base", "--is-ancestor", branch, targetBranch],
         gitContext.repoRoot
       );
       if (!merged.ok) {
         throw new Error(
-          `Committer merge validation failed: branch "${branch}" is not an ancestor of "${gitContext.mergeTargetBranch}".`
+          `Committer merge validation failed: branch "${branch}" is not an ancestor of "${targetBranch}".`
         );
       }
     }
@@ -1782,7 +2195,7 @@ export class TaskRunner {
     await this.validateCommitRangePolicy(
       gitContext.repoRoot,
       `${beforeHead}..${afterHead}`,
-      `phase ${phaseNumber} merge`
+      `phase ${phaseNumber} merge into ${targetBranch}`
     );
     void this.postDiscordNotification(
       {
@@ -1792,7 +2205,7 @@ export class TaskRunner {
         level: "info",
         fields: [
           { name: "Plan", value: planId, inline: true },
-          { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
+          { name: "Target", value: targetBranch, inline: true },
           { name: "Before", value: beforeHead, inline: false },
           { name: "After", value: afterHead, inline: false }
         ]
@@ -1926,6 +2339,41 @@ export class TaskRunner {
     }
 
     return sanitized.slice(0, maxLength);
+  }
+
+  private async runShellCommand(
+    command: string,
+    cwd: string
+  ): Promise<{ stdout: string; stderr: string }> {
+    const shell = process.platform === "win32" ? "cmd" : "sh";
+    const args = process.platform === "win32" ? ["/d", "/s", "/c", command] : ["-lc", command];
+
+    return await new Promise((resolve, reject) => {
+      execFile(
+        shell,
+        args,
+        {
+          cwd,
+          windowsHide: true,
+          maxBuffer: 64 * 1024 * 1024
+        },
+        (error, stdout, stderr) => {
+          const normalizedStdout = String(stdout ?? "");
+          const normalizedStderr = String(stderr ?? "");
+
+          if (error) {
+            const details = normalizedStderr.trim().length > 0 ? normalizedStderr.trim() : error.message;
+            reject(new Error(`Command "${command}" failed in ${cwd}: ${details}`));
+            return;
+          }
+
+          resolve({
+            stdout: normalizedStdout,
+            stderr: normalizedStderr
+          });
+        }
+      );
+    });
   }
 
   private async runGitCommand(

@@ -131,10 +131,28 @@ interface MergePhaseArgs {
   targetBranch: string;
   branches: string[];
   phaseNumber: number;
+  mergeContextSummary?: string;
+  validationCommands?: string[];
   callbacks: CommitterCallbacks;
 }
 
 interface MergePhaseResult {
+  sessionId: string | null;
+  resultText: string;
+  stopReason: string | null;
+}
+
+interface StabilizePhaseIntegrationArgs {
+  repoRoot: string;
+  targetBranch: string;
+  integrationBranch: string;
+  phaseNumber: number;
+  phaseContextSummary?: string;
+  validationCommands: string[];
+  callbacks: CommitterCallbacks;
+}
+
+interface StabilizePhaseIntegrationResult {
   sessionId: string | null;
   resultText: string;
   stopReason: string | null;
@@ -1985,6 +2003,15 @@ Commit policy (strict):
       throw new Error("Unable to start a cleared committer session for phase merge.");
     }
 
+    const mergeContext =
+      typeof args.mergeContextSummary === "string" && args.mergeContextSummary.trim().length > 0
+        ? args.mergeContextSummary.trim()
+        : "No additional merge context provided.";
+    const validationCommands =
+      Array.isArray(args.validationCommands) && args.validationCommands.length > 0
+        ? args.validationCommands.map((command, index) => `${index + 1}. ${command}`).join("\n")
+        : "(none)";
+
     const mergePrompt = `
 You are the dedicated Ralph committer agent for queue merge.
 
@@ -1994,6 +2021,12 @@ Phase number: ${args.phaseNumber}
 Branches to merge in order:
 ${args.branches.map((branch, index) => `${index + 1}. ${branch}`).join("\n")}
 
+Merge context (task intent + execution outcomes):
+${mergeContext}
+
+Validation commands (must all pass before you finish):
+${validationCommands}
+
 Merge policy (strict):
 1) Verify working tree is clean before merging.
 2) Checkout the target branch.
@@ -2001,8 +2034,13 @@ Merge policy (strict):
 4) Merge commit messages MUST follow Conventional Commits:
    <type>[optional scope]: <description>
 5) Never include any Co-authored-by trailer that mentions Claude.
-6) If a conflict occurs, abort the merge and report clearly.
-7) Provide a concise summary of merged branches and resulting commit hashes.
+6) If a merge conflict occurs, resolve it using the merge context above:
+   - preserve intended behavior of already-merged work on target branch
+   - preserve the incoming task's stated acceptance criteria
+   - keep fixes minimal and scoped to conflict/integration correctness
+7) After merges, run every validation command. If a command fails, make minimal integration fixes, commit with Conventional Commits, and rerun until all pass or truly blocked.
+8) If blocked, report concrete blockers (files + why) and leave the repo in a clean, non-conflicted state.
+9) Provide a concise summary of merged branches, conflict resolutions, validation command results, and resulting commit hashes.
 
 You are the only agent allowed to run git merge in this step.
 `;
@@ -2019,13 +2057,121 @@ You are the only agent allowed to run git merge in this step.
         cwd,
         resume: clearSessionId,
         includePartialMessages: true,
-        maxTurns: 30
+        maxTurns: 80
       }
     });
 
     args.callbacks.onQuery(mergeResponse);
 
     for await (const message of mergeResponse) {
+      const textChunk = extractTextDelta(message);
+      if (textChunk) {
+        args.callbacks.onLog(textChunk);
+      }
+
+      const initMessage = message as { type?: string; subtype?: string; session_id?: string };
+      if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+        sessionId = initMessage.session_id;
+      }
+
+      const resultMessage = message as {
+        type?: string;
+        result?: string;
+        stop_reason?: string | null;
+      };
+      if (resultMessage.type === "result") {
+        resultText = resultMessage.result ?? "";
+        stopReason = resultMessage.stop_reason ?? null;
+      }
+    }
+
+    return {
+      sessionId,
+      resultText,
+      stopReason
+    };
+  }
+
+  async stabilizePhaseIntegrationWithCommitter(
+    args: StabilizePhaseIntegrationArgs
+  ): Promise<StabilizePhaseIntegrationResult> {
+    const cwd = resolveQueryCwd(args.repoRoot);
+    const committerModel = this.getModel("committer");
+
+    const clearResponse = query({
+      prompt: "/clear",
+      options: {
+        ...baseOptions,
+        model: committerModel,
+        cwd,
+        maxTurns: 1
+      }
+    });
+
+    let clearSessionId: string | null = null;
+    for await (const message of clearResponse) {
+      const initMessage = message as { type?: string; subtype?: string; session_id?: string };
+      if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+        clearSessionId = initMessage.session_id;
+      }
+    }
+
+    if (!clearSessionId) {
+      throw new Error("Unable to start a cleared committer session for phase stabilization.");
+    }
+
+    const contextSummary =
+      typeof args.phaseContextSummary === "string" && args.phaseContextSummary.trim().length > 0
+        ? args.phaseContextSummary.trim()
+        : "No additional phase context provided.";
+    const validationCommands =
+      Array.isArray(args.validationCommands) && args.validationCommands.length > 0
+        ? args.validationCommands.map((command, index) => `${index + 1}. ${command}`).join("\n")
+        : "(none)";
+
+    const stabilizePrompt = `
+You are the dedicated Ralph committer agent for phase integration stabilization.
+
+Repository root: ${cwd}
+Phase number: ${args.phaseNumber}
+Integration branch: ${args.integrationBranch}
+Target branch for promotion: ${args.targetBranch}
+
+Phase context (what was intended + what already landed):
+${contextSummary}
+
+Validation commands:
+${validationCommands}
+
+Stabilization policy (strict):
+1) Checkout ${args.integrationBranch}.
+2) If any merge/cherry-pick/rebase conflict state exists, resolve it or cleanly abort the operation. Never leave the repository conflicted.
+3) Review integration diff relative to ${args.targetBranch}; keep changes minimal and aligned with phase intent.
+4) Run all validation commands. If any fail, make minimal integration fixes, commit with Conventional Commits, and rerun until all pass or truly blocked.
+5) Never include any Co-authored-by trailer that mentions Claude.
+6) Before finishing, ensure git status is clean and branch is ready for fast-forward promotion.
+7) Provide a concise summary of fixes, validations, and resulting commit hashes.
+`;
+
+    let sessionId: string | null = clearSessionId;
+    let resultText = "";
+    let stopReason: string | null = null;
+
+    const stabilizeResponse = query({
+      prompt: stabilizePrompt,
+      options: {
+        ...baseOptions,
+        model: committerModel,
+        cwd,
+        resume: clearSessionId,
+        includePartialMessages: true,
+        maxTurns: 90
+      }
+    });
+
+    args.callbacks.onQuery(stabilizeResponse);
+
+    for await (const message of stabilizeResponse) {
       const textChunk = extractTextDelta(message);
       if (textChunk) {
         args.callbacks.onLog(textChunk);
