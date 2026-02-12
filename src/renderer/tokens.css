@@ -78,6 +78,37 @@
   --color-log-border: #222;
   --color-log-text: #e6e6e6;
 
+  /* ── Dark surfaces (toasts, log toolbar, dark-themed components) ── */
+  --color-surface-dark: #1a1a1a;
+  --color-surface-dark-raised: #333;
+  --color-text-on-dark: #e6e6e6;
+  --color-text-on-dark-secondary: #ccc;
+  --color-text-on-dark-muted: #777;
+  --color-text-on-dark-dim: #555;
+  --color-text-on-dark-placeholder: #666;
+  --color-text-on-dark-subtle: #888;
+  --color-text-on-dark-faint: #999;
+
+  /* ── Overlay / backdrop ──────────────────────────────────── */
+  --color-overlay: rgba(0, 0, 0, 0.45);
+  --color-overlay-heavy: rgba(0, 0, 0, 0.5);
+  --color-overlay-white-subtle: rgba(255, 255, 255, 0.03);
+  --color-overlay-white-border: rgba(255, 255, 255, 0.12);
+  --color-overlay-white-shimmer: rgba(255, 255, 255, 0.3);
+
+  /* ── Error alpha variants (for dark-themed borders/hovers) ── */
+  --color-error-border-alpha: rgba(185, 28, 28, 0.4);
+  --color-error-hover-alpha: rgba(185, 28, 28, 0.1);
+  --color-error-hover-alpha-light: rgba(185, 28, 28, 0.08);
+
+  /* ── Accent-2 alpha variants (selection pulses) ──────────── */
+  --color-accent-2-alpha-40: rgba(15, 118, 110, 0.4);
+  --color-accent-2-alpha-15: rgba(15, 118, 110, 0.15);
+  --color-accent-2-alpha-0: rgba(15, 118, 110, 0);
+
+  /* ── Search highlight ────────────────────────────────────── */
+  --color-highlight-search: rgba(229, 72, 40, 0.25);
+
   /* ── Border radius ─────────────────────────────────────── */
   --radius-sm: 8px;
   --radius-md: 10px;

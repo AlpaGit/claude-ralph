@@ -7,11 +7,11 @@
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.875rem;
-  background: #1a1a1a;
-  color: #e6e6e6;
+  background: var(--color-surface-dark);
+  color: var(--color-text-on-dark);
   border: 2px solid var(--color-error);
   border-radius: 8px;
-  box-shadow: 4px 4px 0 #000;
+  box-shadow: 4px 4px 0 var(--color-black);
   max-width: 420px;
   width: 100%;
   overflow: hidden;
@@ -68,7 +68,7 @@
   flex-shrink: 0;
   background: none;
   border: none;
-  color: #777;
+  color: var(--color-text-on-dark-muted);
   font-size: 1rem;
   cursor: pointer;
   padding: 0 2px;
@@ -77,7 +77,7 @@
 }
 
 .dismiss:hover {
-  color: #e6e6e6;
+  color: var(--color-text-on-dark);
 }
 
 .dismiss:focus-visible {
@@ -94,7 +94,7 @@
   gap: 6px;
   width: 100%;
   border: none;
-  border-top: 1px dashed rgba(185, 28, 28, 0.4);
+  border-top: 1px dashed var(--color-error-border-alpha);
   background: transparent;
   padding: 6px 16px;
   font-family: var(--font-mono);
@@ -108,7 +108,7 @@
 }
 
 .detailsToggle:hover {
-  background: rgba(185, 28, 28, 0.1);
+  background: var(--color-error-hover-alpha);
 }
 
 .detailsToggle:focus-visible {
@@ -129,7 +129,7 @@
 /* ── Expandable details section ─────────────────────── */
 
 .details {
-  border-top: 1px dashed rgba(185, 28, 28, 0.4);
+  border-top: 1px dashed var(--color-error-border-alpha);
   padding: 10px 16px 14px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -144,7 +144,7 @@
 }
 
 .detailLabel {
-  color: #777;
+  color: var(--color-text-on-dark-muted);
   flex-shrink: 0;
   font-weight: 700;
   text-transform: uppercase;
@@ -154,7 +154,7 @@
 }
 
 .detailValue {
-  color: #ccc;
+  color: var(--color-text-on-dark-secondary);
   word-break: break-word;
 }
 
@@ -167,7 +167,7 @@
 .sectionTitle {
   font-weight: 700;
   font-size: 0.65rem;
-  color: #777;
+  color: var(--color-text-on-dark-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin: 0 0 4px;
@@ -187,9 +187,9 @@
   flex-direction: column;
   gap: 1px;
   padding: 4px 6px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed var(--color-overlay-white-border);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--color-overlay-white-subtle);
 }
 
 .issuePath {
@@ -198,16 +198,16 @@
 }
 
 .issueMessage {
-  color: #ccc;
+  color: var(--color-text-on-dark-secondary);
 }
 
 .issueMeta {
   font-size: 0.65rem;
-  color: #777;
+  color: var(--color-text-on-dark-muted);
 }
 
 .issueMeta strong {
-  color: #ccc;
+  color: var(--color-text-on-dark-secondary);
 }
 
 /* ── Stack trace ────────────────────────────────────── */
@@ -219,9 +219,9 @@
 .stackTrace {
   font-family: var(--font-mono);
   font-size: 0.65rem;
-  color: #999;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  color: var(--color-text-on-dark-faint);
+  background: var(--color-overlay-white-subtle);
+  border: 1px dashed var(--color-overlay-white-border);
   border-radius: 4px;
   padding: 6px 8px;
   white-space: pre-wrap;

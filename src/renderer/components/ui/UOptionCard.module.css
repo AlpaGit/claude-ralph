@@ -49,13 +49,13 @@
 
 @keyframes selectPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.4);
+    box-shadow: 0 0 0 0 var(--color-accent-2-alpha-40);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.15);
+    box-shadow: 0 0 0 6px var(--color-accent-2-alpha-15);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+    box-shadow: 0 0 0 0 var(--color-accent-2-alpha-0);
   }
 }
 

@@ -186,23 +186,23 @@ export function AppShell(): JSX.Element {
         containerStyle={{ zIndex: 10000 }}
         toastOptions={{
           style: {
-            background: "#1a1a1a",
-            color: "#e6e6e6",
-            border: "2px solid #d97706",
+            background: "var(--color-surface-dark)",
+            color: "var(--color-text-on-dark)",
+            border: "2px solid var(--color-in-progress)",
             borderRadius: "8px",
-            fontFamily: "'Space Grotesk', sans-serif",
+            fontFamily: "var(--font-sans)",
             fontWeight: 600,
             fontSize: "0.875rem",
-            boxShadow: "4px 4px 0 #000",
+            boxShadow: "4px 4px 0 var(--color-black)",
             padding: "12px 16px",
             maxWidth: "420px",
           },
           success: {
-            style: { borderColor: "#15803d" },
+            style: { borderColor: "var(--color-completed)" },
             duration: 4000,
           },
           error: {
-            style: { borderColor: "#b91c1c" },
+            style: { borderColor: "var(--color-error)" },
             duration: 6000,
           },
           /* Warning toasts use the default amber border (#d97706) and 5s duration
