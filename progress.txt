@@ -485,3 +485,13 @@ p1-16: Migrate styles.css to CSS Modules   [DONE]
   - No orphan wizard/template/discovery global classes remain (verified via grep)
   - All modern views/components (P1-04 through P1-15) already use CSS Modules
   - Build and typecheck pass
+
+p1-17: Fix bug: Remove hardcoded 'dotnet build' from task execution prompt   [DONE]
+  - src/main/runtime/ralph-agent-service.ts
+    - runTask() method: taskPrompt template literal, step 4 of "Strict workflow"
+    - Removed hardcoded "Run dotnet build and required tests from PRD."
+    - Replaced with generic: "Run build and required tests. Use the project's build
+      and test commands as detected from project configuration files (package.json,
+      Cargo.toml, Makefile, etc.) or as specified in the plan's technical notes."
+    - No other dotnet references found in the file
+  - Build and typecheck pass
