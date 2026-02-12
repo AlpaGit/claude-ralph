@@ -1378,3 +1378,56 @@ p4-03: Write unit tests for Zod schemas and IPC validation   [DONE]
       wizardStepData inputs; valid input returns parsed data without throwing
   - Test results: 135 passed (130 zod-schemas + 5 jsdom), 78 skipped (node/native ABI)
   - Build and typecheck pass
+
+p4-04: Write unit tests for Zustand stores   [DONE]
+  - tests/unit/stores/planStore.test.ts
+    - 32 unit tests for planStore (Zustand store)
+    - Mocks window.ralphApi via installMockRalphApi, mocks toastService via vi.mock
+    - Resets store state between tests with usePlanStore.setState(initialState)
+    - loadPlanList tests (7): populates plansList from API, sets loadingList during fetch,
+      passes filter to API, sets error on failure, clears previous error, handles empty list,
+      maps PlanListItem fields to PlanSummary fields
+    - createPlan tests (5): calls API with correct args and returns planId, auto-loads
+      created plan into currentPlan, sets creating flag during creation, sets error and
+      re-throws on failure, adds created plan to plansList
+    - loadPlan tests (6): sets currentPlan from API, sets loadingPlan during fetch,
+      adds loaded plan to plansList if not present, updates existing entry in plansList,
+      sets error on failure, handles null response without error
+    - deletePlan tests (5): calls API and removes from plansList, clears currentPlan
+      if deleted plan is active, preserves currentPlan if different plan deleted,
+      sets error on failure without removing, handles empty list gracefully
+    - archivePlan tests (3): calls API and sets archivedAt, only updates matching plan,
+      sets error on failure without modifying list
+    - unarchivePlan tests (3): calls API and clears archivedAt, only updates matching plan,
+      sets error on failure without modifying list
+    - archive/unarchive toggle test (1): verifies null -> timestamp -> null round-trip
+    - clearError tests (2): clears error and lastIpcError, no-op when already null
+  - tests/unit/stores/runStore.test.ts
+    - 41 unit tests for runStore (Zustand store with immer middleware)
+    - Mocks window.ralphApi via installMockRalphApi, mocks toastService via vi.mock
+    - Resets store state between tests with useRunStore.setState(initialState)
+    - Uses unique runIds per test to avoid module-level ring buffer state leakage
+    - appendLog tests (4): accumulates single line, accumulates multiple lines in order,
+      maintains separate logs per run, tracks overflow at zero within capacity
+    - appendTodo tests (4): sets todo items for a run, replaces on subsequent calls,
+      handles empty list, maintains separate todos per run
+    - selectRun tests (3): sets selectedRunId, changes on subsequent call, sets to null
+    - _handleRunEvent tests (20):
+      - recentEvents: adds event, accumulates newest-first, caps at 50
+      - started: sets activeRuns to in_progress, sets selectedRunId
+      - log: appends non-empty lines, skips whitespace-only, handles missing payload,
+        accumulates from multiple events
+      - todo_update: updates runTodos, handles missing todos in payload
+      - completed: sets status, clears cancelRequestedAt
+      - failed: sets status, clears cancelRequestedAt
+      - cancelled: sets status, clears cancelRequestedAt
+      - task_status: adds to recentEvents without modifying activeRuns
+    - startRun tests (3): calls API and sets queued status, sets selectedRunId, throws on failure
+    - cancelRun tests (4): transitions through cancelling to cancelled, clears cancelRequestedAt,
+      preserves event stream status if already transitioned, handles API error gracefully
+    - getCancelTimeoutMs test (1): returns 10000ms
+    - initRunEventSubscription tests (3): subscribes to onRunEvent, dispatches events to
+      _handleRunEvent, returns no-op when window.ralphApi unavailable
+    - Full lifecycle test (1): started -> log -> todo_update -> completed end-to-end
+  - Test results: 208 passed (73 store + 130 zod + 5 jsdom), 78 skipped (node/native ABI)
+  - Build and typecheck pass
