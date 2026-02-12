@@ -44,44 +44,12 @@ import type {
   UnarchivePlanInput,
   UpdateModelConfigInput,
   UpdateAppSettingsInput,
-  WizardGuidanceResult,
+  WizardGuidanceResult
 } from "@shared/types";
 
-// Keep preload runtime minimal: do not import @shared/ipc here because it
-// depends on zod/runtime modules that can fail in sandboxed preload contexts.
-const IPC_CHANNELS = {
-  createPlan: "plan:create",
-  getPlan: "plan:get",
-  listPlans: "plan:list",
-  listProjectMemory: "project-memory:list",
-  refreshProjectStackProfile: "project-memory:refresh",
-  deletePlan: "plan:delete",
-  archivePlan: "plan:archive",
-  unarchivePlan: "plan:unarchive",
-  runTask: "task:run",
-  runAll: "task:runAll",
-  cancelRun: "run:cancel",
-  retryTask: "task:retry",
-  skipTask: "task:skip",
-  approveTaskProposal: "proposal:approve",
-  dismissTaskProposal: "proposal:dismiss",
-  abortQueue: "queue:abort",
-  startDiscovery: "discovery:start",
-  continueDiscovery: "discovery:continue",
-  discoveryEvent: "discovery:event",
-  wizardGuidance: "wizard:guidance",
-  inferStack: "wizard:inferStack",
-  runEvent: "run:event",
-  getModelConfig: "config:getModels",
-  updateModelConfig: "config:updateModel",
-  getAppSettings: "config:getAppSettings",
-  updateAppSettings: "config:updateAppSettings",
-  discoverySessions: "discovery:sessions",
-  discoveryResume: "discovery:resume",
-  discoveryAbandon: "discovery:abandon",
-  discoveryCancel: "discovery:cancel",
-  getRunEvents: "run:getEvents",
-} as const;
+// Generated at build time from src/shared/ipc.ts — no zod dependency.
+// Run `npm run generate:ipc` to regenerate after modifying IPC_CHANNELS.
+import { IPC_CHANNELS } from "./channel-names";
 
 const api: RalphApi = {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
@@ -220,7 +188,7 @@ const api: RalphApi = {
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.runEvent, listener);
     };
-  },
+  }
 };
 
 contextBridge.exposeInMainWorld("ralphApi", api);

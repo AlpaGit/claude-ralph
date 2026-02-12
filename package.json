@@ -5,10 +5,12 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
+    "generate:ipc": "npx tsx scripts/generate-ipc-channels.ts",
+    "generate:ipc:check": "npx tsx scripts/generate-ipc-channels.ts --check",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "npm run generate:ipc:check && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
