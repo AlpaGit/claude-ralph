@@ -19,11 +19,15 @@ function cn(...classes: (string | false | undefined | null)[]): string {
 
 /**
  * Build a map from taskId -> most recent TaskRun.
- * Returns the first run per task (runs are ordered newest-first from the backend).
+ * Sorts runs by startedAt DESC so the newest run per task always wins,
+ * regardless of the input array ordering.
  */
 function buildTaskRunMap(runs: TaskRun[]): Map<string, TaskRun> {
+  const sorted = [...runs].sort(
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+  );
   const map = new Map<string, TaskRun>();
-  for (const run of runs) {
+  for (const run of sorted) {
     if (!map.has(run.taskId)) {
       map.set(run.taskId, run);
     }
