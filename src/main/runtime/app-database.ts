@@ -26,6 +26,13 @@ import type {
   UpdateAppSettingsInput,
 } from "@shared/types";
 import { MigrationRunner } from "./migrations/migration-runner";
+import { PlanRepository } from "./repositories/plan-repository";
+import { TaskRepository } from "./repositories/task-repository";
+import {
+  type CreatePlanInput,
+  type PlanListRow,
+  mapPlanListRow,
+} from "./repositories/row-mappers";
 
 /**
  * Custom error thrown when JSON columns in the database fail to parse.
@@ -75,45 +82,7 @@ interface AppSettingRow {
 const APP_SETTING_DISCORD_WEBHOOK_URL = "discord_webhook_url";
 const APP_SETTING_QUEUE_PARALLEL_ENABLED = "queue_parallel_enabled";
 
-interface PlanRow {
-  id: string;
-  project_path: string;
-  project_id: string | null;
-  project_key: string | null;
-  prd_text: string;
-  summary: string;
-  technical_pack_json: string;
-  status: PlanStatus;
-  created_at: string;
-  updated_at: string;
-  archived_at: string | null;
-}
-
-interface PlanListRow {
-  id: string;
-  summary: string;
-  status: PlanStatus;
-  project_path: string;
-  project_id: string | null;
-  project_key: string | null;
-  created_at: string;
-  archived_at: string | null;
-}
-
-interface TaskRow {
-  id: string;
-  plan_id: string;
-  ordinal: number;
-  title: string;
-  description: string;
-  dependencies_json: string;
-  acceptance_criteria_json: string;
-  technical_notes: string;
-  status: TaskStatus;
-  created_at: string;
-  updated_at: string;
-  completed_at: string | null;
-}
+// PlanRow, PlanListRow, and TaskRow are now defined in ./repositories/row-mappers.ts
 
 interface RunRow {
   id: string;
@@ -140,35 +109,7 @@ interface RunEventRow {
   payload_json: string;
 }
 
-interface PlanProgressEntryRow {
-  id: string;
-  plan_id: string;
-  run_id: string | null;
-  status: "completed" | "failed" | "cancelled";
-  entry_text: string;
-  created_at: string;
-}
-
-interface TaskFollowupProposalRow {
-  id: string;
-  plan_id: string;
-  source_run_id: string | null;
-  source_task_id: string;
-  finding_key: string;
-  title: string;
-  description: string;
-  severity: string;
-  rule: string;
-  location: string;
-  message: string;
-  recommended_action: string;
-  acceptance_criteria_json: string;
-  technical_notes: string;
-  status: TaskFollowupProposalStatus;
-  approved_task_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
+// PlanProgressEntryRow and TaskFollowupProposalRow are now defined in ./repositories/row-mappers.ts
 
 interface DiscoverySessionRow {
   id: string;
@@ -319,6 +260,8 @@ const parseJsonArray = (
 
 export class AppDatabase {
   private readonly db: Database.Database;
+  private readonly planRepo: PlanRepository;
+  private readonly taskRepo: TaskRepository;
 
   constructor(dbPath: string, migrationsDir: string) {
     this.db = new Database(dbPath);
@@ -327,6 +270,12 @@ export class AppDatabase {
 
     const runner = new MigrationRunner(this.db, migrationsDir);
     runner.run();
+
+    // Bind touchProject so repositories can resolve project identity
+    // without owning the projects table directly.
+    const touchProjectBound = this.touchProject.bind(this);
+    this.planRepo = new PlanRepository(this.db, touchProjectBound);
+    this.taskRepo = new TaskRepository(this.db);
   }
 
   private parseProjectStackProfile(raw: string | null): ProjectStackProfile | null {
@@ -370,43 +319,8 @@ export class AppDatabase {
     return {};
   }
 
-  private mapPlanListRow(row: PlanListRow): PlanListItem {
-    return {
-      id: row.id,
-      summary: row.summary,
-      status: row.status,
-      projectPath: row.project_path,
-      createdAt: row.created_at,
-      archivedAt: row.archived_at,
-    };
-  }
-
-  private mapTaskFollowupProposalRow(row: TaskFollowupProposalRow): TaskFollowupProposal {
-    return {
-      id: row.id,
-      planId: row.plan_id,
-      sourceRunId: row.source_run_id,
-      sourceTaskId: row.source_task_id,
-      findingKey: row.finding_key,
-      title: row.title,
-      description: row.description,
-      severity: row.severity,
-      rule: row.rule,
-      location: row.location,
-      message: row.message,
-      recommendedAction: row.recommended_action,
-      acceptanceCriteria: parseJsonArray(
-        row.acceptance_criteria_json,
-        "acceptance_criteria_json",
-        row.id,
-      ),
-      technicalNotes: row.technical_notes,
-      status: row.status,
-      approvedTaskId: row.approved_task_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  }
+  // mapPlanListRow and mapTaskFollowupProposalRow are now standalone functions
+  // imported from ./repositories/row-mappers.ts
 
   private mapProjectMemoryRow(row: ProjectRow, limitPlans: number): ProjectMemoryItem {
     const planRows = this.db
@@ -434,7 +348,7 @@ export class AppDatabase {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       lastStackRefreshAt: row.last_stack_refresh_at,
-      recentPlans: planRows.map((planRow) => this.mapPlanListRow(planRow)),
+      recentPlans: planRows.map(mapPlanListRow),
     };
   }
 
@@ -562,27 +476,7 @@ export class AppDatabase {
   }
 
   listPlansByProject(projectPath: string, limit = 10): PlanListItem[] {
-    const project = this.touchProject(projectPath);
-    if (!project) {
-      return [];
-    }
-
-    const rows = this.db
-      .prepare(
-        `
-        SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at
-        FROM plans
-        WHERE project_id = @project_id
-        ORDER BY created_at DESC
-        LIMIT @limit;
-      `,
-      )
-      .all({
-        project_id: project.projectId,
-        limit,
-      }) as PlanListRow[];
-
-    return rows.map((row) => this.mapPlanListRow(row));
+    return this.planRepo.listPlansByProject(projectPath, limit);
   }
 
   listProjectMemory(input: ListProjectMemoryInput = {}): ProjectMemoryItem[] {
@@ -631,233 +525,27 @@ export class AppDatabase {
   }
 
   createPlan(input: CreatePlanInput): void {
-    const createdAt = nowIso();
-    const project = this.touchProject(input.projectPath);
-
-    const insertPlan = this.db.prepare(`
-      INSERT INTO plans (
-        id, project_path, project_id, project_key, prd_text, summary, technical_pack_json, status, created_at, updated_at
-      ) VALUES (
-        @id, @project_path, @project_id, @project_key, @prd_text, @summary, @technical_pack_json, @status, @created_at, @updated_at
-      );
-    `);
-
-    const insertTask = this.db.prepare(`
-      INSERT INTO tasks (
-        id, plan_id, ordinal, title, description, dependencies_json, acceptance_criteria_json, technical_notes, status, created_at, updated_at, completed_at
-      ) VALUES (
-        @id, @plan_id, @ordinal, @title, @description, @dependencies_json, @acceptance_criteria_json, @technical_notes, @status, @created_at, @updated_at, NULL
-      );
-    `);
-
-    const transaction = this.db.transaction(() => {
-      insertPlan.run({
-        id: input.id,
-        project_path: input.projectPath,
-        project_id: project?.projectId ?? null,
-        project_key: project?.projectKey ?? null,
-        prd_text: input.prdText,
-        summary: input.summary,
-        technical_pack_json: JSON.stringify(input.technicalPack),
-        status: "ready",
-        created_at: createdAt,
-        updated_at: createdAt,
-      });
-
-      for (const task of input.tasks) {
-        insertTask.run({
-          id: task.id,
-          plan_id: input.id,
-          ordinal: task.ordinal,
-          title: task.title,
-          description: task.description,
-          dependencies_json: JSON.stringify(task.dependencies),
-          acceptance_criteria_json: JSON.stringify(task.acceptanceCriteria),
-          technical_notes: task.technicalNotes,
-          status: "pending",
-          created_at: createdAt,
-          updated_at: createdAt,
-        });
-      }
-    });
-
-    transaction();
+    this.planRepo.createPlan(input);
   }
 
   getPlan(planId: string): RalphPlan | null {
-    const planRow = this.db.prepare("SELECT * FROM plans WHERE id = ?;").get(planId) as
-      | PlanRow
-      | undefined;
-    if (!planRow) {
-      return null;
-    }
-
-    const taskRows = this.db
-      .prepare("SELECT * FROM tasks WHERE plan_id = ? ORDER BY ordinal ASC;")
-      .all(planId) as TaskRow[];
-
-    const runRows = this.db
-      .prepare("SELECT * FROM runs WHERE plan_id = ? ORDER BY started_at DESC;")
-      .all(planId) as RunRow[];
-    const proposalRows = this.db
-      .prepare(
-        `
-        SELECT
-          id, plan_id, source_run_id, source_task_id, finding_key,
-          title, description, severity, rule, location, message, recommended_action,
-          acceptance_criteria_json, technical_notes,
-          status, approved_task_id, created_at, updated_at
-        FROM task_followup_proposals
-        WHERE plan_id = ?
-        ORDER BY created_at DESC;
-      `,
-      )
-      .all(planId) as TaskFollowupProposalRow[];
-
-    let technicalPack: TechnicalPack;
-    try {
-      technicalPack = JSON.parse(planRow.technical_pack_json) as TechnicalPack;
-    } catch (error: unknown) {
-      console.error(
-        `[AppDatabase] Failed to parse technical_pack_json for plan ${planId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new PlanParseError("technical_pack_json", planId, error);
-    }
-
-    const tasks: RalphTask[] = taskRows.map((row) => ({
-      id: row.id,
-      planId: row.plan_id,
-      ordinal: row.ordinal,
-      title: row.title,
-      description: row.description,
-      dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
-      acceptanceCriteria: parseJsonArray(
-        row.acceptance_criteria_json,
-        "acceptance_criteria_json",
-        row.id,
-      ),
-      technicalNotes: row.technical_notes,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      completedAt: row.completed_at,
-    }));
-
-    const runs: TaskRun[] = runRows.map((row) => ({
-      id: row.id,
-      planId: row.plan_id,
-      taskId: row.task_id,
-      sessionId: row.session_id,
-      status: row.status,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      durationMs: row.duration_ms,
-      totalCostUsd: row.total_cost_usd,
-      resultText: row.result_text,
-      stopReason: row.stop_reason,
-      errorText: row.error_text,
-      retryCount: row.retry_count ?? 0,
-    }));
-    const taskProposals = proposalRows.map((row) => this.mapTaskFollowupProposalRow(row));
-
-    return {
-      id: planRow.id,
-      projectPath: planRow.project_path,
-      prdText: planRow.prd_text,
-      summary: planRow.summary,
-      technicalPack,
-      status: planRow.status,
-      createdAt: planRow.created_at,
-      updatedAt: planRow.updated_at,
-      archivedAt: planRow.archived_at,
-      tasks,
-      runs,
-      taskProposals,
-    };
+    return this.planRepo.getPlan(planId);
   }
 
   getTask(planId: string, taskId: string): RalphTask | null {
-    const row = this.db
-      .prepare("SELECT * FROM tasks WHERE plan_id = ? AND id = ? LIMIT 1;")
-      .get(planId, taskId) as TaskRow | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    return {
-      id: row.id,
-      planId: row.plan_id,
-      ordinal: row.ordinal,
-      title: row.title,
-      description: row.description,
-      dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
-      acceptanceCriteria: parseJsonArray(
-        row.acceptance_criteria_json,
-        "acceptance_criteria_json",
-        row.id,
-      ),
-      technicalNotes: row.technical_notes,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      completedAt: row.completed_at,
-    };
+    return this.taskRepo.getTask(planId, taskId);
   }
 
   getTasks(planId: string): RalphTask[] {
-    const rows = this.db
-      .prepare("SELECT * FROM tasks WHERE plan_id = ? ORDER BY ordinal ASC;")
-      .all(planId) as TaskRow[];
-
-    return rows.map((row) => ({
-      id: row.id,
-      planId: row.plan_id,
-      ordinal: row.ordinal,
-      title: row.title,
-      description: row.description,
-      dependencies: parseJsonArray(row.dependencies_json, "dependencies_json", row.id),
-      acceptanceCriteria: parseJsonArray(
-        row.acceptance_criteria_json,
-        "acceptance_criteria_json",
-        row.id,
-      ),
-      technicalNotes: row.technical_notes,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      completedAt: row.completed_at,
-    }));
+    return this.taskRepo.getTasks(planId);
   }
 
   updateTaskStatus(taskId: string, status: TaskStatus): void {
-    const timestamp = nowIso();
-
-    this.db
-      .prepare(
-        `
-        UPDATE tasks
-        SET status = @status,
-            updated_at = @updated_at,
-            completed_at = CASE
-              WHEN @status = 'completed' THEN @updated_at
-              WHEN @status = 'pending' THEN NULL
-              ELSE completed_at
-            END
-        WHERE id = @id;
-      `,
-      )
-      .run({
-        id: taskId,
-        status,
-        updated_at: timestamp,
-      });
+    this.taskRepo.updateTaskStatus(taskId, status);
   }
 
   updatePlanStatus(planId: string, status: PlanStatus): void {
-    this.db
-      .prepare("UPDATE plans SET status = ?, updated_at = ? WHERE id = ?;")
-      .run(status, nowIso(), planId);
+    this.planRepo.updatePlanStatus(planId, status);
   }
 
   createRun(input: CreateRunInput): void {
@@ -1058,33 +746,7 @@ export class AppDatabase {
     status: "completed" | "failed" | "cancelled";
     entryText: string;
   }): void {
-    const trimmed = input.entryText.trim();
-    if (trimmed.length === 0) {
-      return;
-    }
-
-    const maxLength = 16_000;
-    const truncated =
-      trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed;
-
-    this.db
-      .prepare(
-        `
-        INSERT INTO plan_progress_entries (
-          id, plan_id, run_id, status, entry_text, created_at
-        ) VALUES (
-          @id, @plan_id, @run_id, @status, @entry_text, @created_at
-        );
-      `,
-      )
-      .run({
-        id: randomUUID(),
-        plan_id: input.planId,
-        run_id: input.runId ?? null,
-        status: input.status,
-        entry_text: truncated,
-        created_at: nowIso(),
-      });
+    this.planRepo.appendPlanProgressEntry(input);
   }
 
   listPlanProgressEntries(
@@ -1098,30 +760,7 @@ export class AppDatabase {
     entryText: string;
     createdAt: string;
   }[] {
-    const boundedLimit = Math.min(Math.max(limit, 1), 100);
-    const rows = this.db
-      .prepare(
-        `
-        SELECT id, plan_id, run_id, status, entry_text, created_at
-        FROM plan_progress_entries
-        WHERE plan_id = @plan_id
-        ORDER BY created_at DESC
-        LIMIT @limit;
-      `,
-      )
-      .all({
-        plan_id: planId,
-        limit: boundedLimit,
-      }) as PlanProgressEntryRow[];
-
-    return rows.map((row) => ({
-      id: row.id,
-      planId: row.plan_id,
-      runId: row.run_id,
-      status: row.status,
-      entryText: row.entry_text,
-      createdAt: row.created_at,
-    }));
+    return this.planRepo.listPlanProgressEntries(planId, limit);
   }
 
   createTaskFollowupProposal(input: {
@@ -1139,243 +778,33 @@ export class AppDatabase {
     acceptanceCriteria: string[];
     technicalNotes: string;
   }): boolean {
-    const now = nowIso();
-    const result = this.db
-      .prepare(
-        `
-        INSERT INTO task_followup_proposals (
-          id, plan_id, source_run_id, source_task_id, finding_key,
-          title, description, severity, rule, location, message, recommended_action,
-          acceptance_criteria_json, technical_notes,
-          status, approved_task_id, created_at, updated_at
-        ) VALUES (
-          @id, @plan_id, @source_run_id, @source_task_id, @finding_key,
-          @title, @description, @severity, @rule, @location, @message, @recommended_action,
-          @acceptance_criteria_json, @technical_notes,
-          'proposed', NULL, @created_at, @updated_at
-        )
-        ON CONFLICT(plan_id, finding_key) DO NOTHING;
-      `,
-      )
-      .run({
-        id: randomUUID(),
-        plan_id: input.planId,
-        source_run_id: input.sourceRunId ?? null,
-        source_task_id: input.sourceTaskId,
-        finding_key: input.findingKey,
-        title: input.title,
-        description: input.description,
-        severity: input.severity,
-        rule: input.rule,
-        location: input.location,
-        message: input.message,
-        recommended_action: input.recommendedAction,
-        acceptance_criteria_json: JSON.stringify(input.acceptanceCriteria),
-        technical_notes: input.technicalNotes,
-        created_at: now,
-        updated_at: now,
-      });
-
-    return result.changes > 0;
+    return this.taskRepo.createTaskFollowupProposal(input);
   }
 
   listTaskFollowupProposals(
     planId: string,
     statuses?: TaskFollowupProposalStatus[],
   ): TaskFollowupProposal[] {
-    const rows = this.db
-      .prepare(
-        `
-        SELECT
-          id, plan_id, source_run_id, source_task_id, finding_key,
-          title, description, severity, rule, location, message, recommended_action,
-          acceptance_criteria_json, technical_notes,
-          status, approved_task_id, created_at, updated_at
-        FROM task_followup_proposals
-        WHERE plan_id = @plan_id
-        ORDER BY created_at DESC;
-      `,
-      )
-      .all({
-        plan_id: planId,
-      }) as TaskFollowupProposalRow[];
-
-    const filteredRows =
-      statuses && statuses.length > 0 ? rows.filter((row) => statuses.includes(row.status)) : rows;
-
-    return filteredRows.map((row) => this.mapTaskFollowupProposalRow(row));
+    return this.taskRepo.listTaskFollowupProposals(planId, statuses);
   }
 
   approveTaskFollowupProposal(input: {
     planId: string;
     proposalId: string;
   }): { taskId: string } | null {
-    const transaction = this.db.transaction(() => {
-      const proposal = this.db
-        .prepare(
-          `
-          SELECT
-            id, plan_id, source_run_id, source_task_id, finding_key,
-            title, description, severity, rule, location, message, recommended_action,
-            acceptance_criteria_json, technical_notes,
-            status, approved_task_id, created_at, updated_at
-          FROM task_followup_proposals
-          WHERE id = @id AND plan_id = @plan_id
-          LIMIT 1;
-        `,
-        )
-        .get({
-          id: input.proposalId,
-          plan_id: input.planId,
-        }) as TaskFollowupProposalRow | undefined;
-
-      if (!proposal || proposal.status !== "proposed") {
-        return null;
-      }
-
-      const maxOrdinalRow = this.db
-        .prepare("SELECT MAX(ordinal) AS max_ordinal FROM tasks WHERE plan_id = @plan_id;")
-        .get({
-          plan_id: input.planId,
-        }) as { max_ordinal: number | null } | undefined;
-      const nextOrdinal = (maxOrdinalRow?.max_ordinal ?? 0) + 1;
-
-      const taskId = randomUUID();
-      const now = nowIso();
-      const sourceTaskExists = this.db
-        .prepare(
-          `
-          SELECT 1
-          FROM tasks
-          WHERE id = @task_id
-            AND plan_id = @plan_id
-          LIMIT 1;
-        `,
-        )
-        .get({
-          task_id: proposal.source_task_id,
-          plan_id: input.planId,
-        }) as { 1: number } | undefined;
-      const dependencies = sourceTaskExists ? [proposal.source_task_id] : [];
-
-      this.db
-        .prepare(
-          `
-          INSERT INTO tasks (
-            id, plan_id, ordinal, title, description,
-            dependencies_json, acceptance_criteria_json, technical_notes,
-            status, created_at, updated_at, completed_at
-          ) VALUES (
-            @id, @plan_id, @ordinal, @title, @description,
-            @dependencies_json, @acceptance_criteria_json, @technical_notes,
-            'pending', @created_at, @updated_at, NULL
-          );
-        `,
-        )
-        .run({
-          id: taskId,
-          plan_id: input.planId,
-          ordinal: nextOrdinal,
-          title: proposal.title,
-          description: proposal.description,
-          dependencies_json: JSON.stringify(dependencies),
-          acceptance_criteria_json: proposal.acceptance_criteria_json,
-          technical_notes: `${proposal.technical_notes}\n\nApproved from proposal ${proposal.id}.`,
-          created_at: now,
-          updated_at: now,
-        });
-
-      const updateResult = this.db
-        .prepare(
-          `
-          UPDATE task_followup_proposals
-          SET status = 'approved',
-              approved_task_id = @approved_task_id,
-              updated_at = @updated_at
-          WHERE id = @id
-            AND plan_id = @plan_id
-            AND status = 'proposed';
-        `,
-        )
-        .run({
-          id: input.proposalId,
-          plan_id: input.planId,
-          approved_task_id: taskId,
-          updated_at: now,
-        });
-
-      if (updateResult.changes === 0) {
-        throw new Error(`Proposal approval race detected for proposal ${input.proposalId}.`);
-      }
-
-      this.db.prepare("UPDATE plans SET updated_at = @updated_at WHERE id = @plan_id;").run({
-        plan_id: input.planId,
-        updated_at: now,
-      });
-
-      return { taskId };
-    });
-
-    return transaction();
+    return this.taskRepo.approveTaskFollowupProposal(input);
   }
 
   dismissTaskFollowupProposal(input: { planId: string; proposalId: string }): boolean {
-    const result = this.db
-      .prepare(
-        `
-        UPDATE task_followup_proposals
-        SET status = 'dismissed',
-            updated_at = @updated_at
-        WHERE id = @id
-          AND plan_id = @plan_id
-          AND status = 'proposed';
-      `,
-      )
-      .run({
-        id: input.proposalId,
-        plan_id: input.planId,
-        updated_at: nowIso(),
-      });
-
-    return result.changes > 0;
+    return this.taskRepo.dismissTaskFollowupProposal(input);
   }
 
   countRunnableTasks(planId: string): number {
-    const tasks = this.getTasks(planId);
-    const statusById = new Map(tasks.map((task) => [task.id, task.status]));
-
-    return tasks.filter((task) => {
-      if (task.status !== "pending") {
-        return false;
-      }
-
-      return task.dependencies.every((dependencyId) => {
-        const depStatus = statusById.get(dependencyId);
-        return depStatus === "completed" || depStatus === "skipped";
-      });
-    }).length;
+    return this.taskRepo.countRunnableTasks(planId);
   }
 
   findNextRunnableTask(planId: string): RalphTask | null {
-    const tasks = this.getTasks(planId);
-    const statusById = new Map(tasks.map((task) => [task.id, task.status]));
-
-    for (const task of tasks) {
-      if (task.status !== "pending") {
-        continue;
-      }
-
-      const hasOpenDependencies = task.dependencies.some((dependencyId) => {
-        const depStatus = statusById.get(dependencyId);
-        return depStatus !== "completed" && depStatus !== "skipped";
-      });
-
-      if (!hasOpenDependencies) {
-        return task;
-      }
-    }
-
-    return null;
+    return this.taskRepo.findNextRunnableTask(planId);
   }
 
   /**
@@ -1415,33 +844,7 @@ export class AppDatabase {
    * Returns minimal plan records (no tasks, runs, or PRD body).
    */
   listPlans(filter?: ListPlansFilter): PlanListItem[] {
-    const conditions: string[] = [];
-    const params: Record<string, unknown> = {};
-
-    if (filter?.archived === true) {
-      conditions.push("archived_at IS NOT NULL");
-    } else if (filter?.archived === false) {
-      conditions.push("archived_at IS NULL");
-    }
-
-    if (filter?.search) {
-      conditions.push("(summary LIKE @search OR project_path LIKE @search)");
-      params.search = `%${filter.search}%`;
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const sql = `SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at FROM plans ${where} ORDER BY created_at DESC;`;
-
-    const rows = this.db.prepare(sql).all(params) as PlanListRow[];
-
-    return rows.map((row) => ({
-      id: row.id,
-      summary: row.summary,
-      status: row.status,
-      projectPath: row.project_path,
-      createdAt: row.created_at,
-      archivedAt: row.archived_at,
-    }));
+    return this.planRepo.listPlans(filter);
   }
 
   /**
@@ -1449,25 +852,21 @@ export class AppDatabase {
    * and todo_snapshots. Relies on ON DELETE CASCADE defined on foreign keys.
    */
   deletePlan(planId: string): void {
-    this.db.prepare("DELETE FROM plans WHERE id = ?;").run(planId);
+    this.planRepo.deletePlan(planId);
   }
 
   /**
    * Soft-archive a plan by setting archived_at to the current ISO timestamp.
    */
   archivePlan(planId: string): void {
-    this.db
-      .prepare("UPDATE plans SET archived_at = ?, updated_at = ? WHERE id = ?;")
-      .run(nowIso(), nowIso(), planId);
+    this.planRepo.archivePlan(planId);
   }
 
   /**
    * Remove the archived status from a plan by clearing archived_at.
    */
   unarchivePlan(planId: string): void {
-    this.db
-      .prepare("UPDATE plans SET archived_at = NULL, updated_at = ? WHERE id = ?;")
-      .run(nowIso(), planId);
+    this.planRepo.unarchivePlan(planId);
   }
 
   /**
