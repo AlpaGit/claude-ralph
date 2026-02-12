@@ -1,0 +1,13 @@
+Ralph Desktop Orchestrator - Progress Tracker
+===============================================
+
+p1-02: Implement DB migration system            [DONE]
+  - MigrationRunner class (src/main/runtime/migrations/migration-runner.ts)
+  - Creates schema_migrations table to track applied migrations
+  - Scans numbered .sql files from disk, sorts by numeric prefix
+  - Applies unapplied migrations in order within transactions
+  - 001_initial.sql (resources/migrations/001_initial.sql)
+  - Current schema with IF NOT EXISTS guards for existing DBs
+  - AppDatabase constructor updated to accept migrationsDir param
+  - Replaces inline CREATE TABLE with MigrationRunner.run()
+  - index.ts updated to resolve migrationsDir (dev vs packaged)
