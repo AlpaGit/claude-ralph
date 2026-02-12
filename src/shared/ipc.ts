@@ -23,7 +23,8 @@ export const IPC_CHANNELS = {
   updateModelConfig: "config:updateModel",
   discoverySessions: "discovery:sessions",
   discoveryResume: "discovery:resume",
-  discoveryAbandon: "discovery:abandon"
+  discoveryAbandon: "discovery:abandon",
+  discoveryCancel: "discovery:cancel"
 } as const;
 
 export const listPlansInputSchema = z.object({
@@ -132,5 +133,9 @@ export const discoveryResumeInputSchema = z.object({
 });
 
 export const discoveryAbandonInputSchema = z.object({
+  sessionId: z.string().uuid()
+});
+
+export const discoveryCancelInputSchema = z.object({
   sessionId: z.string().uuid()
 });

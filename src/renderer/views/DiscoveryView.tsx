@@ -105,6 +105,7 @@ export function DiscoveryView(): JSX.Element {
   const checkActiveSessions = useDiscoveryStore((s) => s.checkActiveSessions);
   const resumeSession = useDiscoveryStore((s) => s.resumeSession);
   const abandonSession = useDiscoveryStore((s) => s.abandonSession);
+  const cancelDiscovery = useDiscoveryStore((s) => s.cancelDiscovery);
   const reset = useDiscoveryStore((s) => s.reset);
 
   // ── Resume dialog state ────────────────────────────
@@ -206,6 +207,10 @@ export function DiscoveryView(): JSX.Element {
   }, [loading, lastDiscoveryDurationSec, events.length, secondsSinceLastEvent]);
 
   // ── Handlers ─────────────────────────────────────────
+
+  const handleCancelDiscovery = (): void => {
+    void cancelDiscovery();
+  };
 
   const handleStartDiscovery = (): void => {
     // projectPath is empty for now; discovery can function without it
@@ -347,19 +352,30 @@ export function DiscoveryView(): JSX.Element {
           <div className={styles.feedbackCard}>
             <div className={styles.feedbackHeader}>
               <h3>AI Feedback (Live)</h3>
-              <div className={styles.thinkingIndicator}>
-                <span className={styles.thinkingPulse} />
-                <span>
-                  {loading
-                    ? `Thinking for ${formatDuration(thinkingElapsedSec)}`
-                    : "Idle"}
-                </span>
-                {loading ? (
-                  <span className={styles.thinkingDots} aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
+              <div className={styles.feedbackHeaderActions}>
+                <div className={styles.thinkingIndicator}>
+                  <span className={styles.thinkingPulse} />
+                  <span>
+                    {loading
+                      ? `Thinking for ${formatDuration(thinkingElapsedSec)}`
+                      : "Idle"}
                   </span>
+                  {loading ? (
+                    <span className={styles.thinkingDots} aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                  ) : null}
+                </div>
+                {loading ? (
+                  <UButton
+                    variant="danger"
+                    size="sm"
+                    onClick={handleCancelDiscovery}
+                  >
+                    Cancel Discovery
+                  </UButton>
                 ) : null}
               </div>
             </div>

@@ -78,6 +78,8 @@ interface DiscoveryState {
   resumeSession: (sessionId: string) => Promise<void>;
   /** Abandon (discard) a persisted session by ID. */
   abandonSession: (sessionId: string) => Promise<void>;
+  /** Cancel an in-progress discovery session. */
+  cancelDiscovery: () => Promise<void>;
   /** Reset the store to its initial state. */
   reset: () => void;
 }
@@ -323,6 +325,33 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
     } catch {
       // Non-critical: UI can proceed even if abandon fails
     }
+  },
+
+  // ── Cancel discovery ────────────────────────────────
+
+  cancelDiscovery: async (): Promise<void> => {
+    const { interview } = get();
+    if (!interview) return;
+
+    try {
+      const api = getApi();
+      await api.cancelDiscovery({ sessionId: interview.sessionId });
+    } catch {
+      // Non-critical: the backend may have already completed or cleaned up
+    }
+
+    // Unsubscribe from discovery events
+    if (_discoveryUnsubscribe) {
+      _discoveryUnsubscribe();
+      _discoveryUnsubscribe = null;
+    }
+
+    // Reset loading state but preserve the interview data if available
+    set({
+      loading: false,
+      thinkingStartedAtMs: null,
+      error: "Discovery cancelled.",
+    });
   },
 
   // ── Reset ───────────────────────────────────────────

@@ -4,6 +4,8 @@ import type {
   AbandonDiscoveryInput,
   AbortQueueInput,
   ArchivePlanInput,
+  CancelDiscoveryInput,
+  CancelDiscoveryResponse,
   CancelRunInput,
   CancelRunResponse,
   ContinueDiscoveryInput,
@@ -119,6 +121,10 @@ const api: RalphApi = {
 
   abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.discoveryAbandon, input);
+  },
+
+  cancelDiscovery(input: CancelDiscoveryInput): Promise<CancelDiscoveryResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.discoveryCancel, input);
   },
 
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void {

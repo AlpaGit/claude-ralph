@@ -7,6 +7,7 @@ import {
   createPlanInputSchema,
   deletePlanInputSchema,
   discoveryAbandonInputSchema,
+  discoveryCancelInputSchema,
   discoveryResumeInputSchema,
   getWizardGuidanceInputSchema,
   getPlanInputSchema,
@@ -214,6 +215,15 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = discoveryAbandonInputSchema.parse(rawInput);
       taskRunner.abandonDiscoverySession(input.sessionId);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.discoveryCancel, async (_event, rawInput) => {
+    try {
+      const input = discoveryCancelInputSchema.parse(rawInput);
+      return taskRunner.cancelDiscovery(input);
     } catch (error) {
       throw new Error(formatIpcError(error));
     }

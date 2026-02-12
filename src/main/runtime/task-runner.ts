@@ -4,6 +4,8 @@ import { IPC_CHANNELS } from "@shared/ipc";
 import type {
   AbortQueueInput,
   AgentRole,
+  CancelDiscoveryInput,
+  CancelDiscoveryResponse,
   CancelRunInput,
   CancelRunResponse,
   ContinueDiscoveryInput,
@@ -82,6 +84,8 @@ export class TaskRunner {
   private readonly runningPlanQueues = new Set<string>();
   private readonly abortedPlanQueues = new Set<string>();
   private readonly discoverySessions = new Map<string, DiscoverySession>();
+  /** Set of discovery session IDs that have been cancelled. Checked between specialist completions and before synthesis. */
+  private readonly cancelledDiscoveries = new Set<string>();
   private readonly agentService: RalphAgentService;
 
   constructor(
@@ -182,6 +186,9 @@ export class TaskRunner {
         }
       });
 
+      // Check if cancelled while the discovery was running
+      this.checkDiscoveryCancelled(sessionId);
+
       session.round = 1;
 
       const fullState: DiscoveryInterviewState = {
@@ -209,12 +216,16 @@ export class TaskRunner {
       return fullState;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Discovery start failed.";
-      this.emitDiscoveryEvent({
-        sessionId,
-        type: "failed",
-        level: "error",
-        message
-      });
+      // Only emit failure event if not already emitted by cancelDiscovery
+      if (!this.cancelledDiscoveries.has(sessionId)) {
+        this.emitDiscoveryEvent({
+          sessionId,
+          type: "failed",
+          level: "error",
+          message
+        });
+      }
+      this.cancelledDiscoveries.delete(sessionId);
       this.discoverySessions.delete(sessionId);
       throw error;
     }
@@ -261,6 +272,9 @@ export class TaskRunner {
         }
       });
 
+      // Check if cancelled while the discovery was running
+      this.checkDiscoveryCancelled(session.id);
+
       session.round += 1;
 
       const fullState: DiscoveryInterviewState = {
@@ -287,12 +301,16 @@ export class TaskRunner {
       return fullState;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Discovery continue failed.";
-      this.emitDiscoveryEvent({
-        sessionId: session.id,
-        type: "failed",
-        level: "error",
-        message
-      });
+      // Only emit failure event if not already emitted by cancelDiscovery
+      if (!this.cancelledDiscoveries.has(session.id)) {
+        this.emitDiscoveryEvent({
+          sessionId: session.id,
+          type: "failed",
+          level: "error",
+          message
+        });
+      }
+      this.cancelledDiscoveries.delete(session.id);
       throw error;
     }
   }
@@ -346,6 +364,44 @@ export class TaskRunner {
   abandonDiscoverySession(sessionId: string): void {
     this.discoverySessions.delete(sessionId);
     this.db.abandonDiscoverySession(sessionId);
+  }
+
+  /**
+   * Cancel an in-progress discovery session.
+   * Sets a cancelled flag that is checked between specialist completions
+   * and before synthesis. If a specialist query is mid-flight it may
+   * complete but its result will be discarded.
+   */
+  cancelDiscovery(input: CancelDiscoveryInput): CancelDiscoveryResponse {
+    const session = this.discoverySessions.get(input.sessionId);
+    if (!session) {
+      // Session might not exist yet (race) or already completed
+      return { ok: false };
+    }
+
+    this.cancelledDiscoveries.add(input.sessionId);
+
+    this.emitDiscoveryEvent({
+      sessionId: input.sessionId,
+      type: "failed",
+      level: "info",
+      message: "Discovery cancelled by user."
+    });
+
+    return { ok: true };
+  }
+
+  /**
+   * Check whether a discovery session has been cancelled.
+   * If so, clean up the in-memory session and throw a cancellation error
+   * to abort the current discovery flow.
+   */
+  private checkDiscoveryCancelled(sessionId: string): void {
+    if (this.cancelledDiscoveries.has(sessionId)) {
+      this.cancelledDiscoveries.delete(sessionId);
+      this.discoverySessions.delete(sessionId);
+      throw new Error("Discovery cancelled by user.");
+    }
   }
 
   async getWizardGuidance(input: GetWizardGuidanceInput) {

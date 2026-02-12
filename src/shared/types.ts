@@ -359,6 +359,16 @@ export interface AbandonDiscoveryInput {
   sessionId: string;
 }
 
+/** Input for cancelling an in-progress discovery session. */
+export interface CancelDiscoveryInput {
+  sessionId: string;
+}
+
+/** Response from cancelling an in-progress discovery session. */
+export interface CancelDiscoveryResponse {
+  ok: boolean;
+}
+
 export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
@@ -381,6 +391,7 @@ export interface RalphApi {
   getDiscoverySessions(): Promise<DiscoverySessionSummary[]>;
   resumeDiscoverySession(input: ResumeDiscoveryInput): Promise<DiscoveryInterviewState>;
   abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void>;
+  cancelDiscovery(input: CancelDiscoveryInput): Promise<CancelDiscoveryResponse>;
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void;
   onRunEvent(handler: (event: RunEvent) => void): () => void;
 }
