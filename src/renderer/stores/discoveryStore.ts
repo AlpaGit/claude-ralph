@@ -14,6 +14,22 @@ import { toastService } from "../services/toastService";
 
 export type AnswerMap = Record<string, string>;
 
+/* ── History snapshot for back-navigation ──────────────── */
+
+/** A snapshot of a completed discovery round, used for back-navigation. */
+export interface DiscoveryHistoryEntry {
+  /** The round number (1-based) for this snapshot. */
+  round: number;
+  /** The interview state as it was when this round was active. */
+  interview: DiscoveryInterviewState;
+  /** The answer map as it was during this round. */
+  answerMap: AnswerMap;
+  /** The readiness score at this point. */
+  readinessScore: number;
+  /** ISO timestamp when this round completed. */
+  completedAtIso: string;
+}
+
 /* ── State interface ───────────────────────────────────── */
 
 interface DiscoveryState {
@@ -67,6 +83,15 @@ interface DiscoveryState {
   /** Whether the active-sessions check is in progress. */
   checkingSessions: boolean;
 
+  // ── History / back-navigation ──────────────────────────
+  /** Stack of completed round snapshots for back-navigation. */
+  history: DiscoveryHistoryEntry[];
+  /**
+   * When non-null, the user is viewing a past round snapshot.
+   * Index into the `history` array. null means viewing the current (latest) round.
+   */
+  viewingHistoryIndex: number | null;
+
   // ── Actions ──────────────────────────────────────────
 
   /** Update the seed sentence input. */
@@ -98,6 +123,15 @@ interface DiscoveryState {
   abandonSession: (sessionId: string) => Promise<void>;
   /** Cancel an in-progress discovery session. */
   cancelDiscovery: () => Promise<void>;
+  /**
+   * Navigate to a past round snapshot by its index in the history array.
+   * Sets viewingHistoryIndex so the UI renders the historical state.
+   */
+  navigateToRound: (historyIndex: number) => void;
+  /**
+   * Return to the current (latest) round, clearing the history view.
+   */
+  returnToCurrent: () => void;
   /** Reset the store to its initial state. */
   reset: () => void;
 }
@@ -171,15 +205,28 @@ function executeContinueCall(
     .then((nextState) => {
       const nextMap = buildNextAnswerMap(nextState, answerMap);
 
-      set((state) => ({
-        interview: nextState,
-        answerMap: nextMap,
-        submittedAnswers: [...state.submittedAnswers, ...answerPayload],
-        currentBatchIndex: 0,
-        skippedQuestions: [],
-        lastReadyAtIso: new Date().toISOString(),
-        copyNotice: successNotice,
-      }));
+      set((state) => {
+        // Push a snapshot of the current round into history before advancing.
+        const snapshot: DiscoveryHistoryEntry = {
+          round: state.interview!.round,
+          interview: state.interview!,
+          answerMap: { ...state.answerMap },
+          readinessScore: state.interview!.readinessScore,
+          completedAtIso: new Date().toISOString(),
+        };
+
+        return {
+          interview: nextState,
+          answerMap: nextMap,
+          submittedAnswers: [...state.submittedAnswers, ...answerPayload],
+          currentBatchIndex: 0,
+          skippedQuestions: [],
+          lastReadyAtIso: new Date().toISOString(),
+          copyNotice: successNotice,
+          history: [...state.history, snapshot],
+          viewingHistoryIndex: null,
+        };
+      });
       toastService.success(successToast);
     })
     .catch((caught) => {
@@ -245,6 +292,8 @@ const initialState = {
   skippedQuestions: [] as string[],
   activeSessions: [] as DiscoverySessionSummary[],
   checkingSessions: false,
+  history: [] as DiscoveryHistoryEntry[],
+  viewingHistoryIndex: null as number | null,
 };
 
 /* ── Store ─────────────────────────────────────────────── */
@@ -330,6 +379,8 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       thinkingStartedAtMs: startedAt,
       lastDiscoveryDurationSec: null,
       lastEventAtMs: null,
+      history: [],
+      viewingHistoryIndex: null,
     });
 
     try {
@@ -446,6 +497,9 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
         activeSessions: [],
         lastReadyAtIso: new Date().toISOString(),
         copyNotice: `Resumed discovery session (round ${state.round}).`,
+        // History is not available for resumed sessions — start fresh from current round
+        history: [],
+        viewingHistoryIndex: null,
       });
     } catch (caught) {
       const ipcError = parseIpcError(caught);
@@ -493,6 +547,18 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       thinkingStartedAtMs: null,
       error: "Discovery cancelled.",
     });
+  },
+
+  // ── History navigation ──────────────────────────────
+
+  navigateToRound: (historyIndex: number): void => {
+    const { history } = get();
+    if (historyIndex < 0 || historyIndex >= history.length) return;
+    set({ viewingHistoryIndex: historyIndex });
+  },
+
+  returnToCurrent: (): void => {
+    set({ viewingHistoryIndex: null });
   },
 
   // ── Reset ───────────────────────────────────────────

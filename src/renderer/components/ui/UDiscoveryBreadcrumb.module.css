@@ -1,0 +1,157 @@
+/*
+ * UDiscoveryBreadcrumb CSS Module
+ * Horizontal breadcrumb trail showing discovery round progression.
+ * Brutalist style: clean borders, mono font, token-based colors.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Root layout ──────────────────────────────────────── */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ── Breadcrumb trail ─────────────────────────────────── */
+
+.trail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.crumbGroup {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── Individual crumb ─────────────────────────────────── */
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border: 1.5px solid var(--color-border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-muted);
+  cursor: default;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.crumbClickable {
+  cursor: pointer;
+}
+
+.crumbClickable:hover {
+  border-color: var(--color-accent-2);
+  color: var(--color-accent-2);
+  background: var(--color-wizard-active-bg);
+}
+
+.crumbClickable:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: 2px;
+}
+
+/* ── Active crumb (the one being viewed) ──────────────── */
+
+.crumbActive {
+  border-color: var(--color-accent-2);
+  background: var(--color-wizard-active-bg);
+  color: var(--color-thinking-text);
+  font-weight: 600;
+}
+
+/* ── Current round crumb ──────────────────────────────── */
+
+.crumbCurrent {
+  border-style: solid;
+}
+
+/* ── Crumb inner elements ─────────────────────────────── */
+
+.crumbRound {
+  font-weight: 600;
+}
+
+.crumbScore {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.currentLabel {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-accent-2);
+  font-weight: 600;
+}
+
+/* ── Separator between crumbs ─────────────────────────── */
+
+.separator {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.25rem;
+  color: var(--color-border-soft);
+  font-size: 0.7rem;
+  user-select: none;
+}
+
+.separator::after {
+  content: "\203A"; /* single right-pointing angle quotation mark: › */
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+/* ── Past-round viewing banner ────────────────────────── */
+
+.pastBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border: 1.5px dashed var(--color-warning);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-warm);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.pastBannerText {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+.returnButton {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--color-accent-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-accent-2);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.returnButton:hover {
+  background: var(--color-wizard-active-bg);
+}
+
+.returnButton:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: 2px;
+}

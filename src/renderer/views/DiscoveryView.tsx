@@ -11,6 +11,7 @@ import { UStatusPill } from "../components/UStatusPill/UStatusPill";
 import { USkeleton } from "../components/USkeleton/USkeleton";
 import { UQuestionBatch } from "../components/ui/UQuestionBatch";
 import { UProgressHeader } from "../components/ui/UProgressHeader";
+import { UDiscoveryBreadcrumb } from "../components/ui/UDiscoveryBreadcrumb";
 import { toastService } from "../services/toastService";
 import styles from "./DiscoveryView.module.css";
 
@@ -107,6 +108,10 @@ export function DiscoveryView(): JSX.Element {
   const activeSessions = useDiscoveryStore((s) => s.activeSessions);
   const checkingSessions = useDiscoveryStore((s) => s.checkingSessions);
 
+  // ── History / back-navigation slices ───────────────
+  const history = useDiscoveryStore((s) => s.history);
+  const viewingHistoryIndex = useDiscoveryStore((s) => s.viewingHistoryIndex);
+
   // ── Store actions ────────────────────────────────────
   const setSeedSentence = useDiscoveryStore((s) => s.setSeedSentence);
   const setProjectPath = useDiscoveryStore((s) => s.setProjectPath);
@@ -120,6 +125,8 @@ export function DiscoveryView(): JSX.Element {
   const resumeSession = useDiscoveryStore((s) => s.resumeSession);
   const abandonSession = useDiscoveryStore((s) => s.abandonSession);
   const cancelDiscovery = useDiscoveryStore((s) => s.cancelDiscovery);
+  const navigateToRound = useDiscoveryStore((s) => s.navigateToRound);
+  const returnToCurrent = useDiscoveryStore((s) => s.returnToCurrent);
   const reset = useDiscoveryStore((s) => s.reset);
 
   // ── Resume dialog state ────────────────────────────
@@ -171,14 +178,39 @@ export function DiscoveryView(): JSX.Element {
 
   // ── Derived / memoized values ────────────────────────
 
+  /** Whether the user is viewing a past round snapshot. */
+  const isViewingPast = viewingHistoryIndex !== null;
+
+  /**
+   * The interview state to display. When viewing a past round, this is the
+   * snapshot from history; otherwise it's the live/current interview state.
+   */
+  const displayedInterview = useMemo(() => {
+    if (isViewingPast && viewingHistoryIndex < history.length) {
+      return history[viewingHistoryIndex].interview;
+    }
+    return interview;
+  }, [isViewingPast, viewingHistoryIndex, history, interview]);
+
+  /**
+   * The answer map to display. When viewing a past round, answers are from the
+   * historical snapshot; otherwise from the live answer map.
+   */
+  const displayedAnswerMap = useMemo(() => {
+    if (isViewingPast && viewingHistoryIndex < history.length) {
+      return history[viewingHistoryIndex].answerMap;
+    }
+    return answerMap;
+  }, [isViewingPast, viewingHistoryIndex, history, answerMap]);
+
   const currentRoundAnswered = useMemo(() => {
-    if (!interview) return 0;
-    return interview.questions.filter(
+    if (!displayedInterview) return 0;
+    return displayedInterview.questions.filter(
       (q) =>
-        (answerMap[q.id] ?? "").trim().length > 0 &&
+        (displayedAnswerMap[q.id] ?? "").trim().length > 0 &&
         !skippedQuestions.includes(q.id)
     ).length;
-  }, [answerMap, interview, skippedQuestions]);
+  }, [displayedAnswerMap, displayedInterview, skippedQuestions]);
 
   const liveFeedbackText = useMemo(() => {
     if (events.length === 0) return "Waiting for AI feedback...";
@@ -557,8 +589,8 @@ export function DiscoveryView(): JSX.Element {
           </div>
         ) : null}
 
-        {/* ── Discovery output ready card ─────────────── */}
-        {!loading && interview ? (
+        {/* ── Discovery output ready card (only on current round) ── */}
+        {!loading && interview && !isViewingPast ? (
           <div className={styles.feedbackCard}>
             <div className={styles.outputHeader}>
               <h3>Discovery Output Ready</h3>
@@ -588,35 +620,47 @@ export function DiscoveryView(): JSX.Element {
         ) : null}
 
         {/* ── Interview state panels ──────────────────── */}
-        {interview ? (
+        {displayedInterview ? (
           <>
-            {/* Progress header */}
+            {/* Progress header (always shows the displayed round) */}
             <UProgressHeader
-              batchNumber={interview.round}
+              batchNumber={displayedInterview.round}
               questionsAnswered={currentRoundAnswered}
-              totalQuestions={interview.questions.length}
-              readinessScore={interview.readinessScore}
+              totalQuestions={displayedInterview.questions.length}
+              readinessScore={displayedInterview.readinessScore}
             />
+
+            {/* Discovery round breadcrumb (back-navigation) */}
+            {interview ? (
+              <UDiscoveryBreadcrumb
+                history={history}
+                currentRound={interview.round}
+                currentReadinessScore={interview.readinessScore}
+                viewingHistoryIndex={viewingHistoryIndex}
+                onNavigateToRound={navigateToRound}
+                onReturnToCurrent={returnToCurrent}
+              />
+            ) : null}
 
             {/* Status card */}
             <div className={styles.statusCard}>
               <div className={styles.statusHeader}>
                 <h3>Discovery Status</h3>
                 <UStatusPill
-                  status={readinessStatus(interview.readinessScore)}
-                  label={readinessBadge(interview.readinessScore)}
+                  status={readinessStatus(displayedInterview.readinessScore)}
+                  label={readinessBadge(displayedInterview.readinessScore)}
                 />
               </div>
               <div className={styles.metaRow}>
-                <span>Round: {interview.round}</span>
-                <span>Readiness: {interview.readinessScore}%</span>
+                <span>Round: {displayedInterview.round}</span>
+                <span>Readiness: {displayedInterview.readinessScore}%</span>
                 <span>
                   Questions answered this round: {currentRoundAnswered}/
-                  {interview.questions.length}
+                  {displayedInterview.questions.length}
                 </span>
               </div>
               <p className={styles.directionText}>
-                <strong>Direction:</strong> {interview.directionSummary}
+                <strong>Direction:</strong> {displayedInterview.directionSummary}
               </p>
             </div>
 
@@ -624,43 +668,43 @@ export function DiscoveryView(): JSX.Element {
             <div className={styles.contextCard}>
               <h3>Inferred Context</h3>
               <p className={styles.contextField}>
-                <strong>Stack:</strong> {interview.inferredContext.stack}
+                <strong>Stack:</strong> {displayedInterview.inferredContext.stack}
               </p>
               <p className={styles.contextField}>
                 <strong>Documentation:</strong>{" "}
-                {interview.inferredContext.documentation}
+                {displayedInterview.inferredContext.documentation}
               </p>
               <p className={styles.contextField}>
-                <strong>Scope:</strong> {interview.inferredContext.scope}
+                <strong>Scope:</strong> {displayedInterview.inferredContext.scope}
               </p>
 
-              {interview.inferredContext.painPoints.length > 0 ? (
+              {displayedInterview.inferredContext.painPoints.length > 0 ? (
                 <>
                   <h4>Likely Pain Points</h4>
                   <ul className={styles.contextList}>
-                    {interview.inferredContext.painPoints.map((point) => (
+                    {displayedInterview.inferredContext.painPoints.map((point) => (
                       <li key={point}>{point}</li>
                     ))}
                   </ul>
                 </>
               ) : null}
 
-              {interview.inferredContext.constraints.length > 0 ? (
+              {displayedInterview.inferredContext.constraints.length > 0 ? (
                 <>
                   <h4>Likely Constraints</h4>
                   <ul className={styles.contextList}>
-                    {interview.inferredContext.constraints.map((constraint) => (
+                    {displayedInterview.inferredContext.constraints.map((constraint) => (
                       <li key={constraint}>{constraint}</li>
                     ))}
                   </ul>
                 </>
               ) : null}
 
-              {interview.inferredContext.signals.length > 0 ? (
+              {displayedInterview.inferredContext.signals.length > 0 ? (
                 <>
                   <h4>Signals</h4>
                   <ul className={styles.contextList}>
-                    {interview.inferredContext.signals.map((signal) => (
+                    {displayedInterview.inferredContext.signals.map((signal) => (
                       <li key={signal}>{signal}</li>
                     ))}
                   </ul>
@@ -668,43 +712,46 @@ export function DiscoveryView(): JSX.Element {
               ) : null}
             </div>
 
-            {/* Batched question cards */}
+            {/* Batched question cards — read-only when viewing past round */}
             <UQuestionBatch
-              questions={interview.questions}
-              answers={answerMap}
-              skippedQuestions={skippedQuestions}
-              onAnswer={setAnswer}
-              onSkip={skipQuestion}
-              onSubmitBatch={handleSubmitBatch}
-              isSubmitting={loading}
+              questions={displayedInterview.questions}
+              answers={displayedAnswerMap}
+              skippedQuestions={isViewingPast ? [] : skippedQuestions}
+              onAnswer={isViewingPast ? () => {} : setAnswer}
+              onSkip={isViewingPast ? () => {} : skipQuestion}
+              onSubmitBatch={isViewingPast ? () => {} : handleSubmitBatch}
+              isSubmitting={isViewingPast ? false : loading}
+              disabled={isViewingPast}
             />
 
             {/* Missing critical info */}
-            {interview.missingCriticalInfo.length > 0 ? (
+            {displayedInterview.missingCriticalInfo.length > 0 ? (
               <div className={styles.missingCard}>
                 <h3>Missing Critical Info</h3>
                 <ul className={styles.missingList}>
-                  {interview.missingCriticalInfo.map((item) => (
+                  {displayedInterview.missingCriticalInfo.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
 
-            {/* Bottom actions */}
-            <div className={styles.bottomActions}>
-              <UButton variant="primary" onClick={handleUsePlanInput}>
-                Use as Plan Input
-              </UButton>
-              <UButton
-                variant="ghost"
-                onClick={() => void handleCopyPrdInput()}
-              >
-                Copy PRD Input
-              </UButton>
-            </div>
+            {/* Bottom actions — only show for current round */}
+            {!isViewingPast ? (
+              <div className={styles.bottomActions}>
+                <UButton variant="primary" onClick={handleUsePlanInput}>
+                  Use as Plan Input
+                </UButton>
+                <UButton
+                  variant="ghost"
+                  onClick={() => void handleCopyPrdInput()}
+                >
+                  Copy PRD Input
+                </UButton>
+              </div>
+            ) : null}
 
-            {copyNotice ? (
+            {copyNotice && !isViewingPast ? (
               <p className={styles.copyNotice}>{copyNotice}</p>
             ) : null}
 
@@ -714,7 +761,7 @@ export function DiscoveryView(): JSX.Element {
                 Preview Generated PRD Input
               </summary>
               <pre className={styles.prdPreview}>
-                {interview.prdInputDraft}
+                {displayedInterview.prdInputDraft}
               </pre>
             </details>
           </>

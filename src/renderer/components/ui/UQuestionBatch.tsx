@@ -23,6 +23,11 @@ export interface UQuestionBatchProps {
   onSubmitBatch: () => void;
   /** Whether a batch submission is currently in flight. */
   isSubmitting: boolean;
+  /**
+   * When true, the entire batch is read-only (e.g. viewing a past round).
+   * Disables all interaction and hides the submit footer.
+   */
+  disabled?: boolean;
   /** Additional CSS class names appended to the root element. */
   className?: string;
 }
@@ -254,6 +259,7 @@ export function UQuestionBatch({
   onSkip,
   onSubmitBatch,
   isSubmitting,
+  disabled = false,
   className,
 }: UQuestionBatchProps): JSX.Element {
   // Track free-text "Other" inputs per question (local state, not in store)
@@ -305,7 +311,7 @@ export function UQuestionBatch({
           index={index}
           rawAnswer={answers[question.id] ?? ""}
           isSkipped={skippedQuestions.includes(question.id)}
-          isSubmitting={isSubmitting}
+          isSubmitting={isSubmitting || disabled}
           otherText={otherTexts[question.id] ?? ""}
           onAnswer={onAnswer}
           onSkip={onSkip}
@@ -313,21 +319,23 @@ export function UQuestionBatch({
         />
       ))}
 
-      {/* Submit batch footer */}
-      <div className={styles.batchFooter}>
-        <p className={styles.batchHint}>
-          {answeredCount}/{questions.length} answered
-          {skippedCount > 0 ? ` · ${skippedCount} skipped` : ""}
-        </p>
-        <UButton
-          variant="primary"
-          onClick={onSubmitBatch}
-          loading={isSubmitting}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Submitting…" : "Submit Batch"}
-        </UButton>
-      </div>
+      {/* Submit batch footer — hidden when batch is disabled (e.g. viewing past round) */}
+      {!disabled ? (
+        <div className={styles.batchFooter}>
+          <p className={styles.batchHint}>
+            {answeredCount}/{questions.length} answered
+            {skippedCount > 0 ? ` · ${skippedCount} skipped` : ""}
+          </p>
+          <UButton
+            variant="primary"
+            onClick={onSubmitBatch}
+            loading={isSubmitting}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Submitting…" : "Submit Batch"}
+          </UButton>
+        </div>
+      ) : null}
     </div>
   );
 }
