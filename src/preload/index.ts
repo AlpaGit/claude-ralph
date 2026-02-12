@@ -1,16 +1,20 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
+  ArchivePlanInput,
   CancelRunInput,
   CancelRunResponse,
   ContinueDiscoveryInput,
   CreatePlanInput,
   CreatePlanResponse,
+  DeletePlanInput,
   DiscoveryEvent,
   DiscoveryInterviewState,
   GetWizardGuidanceInput,
   InferStackInput,
   InferStackResult,
+  ListPlansInput,
+  PlanListItem,
   RalphApi,
   RalphPlan,
   RunAllInput,
@@ -19,6 +23,7 @@ import type {
   RunTaskInput,
   RunTaskResponse,
   StartDiscoveryInput,
+  UnarchivePlanInput,
   WizardGuidanceResult
 } from "@shared/types";
 
@@ -29,6 +34,22 @@ const api: RalphApi = {
 
   getPlan(planId: string): Promise<RalphPlan | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.getPlan, { planId });
+  },
+
+  listPlans(input: ListPlansInput): Promise<PlanListItem[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.listPlans, input);
+  },
+
+  deletePlan(input: DeletePlanInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.deletePlan, input);
+  },
+
+  archivePlan(input: ArchivePlanInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.archivePlan, input);
+  },
+
+  unarchivePlan(input: UnarchivePlanInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.unarchivePlan, input);
   },
 
   runTask(input: RunTaskInput): Promise<RunTaskResponse> {

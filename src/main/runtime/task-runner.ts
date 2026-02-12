@@ -12,6 +12,8 @@ import type {
   DiscoveryInterviewState,
   GetWizardGuidanceInput,
   InferStackInput,
+  ListPlansFilter,
+  PlanListItem,
   RalphPlan,
   RalphTask,
   RunAllInput,
@@ -72,6 +74,22 @@ export class TaskRunner {
 
   getPlan(planId: string): RalphPlan | null {
     return this.db.getPlan(planId);
+  }
+
+  listPlans(filter?: ListPlansFilter): PlanListItem[] {
+    return this.db.listPlans(filter);
+  }
+
+  deletePlan(planId: string): void {
+    this.db.deletePlan(planId);
+  }
+
+  archivePlan(planId: string): void {
+    this.db.archivePlan(planId);
+  }
+
+  unarchivePlan(planId: string): void {
+    this.db.unarchivePlan(planId);
   }
 
   async startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState> {

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import type {
+  ListPlansFilter,
+  PlanListItem,
   PlanStatus,
   RalphPlan,
   RalphTask,
@@ -38,6 +40,16 @@ interface PlanRow {
   status: PlanStatus;
   created_at: string;
   updated_at: string;
+  archived_at: string | null;
+}
+
+interface PlanListRow {
+  id: string;
+  summary: string;
+  status: PlanStatus;
+  project_path: string;
+  created_at: string;
+  archived_at: string | null;
 }
 
 interface TaskRow {
@@ -257,6 +269,7 @@ export class AppDatabase {
       status: planRow.status,
       createdAt: planRow.created_at,
       updatedAt: planRow.updated_at,
+      archivedAt: planRow.archived_at,
       tasks,
       runs
     };
@@ -473,6 +486,66 @@ export class AppDatabase {
     }
 
     return null;
+  }
+
+  /**
+   * List plans with optional filtering by archive status and search text.
+   * Returns minimal plan records (no tasks, runs, or PRD body).
+   */
+  listPlans(filter?: ListPlansFilter): PlanListItem[] {
+    const conditions: string[] = [];
+    const params: Record<string, unknown> = {};
+
+    if (filter?.archived === true) {
+      conditions.push("archived_at IS NOT NULL");
+    } else if (filter?.archived === false) {
+      conditions.push("archived_at IS NULL");
+    }
+
+    if (filter?.search) {
+      conditions.push("(summary LIKE @search OR project_path LIKE @search)");
+      params.search = `%${filter.search}%`;
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const sql = `SELECT id, summary, status, project_path, created_at, archived_at FROM plans ${where} ORDER BY created_at DESC;`;
+
+    const rows = this.db.prepare(sql).all(params) as PlanListRow[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      summary: row.summary,
+      status: row.status,
+      projectPath: row.project_path,
+      createdAt: row.created_at,
+      archivedAt: row.archived_at
+    }));
+  }
+
+  /**
+   * Permanently delete a plan and all its associated tasks, runs, run_events,
+   * and todo_snapshots. Relies on ON DELETE CASCADE defined on foreign keys.
+   */
+  deletePlan(planId: string): void {
+    this.db.prepare("DELETE FROM plans WHERE id = ?;").run(planId);
+  }
+
+  /**
+   * Soft-archive a plan by setting archived_at to the current ISO timestamp.
+   */
+  archivePlan(planId: string): void {
+    this.db
+      .prepare("UPDATE plans SET archived_at = ?, updated_at = ? WHERE id = ?;")
+      .run(nowIso(), nowIso(), planId);
+  }
+
+  /**
+   * Remove the archived status from a plan by clearing archived_at.
+   */
+  unarchivePlan(planId: string): void {
+    this.db
+      .prepare("UPDATE plans SET archived_at = NULL, updated_at = ? WHERE id = ?;")
+      .run(nowIso(), planId);
   }
 
   close(): void {

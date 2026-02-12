@@ -3,6 +3,10 @@ import { z } from "zod";
 export const IPC_CHANNELS = {
   createPlan: "plan:create",
   getPlan: "plan:get",
+  listPlans: "plan:list",
+  deletePlan: "plan:delete",
+  archivePlan: "plan:archive",
+  unarchivePlan: "plan:unarchive",
   runTask: "task:run",
   runAll: "task:runAll",
   cancelRun: "run:cancel",
@@ -13,6 +17,25 @@ export const IPC_CHANNELS = {
   inferStack: "wizard:inferStack",
   runEvent: "run:event"
 } as const;
+
+export const listPlansInputSchema = z.object({
+  filter: z.object({
+    archived: z.boolean().optional(),
+    search: z.string().optional()
+  }).optional()
+});
+
+export const deletePlanInputSchema = z.object({
+  planId: z.string().uuid()
+});
+
+export const archivePlanInputSchema = z.object({
+  planId: z.string().uuid()
+});
+
+export const unarchivePlanInputSchema = z.object({
+  planId: z.string().uuid()
+});
 
 export const createPlanInputSchema = z.object({
   prdText: z.string().min(20, "PRD text must be at least 20 characters."),

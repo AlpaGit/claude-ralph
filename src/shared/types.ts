@@ -69,8 +69,27 @@ export interface RalphPlan {
   status: PlanStatus;
   createdAt: string;
   updatedAt: string;
+  archivedAt: string | null;
   tasks: RalphTask[];
   runs: TaskRun[];
+}
+
+/** Lightweight plan record returned by listPlans (no tasks, runs, or PRD body). */
+export interface PlanListItem {
+  id: string;
+  summary: string;
+  status: PlanStatus;
+  projectPath: string;
+  createdAt: string;
+  archivedAt: string | null;
+}
+
+/** Filter options for listPlans. */
+export interface ListPlansFilter {
+  /** If true, return only archived plans. If false, return only non-archived. If undefined, return all. */
+  archived?: boolean;
+  /** Case-insensitive substring match against plan summary or project path. */
+  search?: string;
 }
 
 export type RunEventType =
@@ -92,6 +111,22 @@ export interface RunEvent {
   type: RunEventType;
   level: "info" | "error";
   payload: unknown;
+}
+
+export interface ListPlansInput {
+  filter?: ListPlansFilter;
+}
+
+export interface DeletePlanInput {
+  planId: string;
+}
+
+export interface ArchivePlanInput {
+  planId: string;
+}
+
+export interface UnarchivePlanInput {
+  planId: string;
 }
 
 export interface CreatePlanInput {
@@ -250,6 +285,10 @@ export interface DiscoveryEvent {
 export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
+  listPlans(input: ListPlansInput): Promise<PlanListItem[]>;
+  deletePlan(input: DeletePlanInput): Promise<void>;
+  archivePlan(input: ArchivePlanInput): Promise<void>;
+  unarchivePlan(input: UnarchivePlanInput): Promise<void>;
   runTask(input: RunTaskInput): Promise<RunTaskResponse>;
   runAll(input: RunAllInput): Promise<RunAllResponse>;
   cancelRun(input: CancelRunInput): Promise<CancelRunResponse>;

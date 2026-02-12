@@ -1,15 +1,19 @@
 import { ipcMain } from "electron";
 import {
+  archivePlanInputSchema,
   cancelRunInputSchema,
   continueDiscoveryInputSchema,
   createPlanInputSchema,
+  deletePlanInputSchema,
   getWizardGuidanceInputSchema,
   getPlanInputSchema,
   inferStackInputSchema,
   IPC_CHANNELS,
+  listPlansInputSchema,
   runAllInputSchema,
   runTaskInputSchema,
-  startDiscoveryInputSchema
+  startDiscoveryInputSchema,
+  unarchivePlanInputSchema
 } from "@shared/ipc";
 import { TaskRunner } from "./runtime/task-runner";
 
@@ -35,6 +39,42 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = getPlanInputSchema.parse(rawInput);
       return taskRunner.getPlan(input.planId);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listPlans, async (_event, rawInput) => {
+    try {
+      const input = listPlansInputSchema.parse(rawInput);
+      return taskRunner.listPlans(input.filter);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.deletePlan, async (_event, rawInput) => {
+    try {
+      const input = deletePlanInputSchema.parse(rawInput);
+      taskRunner.deletePlan(input.planId);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.archivePlan, async (_event, rawInput) => {
+    try {
+      const input = archivePlanInputSchema.parse(rawInput);
+      taskRunner.archivePlan(input.planId);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.unarchivePlan, async (_event, rawInput) => {
+    try {
+      const input = unarchivePlanInputSchema.parse(rawInput);
+      taskRunner.unarchivePlan(input.planId);
     } catch (error) {
       throw new Error(formatIpcError(error));
     }

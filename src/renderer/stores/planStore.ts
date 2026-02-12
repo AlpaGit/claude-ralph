@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { RalphPlan } from "@shared/types";
+import type { PlanListItem, RalphPlan } from "@shared/types";
 
 /** Lightweight plan summary for the plans list sidebar. */
 export interface PlanSummary {
@@ -8,6 +8,7 @@ export interface PlanSummary {
   status: string;
   projectPath: string;
   createdAt: string;
+  archivedAt?: string | null;
 }
 
 interface PlanState {
@@ -37,27 +38,17 @@ interface PlanState {
   /** Load a single plan by id and set it as currentPlan. */
   loadPlan: (planId: string) => Promise<void>;
 
-  /**
-   * Reload the plans list.
-   * NOTE: The backend does not yet expose a "plan:list" IPC channel.
-   *       When it does, this action should call it. For now the list
-   *       is populated from the currentPlan only.
-   */
-  loadPlanList: () => Promise<void>;
+  /** Reload the plans list from the backend. */
+  loadPlanList: (filter?: { archived?: boolean; search?: string }) => Promise<void>;
 
-  /**
-   * Delete a plan by id.
-   * NOTE: The backend does not yet expose a "plan:delete" IPC channel.
-   *       This is a placeholder that removes the plan from the local list.
-   */
+  /** Permanently delete a plan and all associated data. */
   deletePlan: (planId: string) => Promise<void>;
 
-  /**
-   * Archive a plan by id.
-   * NOTE: The backend does not yet expose a "plan:archive" IPC channel.
-   *       This is a placeholder that updates status locally.
-   */
+  /** Soft-archive a plan. */
   archivePlan: (planId: string) => Promise<void>;
+
+  /** Remove archive status from a plan. */
+  unarchivePlan: (planId: string) => Promise<void>;
 
   /** Clear the current error. */
   clearError: () => void;
@@ -111,6 +102,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
           status: plan.status,
           projectPath: plan.projectPath,
           createdAt: plan.createdAt,
+          archivedAt: plan.archivedAt,
         };
         set((state) => {
           const existing = state.plansList.findIndex((p) => p.id === plan.id);
@@ -131,11 +123,20 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     }
   },
 
-  loadPlanList: async (): Promise<void> => {
+  loadPlanList: async (filter?: { archived?: boolean; search?: string }): Promise<void> => {
     set({ loadingList: true, error: null });
     try {
-      // TODO: wire up when backend exposes "plan:list" IPC channel.
-      // For now this is a no-op; the list is built from loadPlan calls.
+      const api = getApi();
+      const items: PlanListItem[] = await api.listPlans({ filter });
+      const summaries: PlanSummary[] = items.map((item) => ({
+        id: item.id,
+        summary: item.summary,
+        status: item.status,
+        projectPath: item.projectPath,
+        createdAt: item.createdAt,
+        archivedAt: item.archivedAt,
+      }));
+      set({ plansList: summaries });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to load plans list.";
       set({ error: message });
@@ -147,7 +148,8 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   deletePlan: async (planId: string): Promise<void> => {
     set({ error: null });
     try {
-      // TODO: wire up when backend exposes "plan:delete" IPC channel.
+      const api = getApi();
+      await api.deletePlan({ planId });
       set((state) => ({
         plansList: state.plansList.filter((p) => p.id !== planId),
         currentPlan: state.currentPlan?.id === planId ? null : state.currentPlan,
@@ -161,14 +163,31 @@ export const usePlanStore = create<PlanState>((set, get) => ({
   archivePlan: async (planId: string): Promise<void> => {
     set({ error: null });
     try {
-      // TODO: wire up when backend exposes "plan:archive" IPC channel.
+      const api = getApi();
+      await api.archivePlan({ planId });
       set((state) => ({
         plansList: state.plansList.map((p) =>
-          p.id === planId ? { ...p, status: "archived" } : p
+          p.id === planId ? { ...p, archivedAt: new Date().toISOString() } : p
         ),
       }));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to archive plan.";
+      set({ error: message });
+    }
+  },
+
+  unarchivePlan: async (planId: string): Promise<void> => {
+    set({ error: null });
+    try {
+      const api = getApi();
+      await api.unarchivePlan({ planId });
+      set((state) => ({
+        plansList: state.plansList.map((p) =>
+          p.id === planId ? { ...p, archivedAt: null } : p
+        ),
+      }));
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Failed to unarchive plan.";
       set({ error: message });
     }
   },
