@@ -1081,3 +1081,30 @@ p3-05: Add loading skeletons and streaming progress indicators   [DONE]
     - Replaced "Generating..." button text with static "Generate Ralph Plan"
     - Added PlanCreationProgress panel below button (active=creatingPlan, error during creation)
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-06: Make TaskCards collapsible with summary/expand behavior   [DONE]
+  - src/renderer/components/plan/TaskCard.tsx
+    - Removed internal useState for expanded; now fully controlled by parent
+    - New required props: expanded (boolean), onToggleExpand (taskId: string) => void
+    - Collapsed state shows: ordinal number, task title, status pill (header only)
+    - Expanded state shows: full description, dependencies, acceptance criteria,
+      technical notes, and action buttons
+    - Toggle click calls onToggleExpand(task.id) instead of local setState
+    - Existing CSS grid-template-rows 200ms animation preserved for smooth expand/collapse
+  - src/renderer/views/PlanDetailView.tsx
+    - Added expandedTaskIds state: Set<string> tracking which task cards are open
+    - handleToggleExpand callback: toggles a single task ID in/out of the set
+    - handleExpandAll callback: adds all task IDs to the expanded set
+    - handleCollapseAll callback: clears the expanded set to empty
+    - allExpanded derived boolean: true when all tasks are in the expanded set
+    - Auto-expand effect: on plan load or task status change, automatically adds
+      tasks with status "in_progress" or "failed" to the expanded set
+    - Checklist header: added checklistActions container with "Expand All" / "Collapse All"
+      toggle button alongside existing "Run Next Available Tasks" button
+    - Toggle button label switches based on allExpanded state
+    - TaskCard instances now receive expanded and onToggleExpand props
+  - src/renderer/views/PlanDetailView.module.css
+    - .checklistActions: flex row container for header action buttons
+    - .expandCollapseBtn: ghost-style brutalist button (2px border, bold, --font-sans)
+    - Hover translateY(-1px) micro-interaction, focus-visible outline for accessibility
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
