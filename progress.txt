@@ -591,3 +591,33 @@ p2-01: Add archived_at column and plan management DB methods   [DONE]
     - archivePlan(): wired to real IPC, updates local archivedAt
     - unarchivePlan() (new): wired to real IPC, clears local archivedAt
   - Build and typecheck pass
+
+p2-02: Add plan management IPC channels   [DONE]
+  - All artifacts were already implemented as part of p2-01; this entry confirms
+    completeness against the p2-02 task description and records verification.
+  - src/shared/ipc.ts
+    - IPC_CHANNELS: listPlans ("plan:list"), deletePlan ("plan:delete"),
+      archivePlan ("plan:archive"), unarchivePlan ("plan:unarchive")
+    - Zod schemas: listPlansInputSchema (filter?: { archived?, search? }),
+      deletePlanInputSchema ({ planId: uuid }), archivePlanInputSchema ({ planId: uuid }),
+      unarchivePlanInputSchema ({ planId: uuid })
+  - src/shared/types.ts
+    - TypeScript interfaces: ListPlansInput, DeletePlanInput, ArchivePlanInput, UnarchivePlanInput
+    - PlanListItem, ListPlansFilter supporting types
+    - RalphApi: listPlans, deletePlan, archivePlan, unarchivePlan methods
+  - src/main/ipc.ts
+    - ipcMain.handle for plan:list, plan:delete, plan:archive, plan:unarchive
+    - Each handler validates raw input with corresponding Zod schema, delegates to TaskRunner
+  - src/main/runtime/task-runner.ts
+    - Pass-through methods: listPlans, deletePlan, archivePlan, unarchivePlan -> AppDatabase
+  - src/main/runtime/app-database.ts
+    - listPlans(filter?): dynamic WHERE (archived, search), ORDER BY created_at DESC
+    - deletePlan(planId): DELETE with CASCADE
+    - archivePlan(planId): SET archived_at to ISO timestamp
+    - unarchivePlan(planId): SET archived_at to NULL
+  - src/preload/index.ts
+    - Bridge methods: listPlans, deletePlan, archivePlan, unarchivePlan via ipcRenderer.invoke
+  - src/renderer/stores/planStore.ts
+    - loadPlanList(filter?), deletePlan(planId), archivePlan(planId), unarchivePlan(planId)
+      all wired to real IPC through window.ralphApi
+  - Build and typecheck pass
