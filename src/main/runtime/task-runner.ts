@@ -15,6 +15,7 @@ import type {
   DiscoveryEvent,
   DiscoveryInterviewState,
   DiscoverySessionSummary,
+  GetRunEventsResponse,
   GetWizardGuidanceInput,
   InferStackInput,
   ListPlansFilter,
@@ -137,6 +138,13 @@ export class TaskRunner {
 
   unarchivePlan(planId: string): void {
     this.db.unarchivePlan(planId);
+  }
+
+  getRunEvents(
+    runId: string,
+    options: { limit?: number; afterId?: string } = {}
+  ): GetRunEventsResponse {
+    return this.db.getRunEvents(runId, options);
   }
 
   getModelConfig(): ModelConfigEntry[] {

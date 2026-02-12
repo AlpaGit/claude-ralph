@@ -390,6 +390,19 @@ export interface IpcError {
   stack?: string;
 }
 
+/** Input for fetching paginated run events. */
+export interface GetRunEventsInput {
+  runId: string;
+  limit?: number;
+  afterId?: string;
+}
+
+/** Response from fetching paginated run events. */
+export interface GetRunEventsResponse {
+  events: RunEvent[];
+  hasMore: boolean;
+}
+
 export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
@@ -413,6 +426,7 @@ export interface RalphApi {
   resumeDiscoverySession(input: ResumeDiscoveryInput): Promise<DiscoveryInterviewState>;
   abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void>;
   cancelDiscovery(input: CancelDiscoveryInput): Promise<CancelDiscoveryResponse>;
+  getRunEvents(input: GetRunEventsInput): Promise<GetRunEventsResponse>;
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void;
   onRunEvent(handler: (event: RunEvent) => void): () => void;
 }

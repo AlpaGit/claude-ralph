@@ -24,7 +24,8 @@ export const IPC_CHANNELS = {
   discoverySessions: "discovery:sessions",
   discoveryResume: "discovery:resume",
   discoveryAbandon: "discovery:abandon",
-  discoveryCancel: "discovery:cancel"
+  discoveryCancel: "discovery:cancel",
+  getRunEvents: "run:getEvents"
 } as const;
 
 export const listPlansInputSchema = z.object({
@@ -138,4 +139,10 @@ export const discoveryAbandonInputSchema = z.object({
 
 export const discoveryCancelInputSchema = z.object({
   sessionId: z.string().uuid()
+});
+
+export const getRunEventsInputSchema = z.object({
+  runId: z.string().uuid(),
+  limit: z.number().int().min(1).max(500).optional(),
+  afterId: z.string().optional()
 });

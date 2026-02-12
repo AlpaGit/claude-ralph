@@ -54,6 +54,7 @@ export function createMockRalphApi(): MockRalphApi {
     resumeDiscoverySession: vi.fn(),
     abandonDiscoverySession: vi.fn(),
     cancelDiscovery: vi.fn(),
+    getRunEvents: vi.fn(),
     onDiscoveryEvent: vi.fn().mockReturnValue(noopUnsubscribe),
     onRunEvent: vi.fn().mockReturnValue(noopUnsubscribe)
   };

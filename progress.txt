@@ -1562,3 +1562,28 @@ Discovery resume flow test (1 test, self-managed app lifecycle):
   - Clean up: close app, remove temp DB files
 
 Mocking approach: Replaces all 6 discovery IPC handlers (discovery:start, discovery:continue, discovery:sessions, discovery:resume, discovery:abandon, discovery:cancel) via ipcMain.removeHandler() + ipcMain.handle() in electronApp.evaluate(). Mock discovery:start emits synthetic DiscoveryEvent payloads (status, agent start/complete for all 5 specialists, log events, completed) via BrowserWindow.webContents.send("discovery:event", ...) and persists session to discovery_sessions table. Mock discovery:continue emits refined events and updates session state in DB. Mock discovery:sessions reads active sessions from DB. Mock discovery:resume reads latest_state_json from DB. Build passes. Pre-existing E2E runtime issue (Electron window closes immediately) affects all E2E tests equally and is unrelated to this change.
+
+## p4-10 — Add performance optimizations and documentation
+**Status**: Done
+**Files changed**:
+- src/main/runtime/app-database.ts (modified -- added RunEventRow interface and getRunEvents() method with cursor-based pagination)
+- src/shared/types.ts (modified -- added GetRunEventsInput, GetRunEventsResponse interfaces and getRunEvents to RalphApi)
+- src/shared/ipc.ts (modified -- added getRunEvents channel and getRunEventsInputSchema)
+- src/main/runtime/task-runner.ts (modified -- added getRunEvents pass-through, imported GetRunEventsResponse)
+- src/main/ipc.ts (modified -- registered run:getEvents IPC handler with Zod validation)
+- src/preload/index.ts (modified -- added getRunEvents bridge method)
+- src/test-utils/mock-ralph-api.ts (modified -- added getRunEvents to mock)
+- resources/migrations/006_run_events_pagination.sql (new -- composite index on run_events(run_id, ts ASC, id ASC) for cursor pagination)
+- ARCHITECTURE.md (new -- comprehensive project documentation)
+- README.md (rewritten -- expanded with setup, dev workflow, test commands, project structure guide)
+
+**Notes**:
+Pagination: Added getRunEvents(runId, { limit, afterId }) method to AppDatabase with cursor-based pagination. Default limit 100, max 500. Uses (ts, id) compound ordering for stable cursor positioning when timestamps collide. The query fetches limit+1 rows and returns hasMore boolean. Joins with runs table to populate planId/taskId on returned RunEvent objects. Full IPC pipeline wired: Zod schema validates runId (UUID), optional limit (1-500), optional afterId string.
+
+Index: Added migration 006_run_events_pagination.sql with CREATE INDEX IF NOT EXISTS idx_run_events_run_ts_id ON run_events(run_id, ts ASC, id ASC) to support the cursor-based pagination query efficiently. The existing idx_run_events_run_ts index covers (run_id, ts) but the cursor query also uses id as a tie-breaker. The discovery_sessions(status) index already existed in migration 003.
+
+ARCHITECTURE.md: Comprehensive project documentation covering: Overview, Directory Structure (full file tree with descriptions), Data Flow Diagrams (plan creation, task execution, discovery interview -- all in text), Component Hierarchy (React tree), State Management (4 Zustand stores with state/actions/IPC details), IPC Contract (24-channel table with schemas and response types), DB Schema (8 tables with all columns and indexes), Testing Strategy (unit tests with Vitest, E2E with Playwright), Build & Deploy (all commands and packaging notes).
+
+README.md: Rewritten with: features list, system requirements (Node, Python, C++ build tools), step-by-step setup guide, development workflow commands, testing commands (unit, watch, coverage, E2E), project structure overview table, database notes, guide for adding new IPC channels.
+
+Build and unit tests pass (208 passed, 105 skipped for native ABI). Pre-existing TS2352 typecheck error in task-runner.ts is unrelated.

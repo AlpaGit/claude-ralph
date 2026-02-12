@@ -15,6 +15,8 @@ import type {
   DiscoveryEvent,
   DiscoveryInterviewState,
   DiscoverySessionSummary,
+  GetRunEventsInput,
+  GetRunEventsResponse,
   GetWizardGuidanceInput,
   InferStackInput,
   InferStackResult,
@@ -125,6 +127,10 @@ const api: RalphApi = {
 
   cancelDiscovery(input: CancelDiscoveryInput): Promise<CancelDiscoveryResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.discoveryCancel, input);
+  },
+
+  getRunEvents(input: GetRunEventsInput): Promise<GetRunEventsResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getRunEvents, input);
   },
 
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void {

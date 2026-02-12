@@ -10,6 +10,7 @@ import {
   discoveryAbandonInputSchema,
   discoveryCancelInputSchema,
   discoveryResumeInputSchema,
+  getRunEventsInputSchema,
   getWizardGuidanceInputSchema,
   getPlanInputSchema,
   inferStackInputSchema,
@@ -292,6 +293,18 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = discoveryCancelInputSchema.parse(rawInput);
       return taskRunner.cancelDiscovery(input);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getRunEvents, async (_event, rawInput) => {
+    try {
+      const input = getRunEventsInputSchema.parse(rawInput);
+      return taskRunner.getRunEvents(input.runId, {
+        limit: input.limit,
+        afterId: input.afterId
+      });
     } catch (error) {
       throw createIpcError(error);
     }

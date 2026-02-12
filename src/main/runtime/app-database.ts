@@ -104,6 +104,15 @@ interface RunRow {
   retry_count: number;
 }
 
+interface RunEventRow {
+  id: string;
+  run_id: string;
+  ts: string;
+  level: "info" | "error";
+  event_type: string;
+  payload_json: string;
+}
+
 interface DiscoverySessionRow {
   id: string;
   project_path: string;
@@ -484,6 +493,84 @@ export class AppDatabase {
         event_type: event.type,
         payload_json: JSON.stringify(event.payload ?? {})
       });
+  }
+
+  /**
+   * Retrieve run events for a given run with cursor-based pagination.
+   * Returns up to `limit` events ordered by ts ASC.
+   * When `afterId` is provided, only events with id > afterId (by ts ordering) are returned.
+   */
+  getRunEvents(
+    runId: string,
+    options: { limit?: number; afterId?: string } = {}
+  ): { events: RunEvent[]; hasMore: boolean } {
+    const limit = options.limit ?? 100;
+
+    let rows: RunEventRow[];
+
+    if (options.afterId) {
+      // Cursor-based: get the ts of the cursor event, then fetch events after it.
+      // Use (ts, id) > (cursorTs, cursorId) for stable ordering when ts values collide.
+      const cursorRow = this.db
+        .prepare("SELECT ts FROM run_events WHERE id = ? LIMIT 1;")
+        .get(options.afterId) as { ts: string } | undefined;
+
+      if (!cursorRow) {
+        // Cursor event not found -- return from the beginning
+        rows = this.db
+          .prepare(
+            "SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;"
+          )
+          .all(runId, limit + 1) as RunEventRow[];
+      } else {
+        rows = this.db
+          .prepare(
+            `SELECT * FROM run_events
+             WHERE run_id = ? AND (ts > ? OR (ts = ? AND id > ?))
+             ORDER BY ts ASC, id ASC
+             LIMIT ?;`
+          )
+          .all(runId, cursorRow.ts, cursorRow.ts, options.afterId, limit + 1) as RunEventRow[];
+      }
+    } else {
+      rows = this.db
+        .prepare(
+          "SELECT * FROM run_events WHERE run_id = ? ORDER BY ts ASC, id ASC LIMIT ?;"
+        )
+        .all(runId, limit + 1) as RunEventRow[];
+    }
+
+    const hasMore = rows.length > limit;
+    const resultRows = hasMore ? rows.slice(0, limit) : rows;
+
+    // Look up the parent run to populate planId and taskId on each event.
+    const runRow = this.db
+      .prepare("SELECT plan_id, task_id FROM runs WHERE id = ? LIMIT 1;")
+      .get(runId) as { plan_id: string; task_id: string } | undefined;
+    const planId = runRow?.plan_id ?? "";
+    const taskId = runRow?.task_id ?? "";
+
+    const events: RunEvent[] = resultRows.map((row) => {
+      let payload: unknown = {};
+      try {
+        payload = JSON.parse(row.payload_json);
+      } catch {
+        // keep empty object
+      }
+
+      return {
+        id: row.id,
+        ts: row.ts,
+        runId: row.run_id,
+        planId,
+        taskId,
+        type: row.event_type as RunEvent["type"],
+        level: row.level,
+        payload
+      };
+    });
+
+    return { events, hasMore };
   }
 
   addTodoSnapshot(runId: string, todos: TodoItem[]): void {
