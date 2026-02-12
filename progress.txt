@@ -1515,3 +1515,26 @@ p4-06: Set up Playwright with Electron fixture for E2E tests   [DONE]
 - tests/e2e/electron-fixture.ts (modified — ESM compatibility with import.meta.url)
 
 **Notes**: Comprehensive E2E test suite covering: empty state, create plan (seed via IPC), view detail (verify sections/tasks render), archive (confirm modal → verify archived list), unarchive (restore from archive), delete (confirm modal → verify removal), search/filter (by name and project path), and cancel-delete confirmation. Tests use direct SQLite seeding via Electron's evaluate API to bypass Claude Agent SDK. Serial execution mode ensures clean state between tests.
+
+## p4-08 — Write E2E tests for task execution and error recovery
+**Status**: Done
+**Commit**: 2232b2a
+**Files changed**:
+- tests/e2e/task-execution.e2e.ts (new — 4 E2E tests for task execution flow)
+- tests/e2e/error-recovery.e2e.ts (new — 5 E2E tests for error recovery flow)
+
+**Notes**: Two new E2E test files covering task execution and error recovery flows.
+Task execution tests (task-execution.e2e.ts):
+  - Navigate to plan detail, verify task card renders with pending status
+  - Seed completed run with log lines, emit run events via webContents.send(), verify completion status and log streaming in UI
+  - Seed failed run with error text, verify failed status pill and Retry/Skip buttons appear
+  - Verify run status transitions (pending → in_progress) reflected in task card status pill
+
+Error recovery tests (error-recovery.e2e.ts):
+  - 3-task queue where task-2 fails: verify task-1 completed, task-2 failed with Retry/Skip buttons, task-3 remains pending
+  - Skip failed task: update task to skipped in DB, verify skipped pill renders and remaining tasks stay visible
+  - Retry creates new run: seed retry run with retry_count=1 that succeeds, verify task transitions from failed to completed
+  - Abort queue: simulate active queue with in_progress task-2, abort by resetting state, verify task-2 returns to pending
+  - Full queue failure scenario: task-1 completes, task-2 fails, task-3 stays pending (queue stops at failure)
+
+Testing approach: Seeds plan/task/run data directly into SQLite via electronApp.evaluate() and emits synthetic RunEvent payloads via BrowserWindow.webContents.send("run:event", ...) to simulate TaskRunner behavior without invoking the Claude Agent SDK. Build and unit tests pass. Pre-existing TS2352 typecheck error in task-runner.ts is unrelated.
