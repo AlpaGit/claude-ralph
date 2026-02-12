@@ -1587,3 +1587,13 @@ ARCHITECTURE.md: Comprehensive project documentation covering: Overview, Directo
 README.md: Rewritten with: features list, system requirements (Node, Python, C++ build tools), step-by-step setup guide, development workflow commands, testing commands (unit, watch, coverage, E2E), project structure overview table, database notes, guide for adding new IPC channels.
 
 Build and unit tests pass (208 passed, 105 skipped for native ABI). Pre-existing TS2352 typecheck error in task-runner.ts is unrelated.
+
+## p1-02 (v2) — Fix toast notification rendering and z-index
+**Status**: Done
+**Files changed**:
+- src/renderer/components/AppShell/AppShell.tsx (modified — added z-index hierarchy comment, added warning toast documentation comment in toastOptions)
+- src/renderer/components/ui/ULogViewer.module.css (modified — adjusted .viewer.fullscreen z-index from 9998 to 9990 with hierarchy comment)
+- src/renderer/services/toastService.ts (modified — enhanced warning() JSDoc, added explicit borderColor style for amber consistency)
+
+**Notes**:
+Z-index hierarchy verified and documented: modals (1000-1001) < fullscreen log viewer (9990) < toasts (10000). Toast container z-index 10000 was already set in p3-04; this task confirmed correctness and added documentation comments. ULogViewer fullscreen z-index lowered from 9998 to 9990 for cleaner separation from toast layer. Warning toasts already had 5s duration configured per-call in toastService.warning(); added explicit amber borderColor (#d97706) for styling consistency with success/error variants. react-hot-toast does not expose a built-in "warning" type in toastOptions, so warning duration remains configured per-call. DiscoveryView resumeOverlay (z-index 1000) correctly sits below toast layer. Build and typecheck pass.

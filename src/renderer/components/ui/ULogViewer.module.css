@@ -19,10 +19,11 @@
   position: relative;
 }
 
+/* z-index 9990: above modals (1001) but below toast notifications (10000) */
 .viewer.fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 9998;
+  z-index: 9990;
   border-radius: 0;
   border: none;
 }

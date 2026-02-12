@@ -39,11 +39,14 @@ export function info(message: string): string {
 }
 
 /**
- * Show a warning toast (amber accent).
+ * Show a warning toast (amber accent, 5s duration).
+ * Uses the default amber border (#d97706) from Toaster base style.
+ * Duration is longer than info/success (4s) to give users time to read warnings.
  */
 export function warning(message: string): string {
   return toast(message, {
     icon: "\u26A0\uFE0F",
+    style: { borderColor: "#d97706" },
     duration: 5000,
   });
 }

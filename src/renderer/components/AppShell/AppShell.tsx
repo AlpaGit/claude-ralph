@@ -180,6 +180,7 @@ export function AppShell(): JSX.Element {
         </div>
       </main>
 
+      {/* z-index hierarchy: modals (1000-1001) < fullscreen log viewer (9990) < toasts (10000) */}
       <Toaster
         position="bottom-right"
         containerStyle={{ zIndex: 10000 }}
@@ -204,6 +205,9 @@ export function AppShell(): JSX.Element {
             style: { borderColor: "#b91c1c" },
             duration: 6000,
           },
+          /* Warning toasts use the default amber border (#d97706) and 5s duration
+             configured per-call in toastService.warning(). react-hot-toast does not
+             expose a built-in "warning" type, so the 5s duration lives in the service. */
           duration: 4000,
         }}
       />

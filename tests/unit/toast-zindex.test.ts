@@ -10,7 +10,7 @@
  * the log viewer when in fullscreen mode.
  *
  * Fix: Toaster containerStyle.zIndex raised to 10000; ULogViewer fullscreen
- * lowered to 9998.
+ * lowered to 9990 (cleaner separation from toast layer).
  *
  * These tests parse the actual source files to guard against regressions.
  */
@@ -95,16 +95,16 @@ describe("Toast z-index layering (p1-01 regression guard)", () => {
   // ── ULogViewer fullscreen ───────────────────────────────────────────────
 
   describe("ULogViewer fullscreen z-index", () => {
-    it("uses z-index 9998 for fullscreen mode (not 9999)", () => {
+    it("uses z-index 9990 for fullscreen mode (not 9999)", () => {
       const css = readSrc(ULOGVIEWER_CSS);
 
-      // The fullscreen rule should have z-index: 9998
+      // The fullscreen rule should have z-index: 9990
       // Extract the .viewer.fullscreen block to check its specific z-index
       const fullscreenBlock = css.match(
         /\.viewer\.fullscreen\s*\{[^}]*z-index:\s*(\d+)/
       );
       expect(fullscreenBlock).not.toBeNull();
-      expect(Number(fullscreenBlock![1])).toBe(9998);
+      expect(Number(fullscreenBlock![1])).toBe(9990);
     });
 
     it("fullscreen z-index must NOT equal the react-hot-toast default of 9999", () => {
@@ -153,7 +153,7 @@ describe("Toast z-index layering (p1-01 regression guard)", () => {
 
       // Concrete expected values (document the contract)
       expect(toasterZ).toBe(10000);
-      expect(logViewerFullscreenZ).toBe(9998);
+      expect(logViewerFullscreenZ).toBe(9990);
       expect(modalBackdropZ).toBe(1000);
       expect(modalDialogZ).toBe(1001);
       expect(discoveryOverlayZ).toBe(1000);
