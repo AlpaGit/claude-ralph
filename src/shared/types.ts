@@ -316,6 +316,26 @@ export interface UpdateModelConfigInput {
   modelId: string;
 }
 
+/** Lightweight summary of a discovery session for the resume dialog. */
+export interface DiscoverySessionSummary {
+  id: string;
+  projectPath: string;
+  seedSentence: string;
+  roundNumber: number;
+  readinessScore: number;
+  updatedAt: string;
+}
+
+/** Input for resuming a discovery session. */
+export interface ResumeDiscoveryInput {
+  sessionId: string;
+}
+
+/** Input for abandoning a discovery session. */
+export interface AbandonDiscoveryInput {
+  sessionId: string;
+}
+
 export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
@@ -332,6 +352,9 @@ export interface RalphApi {
   inferStack(input: InferStackInput): Promise<InferStackResult>;
   getModelConfig(): Promise<ModelConfigEntry[]>;
   updateModelConfig(input: UpdateModelConfigInput): Promise<void>;
+  getDiscoverySessions(): Promise<DiscoverySessionSummary[]>;
+  resumeDiscoverySession(input: ResumeDiscoveryInput): Promise<DiscoveryInterviewState>;
+  abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void>;
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void;
   onRunEvent(handler: (event: RunEvent) => void): () => void;
 }

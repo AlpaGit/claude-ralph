@@ -17,7 +17,10 @@ export const IPC_CHANNELS = {
   inferStack: "wizard:inferStack",
   runEvent: "run:event",
   getModelConfig: "config:getModels",
-  updateModelConfig: "config:updateModel"
+  updateModelConfig: "config:updateModel",
+  discoverySessions: "discovery:sessions",
+  discoveryResume: "discovery:resume",
+  discoveryAbandon: "discovery:abandon"
 } as const;
 
 export const listPlansInputSchema = z.object({
@@ -105,4 +108,12 @@ export const inferStackInputSchema = z.object({
 export const updateModelConfigInputSchema = z.object({
   agentRole: z.enum(["discovery_specialist", "plan_synthesis", "task_execution"]),
   modelId: z.string().min(1)
+});
+
+export const discoveryResumeInputSchema = z.object({
+  sessionId: z.string().uuid()
+});
+
+export const discoveryAbandonInputSchema = z.object({
+  sessionId: z.string().uuid()
 });

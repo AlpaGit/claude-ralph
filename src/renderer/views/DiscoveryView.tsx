@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useNavigate } from "react-router-dom";
-import type { DiscoveryEvent } from "@shared/types";
+import type { DiscoveryEvent, DiscoverySessionSummary } from "@shared/types";
 import { useDiscoveryStore } from "../stores/discoveryStore";
 import { UButton } from "../components/ui/UButton";
 import { UTextArea } from "../components/UTextArea/UTextArea";
@@ -91,6 +91,10 @@ export function DiscoveryView(): JSX.Element {
   const lastReadyAtIso = useDiscoveryStore((s) => s.lastReadyAtIso);
   const copyNotice = useDiscoveryStore((s) => s.copyNotice);
 
+  // ── Session management slices ───────────────────────
+  const activeSessions = useDiscoveryStore((s) => s.activeSessions);
+  const checkingSessions = useDiscoveryStore((s) => s.checkingSessions);
+
   // ── Store actions ────────────────────────────────────
   const setSeedSentence = useDiscoveryStore((s) => s.setSeedSentence);
   const setAdditionalContext = useDiscoveryStore((s) => s.setAdditionalContext);
@@ -98,7 +102,46 @@ export function DiscoveryView(): JSX.Element {
   const setCopyNotice = useDiscoveryStore((s) => s.setCopyNotice);
   const startDiscovery = useDiscoveryStore((s) => s.startDiscovery);
   const continueDiscovery = useDiscoveryStore((s) => s.continueDiscovery);
+  const checkActiveSessions = useDiscoveryStore((s) => s.checkActiveSessions);
+  const resumeSession = useDiscoveryStore((s) => s.resumeSession);
+  const abandonSession = useDiscoveryStore((s) => s.abandonSession);
   const reset = useDiscoveryStore((s) => s.reset);
+
+  // ── Resume dialog state ────────────────────────────
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+
+  // Check for active sessions on mount
+  useEffect(() => {
+    // Only check if there is no active interview already loaded
+    if (!interview) {
+      void checkActiveSessions();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show resume dialog when active sessions are found
+  useEffect(() => {
+    if (activeSessions.length > 0 && !interview && !loading) {
+      setShowResumeDialog(true);
+    } else {
+      setShowResumeDialog(false);
+    }
+  }, [activeSessions, interview, loading]);
+
+  const handleResumeSession = useCallback(
+    (sessionId: string): void => {
+      setShowResumeDialog(false);
+      void resumeSession(sessionId);
+    },
+    [resumeSession]
+  );
+
+  const handleStartFresh = useCallback((): void => {
+    // Abandon all active sessions and close the dialog
+    for (const session of activeSessions) {
+      void abandonSession(session.id);
+    }
+    setShowResumeDialog(false);
+  }, [activeSessions, abandonSession]);
 
   // ── Local tick timer for live elapsed display ────────
   const [tickMs, setTickMs] = useState<number>(() => Date.now());
@@ -198,6 +241,56 @@ export function DiscoveryView(): JSX.Element {
 
   return (
     <section className={styles.view}>
+      {/* ── Resume dialog ─────────────────────────── */}
+      {showResumeDialog && activeSessions.length > 0 ? (
+        <div className={styles.resumeOverlay}>
+          <div className={styles.resumeDialog} role="dialog" aria-label="Resume discovery session">
+            <h3 className={styles.resumeTitle}>Active Discovery Session Found</h3>
+            <div className={styles.resumeSessionList}>
+              {activeSessions.map((session: DiscoverySessionSummary) => (
+                <div key={session.id} className={styles.resumeSessionItem}>
+                  <div className={styles.resumeSessionInfo}>
+                    <p className={styles.resumeSessionSeed}>
+                      {session.seedSentence.length > 80
+                        ? `${session.seedSentence.slice(0, 80)}...`
+                        : session.seedSentence}
+                    </p>
+                    <div className={styles.resumeSessionMeta}>
+                      <span>Round {session.roundNumber}</span>
+                      <span>Readiness: {session.readinessScore}%</span>
+                      {session.projectPath ? (
+                        <span>
+                          {session.projectPath.length > 40
+                            ? `...${session.projectPath.slice(-40)}`
+                            : session.projectPath}
+                        </span>
+                      ) : null}
+                      <span>
+                        Updated: {new Date(session.updatedAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.resumeSessionActions}>
+                    <UButton
+                      variant="primary"
+                      size="sm"
+                      onClick={() => handleResumeSession(session.id)}
+                    >
+                      Resume
+                    </UButton>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className={styles.resumeDialogFooter}>
+              <UButton variant="ghost" onClick={handleStartFresh}>
+                Start Fresh (abandon all)
+              </UButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className={styles.sections}>
         {/* ── Header ─────────────────────────────────── */}
         <div>

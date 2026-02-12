@@ -6,6 +6,84 @@
   margin: 0 auto;
 }
 
+/* ── Resume dialog ───────────────────────────────────── */
+
+.resumeOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.resumeDialog {
+  background: var(--color-panel);
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  max-width: 520px;
+  width: 90%;
+  display: grid;
+  gap: var(--space-md);
+}
+
+.resumeTitle {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.resumeSessionList {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.resumeSessionItem {
+  border: 1px dashed var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.resumeSessionInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.resumeSessionSeed {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.resumeSessionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: var(--space-xs);
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.resumeSessionActions {
+  flex-shrink: 0;
+}
+
+.resumeDialogFooter {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px dashed var(--color-panel-border);
+  padding-top: var(--space-sm);
+}
+
 /* ── Section grid ─────────────────────────────────────── */
 
 .sections {

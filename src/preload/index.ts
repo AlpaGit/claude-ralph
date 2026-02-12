@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
+  AbandonDiscoveryInput,
   ArchivePlanInput,
   CancelRunInput,
   CancelRunResponse,
@@ -10,6 +11,7 @@ import type {
   DeletePlanInput,
   DiscoveryEvent,
   DiscoveryInterviewState,
+  DiscoverySessionSummary,
   GetWizardGuidanceInput,
   InferStackInput,
   InferStackResult,
@@ -18,6 +20,7 @@ import type {
   PlanListItem,
   RalphApi,
   RalphPlan,
+  ResumeDiscoveryInput,
   RunAllInput,
   RunAllResponse,
   RunEvent,
@@ -88,6 +91,18 @@ const api: RalphApi = {
 
   updateModelConfig(input: UpdateModelConfigInput): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.updateModelConfig, input);
+  },
+
+  getDiscoverySessions(): Promise<DiscoverySessionSummary[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.discoverySessions);
+  },
+
+  resumeDiscoverySession(input: ResumeDiscoveryInput): Promise<DiscoveryInterviewState> {
+    return ipcRenderer.invoke(IPC_CHANNELS.discoveryResume, input);
+  },
+
+  abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.discoveryAbandon, input);
   },
 
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void {

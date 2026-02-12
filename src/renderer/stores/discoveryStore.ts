@@ -3,6 +3,7 @@ import type {
   DiscoveryAnswer,
   DiscoveryEvent,
   DiscoveryInterviewState,
+  DiscoverySessionSummary,
   StartDiscoveryInput,
   ContinueDiscoveryInput,
 } from "@shared/types";
@@ -50,6 +51,12 @@ interface DiscoveryState {
   /** Transient copy / status notice shown to the user. */
   copyNotice: string | null;
 
+  // ── Session management ────────────────────────────────
+  /** Active discovery sessions retrieved from the backend. */
+  activeSessions: DiscoverySessionSummary[];
+  /** Whether the active-sessions check is in progress. */
+  checkingSessions: boolean;
+
   // ── Actions ──────────────────────────────────────────
 
   /** Update the seed sentence input. */
@@ -65,6 +72,12 @@ interface DiscoveryState {
   startDiscovery: (projectPath: string) => Promise<void>;
   /** Continue the interview by submitting current answers. */
   continueDiscovery: () => Promise<void>;
+  /** Check for active (resumable) discovery sessions. */
+  checkActiveSessions: () => Promise<void>;
+  /** Resume a persisted session by ID. Hydrates the store from latest_state_json. */
+  resumeSession: (sessionId: string) => Promise<void>;
+  /** Abandon (discard) a persisted session by ID. */
+  abandonSession: (sessionId: string) => Promise<void>;
   /** Reset the store to its initial state. */
   reset: () => void;
 }
@@ -95,6 +108,8 @@ const initialState = {
   lastDiscoveryDurationSec: null as number | null,
   lastReadyAtIso: null as string | null,
   copyNotice: null as string | null,
+  activeSessions: [] as DiscoverySessionSummary[],
+  checkingSessions: false,
 };
 
 /* ── Store ─────────────────────────────────────────────── */
@@ -250,6 +265,63 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
           Math.floor((Date.now() - startedAt) / 1000)
         ),
       }));
+    }
+  },
+
+  // ── Session management ─────────────────────────────
+
+  checkActiveSessions: async (): Promise<void> => {
+    set({ checkingSessions: true });
+    try {
+      const api = getApi();
+      const sessions = await api.getDiscoverySessions();
+      set({ activeSessions: sessions });
+    } catch {
+      // Non-critical: if this fails we simply show no resume dialog
+      set({ activeSessions: [] });
+    } finally {
+      set({ checkingSessions: false });
+    }
+  },
+
+  resumeSession: async (sessionId: string): Promise<void> => {
+    set({ loading: true, error: null });
+    try {
+      const api = getApi();
+      const state = await api.resumeDiscoverySession({ sessionId });
+
+      // Build answer map from the returned questions
+      const newAnswerMap: AnswerMap = {};
+      for (const q of state.questions) {
+        newAnswerMap[q.id] = "";
+      }
+
+      set({
+        interview: state,
+        seedSentence: state.directionSummary,
+        answerMap: newAnswerMap,
+        activeSessions: [],
+        lastReadyAtIso: new Date().toISOString(),
+        copyNotice: `Resumed discovery session (round ${state.round}).`,
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Failed to resume discovery session.";
+      set({ error: message });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  abandonSession: async (sessionId: string): Promise<void> => {
+    try {
+      const api = getApi();
+      await api.abandonDiscoverySession({ sessionId });
+      set((state) => ({
+        activeSessions: state.activeSessions.filter((s) => s.id !== sessionId),
+      }));
+    } catch {
+      // Non-critical: UI can proceed even if abandon fails
     }
   },
 

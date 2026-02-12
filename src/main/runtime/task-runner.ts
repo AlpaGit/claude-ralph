@@ -11,6 +11,7 @@ import type {
   DiscoveryAnswer,
   DiscoveryEvent,
   DiscoveryInterviewState,
+  DiscoverySessionSummary,
   GetWizardGuidanceInput,
   InferStackInput,
   ListPlansFilter,
@@ -167,6 +168,22 @@ export class TaskRunner {
       });
 
       session.round = 1;
+
+      const fullState: DiscoveryInterviewState = {
+        sessionId,
+        round: session.round,
+        ...initialState
+      };
+
+      // Persist session to database
+      this.db.createDiscoverySession({
+        id: sessionId,
+        projectPath: input.projectPath,
+        seedSentence: input.seedSentence,
+        additionalContext: input.additionalContext,
+        latestState: fullState
+      });
+
       this.emitDiscoveryEvent({
         sessionId,
         type: "completed",
@@ -174,11 +191,7 @@ export class TaskRunner {
         message: `Discovery round 1 completed. Readiness ${initialState.readinessScore}%.`
       });
 
-      return {
-        sessionId,
-        round: session.round,
-        ...initialState
-      };
+      return fullState;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Discovery start failed.";
       this.emitDiscoveryEvent({
@@ -234,6 +247,21 @@ export class TaskRunner {
       });
 
       session.round += 1;
+
+      const fullState: DiscoveryInterviewState = {
+        sessionId: session.id,
+        round: session.round,
+        ...nextState
+      };
+
+      // Persist updated session state to database
+      this.db.updateDiscoverySession({
+        id: session.id,
+        answerHistory: session.answerHistory,
+        roundNumber: session.round,
+        latestState: fullState
+      });
+
       this.emitDiscoveryEvent({
         sessionId: session.id,
         type: "completed",
@@ -241,11 +269,7 @@ export class TaskRunner {
         message: `Discovery round ${session.round} completed. Readiness ${nextState.readinessScore}%.`
       });
 
-      return {
-        sessionId: session.id,
-        round: session.round,
-        ...nextState
-      };
+      return fullState;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Discovery continue failed.";
       this.emitDiscoveryEvent({
@@ -256,6 +280,57 @@ export class TaskRunner {
       });
       throw error;
     }
+  }
+
+  /**
+   * Return lightweight summaries of all active discovery sessions.
+   */
+  getActiveDiscoverySessions(): DiscoverySessionSummary[] {
+    const sessions = this.db.getActiveDiscoverySessions();
+    return sessions.map((session) => ({
+      id: session.id,
+      projectPath: session.projectPath,
+      seedSentence: session.seedSentence,
+      roundNumber: session.roundNumber,
+      readinessScore: session.latestState.readinessScore,
+      updatedAt: session.updatedAt
+    }));
+  }
+
+  /**
+   * Resume a persisted discovery session by ID.
+   * Hydrates the in-memory DiscoverySession map from DB state and returns
+   * the latest DiscoveryInterviewState so the renderer can restore the UI.
+   */
+  resumeDiscoverySession(sessionId: string): DiscoveryInterviewState {
+    const dbSession = this.db.getDiscoverySession(sessionId);
+    if (!dbSession) {
+      throw new Error(`Discovery session not found: ${sessionId}`);
+    }
+    if (dbSession.status !== "active") {
+      throw new Error(`Discovery session is not active: ${sessionId} (status: ${dbSession.status})`);
+    }
+
+    // Hydrate in-memory session so continueDiscovery() works
+    this.discoverySessions.set(sessionId, {
+      id: sessionId,
+      projectPath: dbSession.projectPath,
+      seedSentence: dbSession.seedSentence,
+      additionalContext: dbSession.additionalContext,
+      answerHistory: dbSession.answerHistory,
+      round: dbSession.roundNumber
+    });
+
+    return dbSession.latestState;
+  }
+
+  /**
+   * Abandon (soft-delete) a discovery session by ID.
+   * Removes it from the in-memory map and marks it as 'abandoned' in the DB.
+   */
+  abandonDiscoverySession(sessionId: string): void {
+    this.discoverySessions.delete(sessionId);
+    this.db.abandonDiscoverySession(sessionId);
   }
 
   async getWizardGuidance(input: GetWizardGuidanceInput) {

@@ -5,6 +5,8 @@ import {
   continueDiscoveryInputSchema,
   createPlanInputSchema,
   deletePlanInputSchema,
+  discoveryAbandonInputSchema,
+  discoveryResumeInputSchema,
   getWizardGuidanceInputSchema,
   getPlanInputSchema,
   inferStackInputSchema,
@@ -156,6 +158,32 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = updateModelConfigInputSchema.parse(rawInput);
       taskRunner.updateModelForRole(input.agentRole, input.modelId);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.discoverySessions, async () => {
+    try {
+      return taskRunner.getActiveDiscoverySessions();
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.discoveryResume, async (_event, rawInput) => {
+    try {
+      const input = discoveryResumeInputSchema.parse(rawInput);
+      return taskRunner.resumeDiscoverySession(input.sessionId);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.discoveryAbandon, async (_event, rawInput) => {
+    try {
+      const input = discoveryAbandonInputSchema.parse(rawInput);
+      taskRunner.abandonDiscoverySession(input.sessionId);
     } catch (error) {
       throw new Error(formatIpcError(error));
     }
