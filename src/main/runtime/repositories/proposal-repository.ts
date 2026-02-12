@@ -197,29 +197,7 @@ export class ProposalRepository {
 
       if (existingTaskRow?.id) {
         // Link to existing task instead of creating a duplicate.
-        const updateResult = this.conn
-          .prepare(
-            `
-            UPDATE task_followup_proposals
-            SET status = 'approved',
-                approved_task_id = @approved_task_id,
-                updated_at = @updated_at
-            WHERE id = @id
-              AND plan_id = @plan_id
-              AND status = 'proposed';
-          `,
-          )
-          .run({
-            id: input.proposalId,
-            plan_id: input.planId,
-            approved_task_id: existingTaskRow.id,
-            updated_at: now,
-          });
-
-        if (updateResult.changes === 0) {
-          throw new Error(`Proposal approval race detected for proposal ${input.proposalId}.`);
-        }
-
+        this.markProposalApproved(input.proposalId, input.planId, existingTaskRow.id, now);
         this.touchPlanUpdatedAt(input.planId, now);
 
         return { taskId: existingTaskRow.id, created: false };
@@ -308,29 +286,7 @@ export class ProposalRepository {
         });
 
       // Mark the proposal as approved.
-      const updateResult = this.conn
-        .prepare(
-          `
-          UPDATE task_followup_proposals
-          SET status = 'approved',
-              approved_task_id = @approved_task_id,
-              updated_at = @updated_at
-          WHERE id = @id
-            AND plan_id = @plan_id
-            AND status = 'proposed';
-        `,
-        )
-        .run({
-          id: input.proposalId,
-          plan_id: input.planId,
-          approved_task_id: taskId,
-          updated_at: now,
-        });
-
-      if (updateResult.changes === 0) {
-        throw new Error(`Proposal approval race detected for proposal ${input.proposalId}.`);
-      }
-
+      this.markProposalApproved(input.proposalId, input.planId, taskId, now);
       this.touchPlanUpdatedAt(input.planId, now);
 
       return { taskId, created: true };
@@ -370,6 +326,40 @@ export class ProposalRepository {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Mark a proposal as approved, linking it to the given task.
+   * Throws if the proposal was concurrently approved or dismissed (race guard).
+   */
+  private markProposalApproved(
+    proposalId: string,
+    planId: string,
+    approvedTaskId: string,
+    timestamp: string,
+  ): void {
+    const result = this.conn
+      .prepare(
+        `
+        UPDATE task_followup_proposals
+        SET status = 'approved',
+            approved_task_id = @approved_task_id,
+            updated_at = @updated_at
+        WHERE id = @id
+          AND plan_id = @plan_id
+          AND status = 'proposed';
+      `,
+      )
+      .run({
+        id: proposalId,
+        plan_id: planId,
+        approved_task_id: approvedTaskId,
+        updated_at: timestamp,
+      });
+
+    if (result.changes === 0) {
+      throw new Error(`Proposal approval race detected for proposal ${proposalId}.`);
+    }
+  }
 
   /**
    * Touch a plan's updated_at timestamp. Used after proposal approval to
