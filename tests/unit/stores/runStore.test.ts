@@ -32,7 +32,13 @@ vi.mock("../../../src/renderer/services/toastService", () => ({
 }));
 
 // Import after mocking
-import { useRunStore, initRunEventSubscription } from "../../../src/renderer/stores/runStore";
+import {
+  useRunStore,
+  initRunEventSubscription,
+  _resetLogCache,
+  _getLogCacheSize,
+  _MAX_BUFFERED_RUNS,
+} from "../../../src/renderer/stores/runStore";
 import type { RunEvent, TodoItem } from "@shared/types";
 
 // ── Helpers ──────────────────────────────────────────────
@@ -60,6 +66,9 @@ function makeTodoItem(overrides?: Partial<TodoItem>): TodoItem {
   };
 }
 
+/** Flush pending microtasks (used to await deferred LRU eviction cleanup). */
+const flushMicrotasks = (): Promise<void> => new Promise((resolve) => queueMicrotask(resolve));
+
 /** Initial (clean) state for the runStore. */
 const initialState = {
   activeRuns: {},
@@ -76,6 +85,8 @@ describe("runStore", () => {
 
   beforeEach(() => {
     api = installMockRalphApi();
+    // Reset module-level LRU log cache to avoid cross-test state leakage
+    _resetLogCache();
     // Reset store state to initial between tests
     useRunStore.setState(initialState);
   });
@@ -616,6 +627,132 @@ describe("runStore", () => {
 
       // All events recorded
       expect(useRunStore.getState().recentEvents).toHaveLength(5);
+    });
+  });
+
+  // ── LRU log cache eviction ─────────────────────────────
+
+  describe("LRU log cache eviction", () => {
+    it("should report the correct cache size after appending logs", () => {
+      useRunStore.getState().appendLog("run-a", "Line A");
+      useRunStore.getState().appendLog("run-b", "Line B");
+      useRunStore.getState().appendLog("run-c", "Line C");
+
+      expect(_getLogCacheSize()).toBe(3);
+    });
+
+    it("should expose MAX_BUFFERED_RUNS as 20", () => {
+      expect(_MAX_BUFFERED_RUNS).toBe(20);
+    });
+
+    it("should evict LRU run logs when exceeding MAX_BUFFERED_RUNS", async () => {
+      const { appendLog } = useRunStore.getState();
+
+      // Fill exactly to capacity
+      for (let i = 0; i < _MAX_BUFFERED_RUNS; i++) {
+        appendLog(`run-${i}`, `Line from run ${i}`);
+      }
+      expect(_getLogCacheSize()).toBe(_MAX_BUFFERED_RUNS);
+      expect(useRunStore.getState().runLogs["run-0"]).toBeDefined();
+
+      // Add one more — should evict "run-0" (the LRU)
+      appendLog("run-overflow", "I caused eviction");
+
+      expect(_getLogCacheSize()).toBe(_MAX_BUFFERED_RUNS);
+      // Zustand state cleanup is deferred via queueMicrotask
+      await flushMicrotasks();
+      // run-0's log data should be cleaned up from Zustand state
+      expect(useRunStore.getState().runLogs["run-0"]).toBeUndefined();
+      expect(useRunStore.getState().runLogOverflow["run-0"]).toBeUndefined();
+      // The new run and recent runs should still have their logs
+      expect(useRunStore.getState().runLogs["run-overflow"]).toEqual(["I caused eviction"]);
+      expect(useRunStore.getState().runLogs[`run-${_MAX_BUFFERED_RUNS - 1}`]).toBeDefined();
+    });
+
+    it("should promote a run on access, evicting a different LRU entry", async () => {
+      const { appendLog } = useRunStore.getState();
+
+      // Fill to capacity: run-0 through run-19
+      for (let i = 0; i < _MAX_BUFFERED_RUNS; i++) {
+        appendLog(`run-${i}`, `Line ${i}`);
+      }
+
+      // Access run-0 to promote it (makes run-1 the new LRU)
+      appendLog("run-0", "Promoted line");
+
+      // Add a new run — should evict run-1 (not run-0)
+      appendLog("run-new", "New run");
+
+      await flushMicrotasks();
+      expect(useRunStore.getState().runLogs["run-0"]).toBeDefined();
+      expect(useRunStore.getState().runLogs["run-1"]).toBeUndefined();
+      expect(useRunStore.getState().runLogs["run-new"]).toEqual(["New run"]);
+    });
+
+    it("should clean up overflow tracking on eviction", async () => {
+      const { appendLog } = useRunStore.getState();
+
+      // Create a run and verify overflow starts at 0
+      appendLog("run-evictable", "Some log");
+      expect(useRunStore.getState().runLogOverflow["run-evictable"]).toBe(0);
+
+      // Fill to capacity with other runs to push "run-evictable" out
+      for (let i = 0; i < _MAX_BUFFERED_RUNS; i++) {
+        appendLog(`filler-${i}`, `Filler line ${i}`);
+      }
+
+      await flushMicrotasks();
+      // run-evictable should be evicted and its overflow cleaned up
+      expect(useRunStore.getState().runLogOverflow["run-evictable"]).toBeUndefined();
+    });
+
+    it("should not affect activeRuns or runTodos on eviction", async () => {
+      const { appendLog, appendTodo } = useRunStore.getState();
+
+      // Set up a run with active status and todos
+      useRunStore.setState({
+        activeRuns: { "run-0": "in_progress" },
+      });
+      appendLog("run-0", "Log line");
+      appendTodo("run-0", [makeTodoItem({ content: "Do something" })]);
+
+      // Fill beyond capacity to evict run-0's logs
+      for (let i = 1; i <= _MAX_BUFFERED_RUNS; i++) {
+        appendLog(`run-${i}`, `Line ${i}`);
+      }
+
+      await flushMicrotasks();
+      // Logs evicted, but active status and todos remain
+      expect(useRunStore.getState().runLogs["run-0"]).toBeUndefined();
+      expect(useRunStore.getState().activeRuns["run-0"]).toBe("in_progress");
+      expect(useRunStore.getState().runTodos["run-0"]).toHaveLength(1);
+    });
+
+    it("should handle re-creating a buffer for a previously evicted run", async () => {
+      const { appendLog } = useRunStore.getState();
+
+      // Add a run, fill cache to evict it, then re-add
+      appendLog("run-0", "Original line");
+      for (let i = 1; i <= _MAX_BUFFERED_RUNS; i++) {
+        appendLog(`run-${i}`, `Line ${i}`);
+      }
+
+      await flushMicrotasks();
+      // run-0 was evicted
+      expect(useRunStore.getState().runLogs["run-0"]).toBeUndefined();
+
+      // Re-create it — should work fine with a fresh buffer
+      appendLog("run-0", "Reborn line");
+      expect(useRunStore.getState().runLogs["run-0"]).toEqual(["Reborn line"]);
+    });
+
+    it("should reset cache size to 0 after _resetLogCache()", () => {
+      useRunStore.getState().appendLog("run-a", "Line");
+      useRunStore.getState().appendLog("run-b", "Line");
+      expect(_getLogCacheSize()).toBe(2);
+
+      _resetLogCache();
+      expect(_getLogCacheSize()).toBe(0);
     });
   });
 });
