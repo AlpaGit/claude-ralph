@@ -1,0 +1,109 @@
+/*
+ * Design tokens for Ralph Desktop Orchestrator.
+ * Import this file before any component styles.
+ * All CSS custom properties are defined here to centralize the design system.
+ */
+
+:root {
+  /* ── Fonts ─────────────────────────────────────────────── */
+  --font-sans: "Space Grotesk", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* ── Core palette ──────────────────────────────────────── */
+  --color-bg-a: #f4efdf;
+  --color-bg-b: #d7dde5;
+  --color-panel: #f9f7f0;
+  --color-panel-border: #141414;
+  --color-text: #101010;
+  --color-muted: #4f4f4f;
+  --color-accent: #e54828;
+  --color-accent-2: #156f67;
+  --color-white: #fff;
+  --color-black: #000;
+
+  /* ── Background gradient spots ─────────────────────────── */
+  --color-gradient-warm: #fff5d4;
+  --color-gradient-cool: #c8f0e2;
+
+  /* ── Hero ───────────────────────────────────────────────── */
+  --color-hero-gradient-start: #f3eada;
+  --color-hero-gradient-end: #f7f5ed;
+
+  /* ── Surfaces ──────────────────────────────────────────── */
+  --color-surface: #fff;
+  --color-surface-warm: #fffefa;
+  --color-surface-cool: #f9fbff;
+  --color-surface-task: #fffdfa;
+
+  /* ── Neutral borders / muted lines ─────────────────────── */
+  --color-border-dark: #1a1a1a;
+  --color-border-input: #191919;
+  --color-border-btn: #111;
+  --color-border-mid: #212121;
+  --color-border-soft: #d4d4d4;
+  --color-border-dashed: #7c7c7c;
+  --color-border-dashed-alt: #6e6e6e;
+  --color-border-event: #999;
+
+  /* ── Wizard / active states ────────────────────────────── */
+  --color-wizard-active-bg: #e9f9f4;
+  --color-wizard-active-border: #0f766e;
+
+  /* ── Thinking / discovery ──────────────────────────────── */
+  --color-thinking-text: #0f4f4a;
+  --color-thinking-pulse: #14b8a6;
+  --color-thinking-dots: #0f766e;
+
+  /* ── Status badge backgrounds ──────────────────────────── */
+  --color-status-pending-bg: #eceff1;
+  --color-status-in-progress-bg: #fde68a;
+  --color-status-completed-bg: #bbf7d0;
+  --color-status-failed-bg: #fecaca;
+  --color-status-cancelled-bg: #dbeafe;
+
+  /* ── Semantic status (text / semantic) ─────────────────── */
+  --color-pending: #6b7280;
+  --color-in-progress: #d97706;
+  --color-completed: #15803d;
+  --color-failed: #b91c1c;
+
+  /* ── Feedback ──────────────────────────────────────────── */
+  --color-error: #b91c1c;
+  --color-error-bg: #fee2e2;
+  --color-warning: #b45309;
+  --color-danger: #ef4444;
+
+  /* ── Log box ───────────────────────────────────────────── */
+  --color-log-bg: #111;
+  --color-log-border: #222;
+  --color-log-text: #e6e6e6;
+
+  /* ── Border radius ─────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-panel: 14px;
+  --radius-lg: 16px;
+  --radius-card: 12px;
+  --radius-pill: 100px;
+  --radius-circle: 999px;
+
+  /* ── Box shadows ───────────────────────────────────────── */
+  --shadow-hero: 6px 6px 0 var(--color-black);
+  --shadow-panel: 5px 5px 0 var(--color-black);
+
+  /* ── Transitions ───────────────────────────────────────── */
+  --transition-fast: 100ms ease-in-out;
+
+  /* ── Spacing (common repeated values) ──────────────────── */
+  --space-xs: 0.2rem;
+  --space-sm: 0.45rem;
+  --space-md: 0.7rem;
+  --space-lg: 1rem;
+  --space-xl: 1.25rem;
+
+  /* ── Opacity ───────────────────────────────────────────── */
+  --opacity-disabled: 0.5;
+
+  /* ── Layout ────────────────────────────────────────────── */
+  --max-width-app: 1500px;
+}
