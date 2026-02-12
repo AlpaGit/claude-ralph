@@ -1605,3 +1605,50 @@ Z-index hierarchy verified and documented: modals (1000-1001) < fullscreen log v
 
 **Notes**:
 Created docs/TROUBLESHOOTING.md with a complete toast notification troubleshooting section. Covers: z-index architecture with ASCII stack diagram and source file table, 5 common failure modes with symptoms/root-cause/diagnosis/fix for each (invisible toasts behind overlays, missing Toaster container, premature dismissal, wrong styling, production build issues), step-by-step verification instructions (manual DevTools check, DOM inspection, automated test commands), guidelines for adding new overlay layers safely, and toastService API reference with all active call sites. All z-index values and file paths reference the actual implementation.
+
+## disc-005 — Build UQuestionBatch container component with batch transitions
+**Status**: Done
+**Files changed**:
+- src/renderer/components/ui/UQuestionBatch.tsx (rewritten — all-at-once batch layout replacing step-by-step wizard)
+- src/renderer/components/ui/UQuestionBatch.module.css (rewritten — staggered slideInLeft animation, skip controls, batch footer)
+
+**Notes**:
+Rewrote UQuestionBatch from a step-by-step single-question wizard into an all-at-once batch container that renders all questions (typically 3) simultaneously. Each question is a QuestionBlock sub-component with: question header + Q-number badge, reason text, selection mode hint, UOptionCard grid (predefined options + "Other" free-text fallback), and per-question skip button. Skipped questions show a "Skipped" badge and dim with pointer-events disabled on the options grid. Submit Batch footer shows answered/skipped counts and a UButton primary variant. CSS animations: @keyframes slideInLeft (translateX 30px → 0, opacity 0 → 1, 300ms ease-out) with staggered delays (0ms/100ms/200ms per nth-child). @media prefers-reduced-motion disables animations. Props interface: { questions, answers (AnswerMap), skippedQuestions, onAnswer, onSkip, onSubmitBatch, isSubmitting, className }. Multi-select answers parsed from JSON-stringified arrays. Build and typecheck pass.
+
+---
+
+### disc-004: Build UOptionCard and UProgressHeader UI components   [DONE]
+
+**Status**: Done
+**Files changed**:
+- src/renderer/components/ui/UOptionCard.tsx (already complete — selectable option tile with recommended badge, radio/checkbox indicator, Other free-text reveal)
+- src/renderer/components/ui/UOptionCard.module.css (already complete — selectPulse animation, hover scale, otherReveal animation, brutalist borders)
+- src/renderer/components/ui/UProgressHeader.tsx (already complete — compact batch/question/readiness progress indicator with stat chips and bar)
+- src/renderer/components/ui/UProgressHeader.module.css (already complete — smooth width transition, chipComplete state, token-referenced styling)
+- src/renderer/components/ui.ts (already complete — barrel exports for UOptionCard, OTHER_OPTION_VALUE, UOptionCardProps, UProgressHeader, UProgressHeaderProps)
+
+**Notes**:
+Both components were already fully implemented in prior work. Verified all task requirements are met:
+UOptionCard: Props { value, label, isRecommended, isSelected, selectionMode ('single'|'multi'), onSelect, onOtherText, disabled, className }. "Other" option identified by OTHER_OPTION_VALUE="__other__" sentinel. Radio indicator (circle) for single, checkbox (checkmark) for multi. Recommended badge absolute-positioned top-right with pill radius. CSS: .card with 2px solid border, padding, cursor:pointer; .card:hover with transform:scale(1.02); .selected with border-color/background change + animation: selectPulse 0.3s ease-out (box-shadow pulse); .otherInput with @keyframes otherReveal (0.2s slide-up fade-in); focus-visible outline for accessibility. All values reference tokens.css custom properties.
+UProgressHeader: Props { batchNumber, questionsAnswered, totalQuestions, readinessScore, className }. Rendered as compact bar with stat chips (Batch #, answered/total, % ready) and progress track. Progress bar uses 400ms cubic-bezier width transition. Complete state (≥85%) changes chip color to --color-completed and fill to green. role="progressbar" with aria-valuenow/min/max for accessibility.
+Build and typecheck pass.
+
+---
+
+### disc-006: Refactor DiscoveryView.tsx for batched multi-choice rendering   [DONE]
+
+**Status**: Done
+**Files changed**:
+- src/renderer/views/DiscoveryView.module.css (removed orphaned old question-card CSS classes: .questionsCard, .questionList, .questionItem, .questionText, .questionReason, .noQuestions — these were leftover from the pre-batch UTextArea-based question list and are no longer referenced)
+
+**Notes**:
+DiscoveryView.tsx was already fully refactored in prior dependency tasks (disc-002 through disc-005). Verified all disc-006 requirements are met:
+(1) UQuestionBatch and UProgressHeader imported (lines 12-13).
+(2) Old UTextArea-based question mapping replaced with <UQuestionBatch questions={interview.questions} answers={answerMap} skippedQuestions={skippedQuestions} onAnswer={setAnswer} onSkip={skipQuestion} onSubmitBatch={handleSubmitBatch} isSubmitting={loading} />.
+(3) <UProgressHeader> placed above status card with batchNumber={interview.round}, questionsAnswered={currentRoundAnswered}, totalQuestions={interview.questions.length}, readinessScore={interview.readinessScore}.
+(4) Handlers wired: onAnswer → store.setAnswer, onSkip → store.skipQuestion, onSubmitBatch → store.submitBatch (via handleSubmitBatch callback).
+(5) Specialist progress tracker continues to display during batch submission loading (feedback panel renders when loading || events.length > 0).
+(6) Old 'Submit Answers And Continue' button logic fully replaced by UQuestionBatch's built-in Submit Batch footer.
+(7) currentRoundAnswered memoised computation updated: counts questions with non-empty answers excluding skipped IDs from skippedQuestions array.
+CSS cleanup: removed 6 orphaned class definitions (48 lines) that were left over from the old question-card rendering pattern.
+Build and typecheck pass.

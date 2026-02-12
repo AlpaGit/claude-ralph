@@ -266,7 +266,7 @@ test.describe("Plan CRUD flow", () => {
     await appPage.waitForLoadState("domcontentloaded");
 
     // The plan list view should be visible (route: /)
-    const heading = appPage.locator("h1").filter({ hasText: "Plans" });
+    const heading = appPage.locator("h1").filter({ hasText: "Projects" });
     await expect(heading).toBeVisible({ timeout: 15_000 });
 
     // Initially, the empty state should be visible since no plans exist
@@ -284,7 +284,7 @@ test.describe("Plan CRUD flow", () => {
     await appPage.waitForLoadState("domcontentloaded");
 
     // Wait for the plan list to load
-    const heading = appPage.locator("h1").filter({ hasText: "Plans" });
+    const heading = appPage.locator("h1").filter({ hasText: "Projects" });
     await expect(heading).toBeVisible({ timeout: 15_000 });
 
     // The seeded plan card should appear

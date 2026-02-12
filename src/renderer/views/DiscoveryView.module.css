@@ -463,55 +463,6 @@
   line-height: 1.5;
 }
 
-/* ── Question cards ───────────────────────────────────── */
-
-.questionsCard {
-  border: 2px solid var(--color-panel-border);
-  border-radius: var(--radius-panel);
-  background: var(--color-panel);
-  box-shadow: var(--shadow-panel);
-  padding: var(--space-lg);
-  display: grid;
-  gap: var(--space-md);
-}
-
-.questionsCard h3 {
-  margin: 0;
-}
-
-.questionList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-md);
-}
-
-.questionItem {
-  border: 1px dashed var(--color-panel-border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-md);
-  display: grid;
-  gap: var(--space-xs);
-}
-
-.questionText {
-  font-weight: 700;
-  font-size: 0.92rem;
-}
-
-.questionReason {
-  color: var(--color-muted);
-  font-size: 0.82rem;
-  margin: 0;
-}
-
-.noQuestions {
-  color: var(--color-muted);
-  font-size: 0.9rem;
-  margin: 0;
-}
-
 /* ── Missing critical info ────────────────────────────── */
 
 .missingCard {

@@ -769,7 +769,7 @@ test.describe("Discovery interview flow", () => {
 
     // Should navigate to the plan list view (/)
     await appPage.waitForTimeout(500);
-    const plansHeading = appPage.locator("h1").filter({ hasText: "Plans" });
+    const plansHeading = appPage.locator("h1").filter({ hasText: "Projects" });
     await expect(plansHeading).toBeVisible({ timeout: 10_000 });
   });
 });
@@ -804,7 +804,7 @@ test.describe("Discovery resume flow", () => {
     await page1.waitForLoadState("domcontentloaded");
 
     // Wait for initial rendering
-    const heading1 = page1.locator("h1").filter({ hasText: "Plans" });
+    const heading1 = page1.locator("h1").filter({ hasText: "Projects" });
     await expect(heading1).toBeVisible({ timeout: 15_000 });
 
     // Mock discovery handlers for app1
@@ -943,7 +943,7 @@ test.describe("Discovery resume flow", () => {
     await page2.waitForLoadState("domcontentloaded");
 
     // Wait for initial rendering
-    const heading2 = page2.locator("h1").filter({ hasText: "Plans" });
+    const heading2 = page2.locator("h1").filter({ hasText: "Projects" });
     await expect(heading2).toBeVisible({ timeout: 15_000 });
 
     // Mock discovery handlers for app2

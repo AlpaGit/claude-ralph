@@ -59,7 +59,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Plans", end: true },
+  { to: "/", label: "Projects", end: true },
   { to: "/discovery", label: "Discovery", shortcutHint: "Ctrl+N" },
   { to: "/project-memory", label: "Project Memory" },
   { to: "/settings", label: "Settings", shortcutHint: "Ctrl+," },
@@ -115,8 +115,8 @@ export interface SidebarProps {
  *
  * Shows:
  * - App logo / title at top
- * - Navigation links (Plans, Discovery, Settings)
- * - Collapsible plan list below the Plans link showing recent plans with status pills
+ * - Navigation links (Projects, Discovery, Settings)
+ * - Collapsible plan list below the Projects link showing recent plans with status pills
  * - "New Plan" button
  * - Collapse / expand toggle
  *
@@ -186,8 +186,8 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
               {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
             </NavLink>
 
-            {/* ── Plan list (below Plans link) ─────────────── */}
-            {item.label === "Plans" && !collapsed && plansList.length > 0 && (
+            {/* ── Plan list (below Projects link) ──────────── */}
+            {item.to === "/" && !collapsed && plansList.length > 0 && (
               <div className={styles.planSection}>
                 <button
                   type="button"
@@ -225,7 +225,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
             )}
 
             {/* Collapsed plan dots */}
-            {item.label === "Plans" && collapsed && plansList.length > 0 && (
+            {item.to === "/" && collapsed && plansList.length > 0 && (
               <div className={styles.planListCollapsed}>
                 {plansList.slice(0, 5).map((plan) => (
                   <PlanListItem

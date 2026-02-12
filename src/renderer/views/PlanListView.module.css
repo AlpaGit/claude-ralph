@@ -1,5 +1,4 @@
-/* PlanListView -- list of plan cards with search filtering, archive toggle,
-   and per-card delete/archive actions */
+/* PlanListView -- project-first plan browser with search/filter and plan actions */
 
 .view {
   padding: var(--space-lg);
@@ -120,6 +119,64 @@
   display: grid;
   gap: var(--space-lg);
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+/* ── Project sections ────────────────────────────────────── */
+
+.projectSections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.projectSection {
+  border: 2px solid var(--color-border-soft);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.projectHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px dashed var(--color-border-dashed);
+}
+
+.projectInfo {
+  min-width: 0;
+}
+
+.projectTitle {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.projectPath {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+.projectCount {
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 /* ── Individual plan card ───────────────────────────────── */
@@ -372,5 +429,10 @@
 
   .searchInput {
     max-width: 100%;
+  }
+
+  .projectHeader {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

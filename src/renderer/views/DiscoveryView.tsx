@@ -9,6 +9,8 @@ import { UInput } from "../components/UInput/UInput";
 import { UTextArea } from "../components/UTextArea/UTextArea";
 import { UStatusPill } from "../components/UStatusPill/UStatusPill";
 import { USkeleton } from "../components/USkeleton/USkeleton";
+import { UQuestionBatch } from "../components/ui/UQuestionBatch";
+import { UProgressHeader } from "../components/ui/UProgressHeader";
 import { toastService } from "../services/toastService";
 import styles from "./DiscoveryView.module.css";
 
@@ -55,12 +57,12 @@ function extractSpecialistId(event: DiscoveryEvent): string | null {
   }
 
   const startMatch = event.message.match(
-    /^Starting specialist agent:\s(.+)$/
+    /^Starting (?:specialist|analysis) agent:\s(.+)$/
   );
   if (startMatch) return startMatch[1].trim();
 
   const completeMatch = event.message.match(
-    /^Completed specialist agent:\s(.+?)(\s\(|$)/
+    /^Completed (?:specialist|analysis) agent:\s(.+?)(\s\(|$)/
   );
   if (completeMatch) return completeMatch[1].trim();
 
@@ -98,6 +100,9 @@ export function DiscoveryView(): JSX.Element {
   const creatingPlan = usePlanStore((s) => s.creating);
   const createPlan = usePlanStore((s) => s.createPlan);
 
+  // ── Batch state slices ─────────────────────────────────
+  const skippedQuestions = useDiscoveryStore((s) => s.skippedQuestions);
+
   // ── Session management slices ───────────────────────
   const activeSessions = useDiscoveryStore((s) => s.activeSessions);
   const checkingSessions = useDiscoveryStore((s) => s.checkingSessions);
@@ -108,8 +113,9 @@ export function DiscoveryView(): JSX.Element {
   const setAdditionalContext = useDiscoveryStore((s) => s.setAdditionalContext);
   const setAnswer = useDiscoveryStore((s) => s.setAnswer);
   const setCopyNotice = useDiscoveryStore((s) => s.setCopyNotice);
+  const skipQuestion = useDiscoveryStore((s) => s.skipQuestion);
+  const submitBatch = useDiscoveryStore((s) => s.submitBatch);
   const startDiscovery = useDiscoveryStore((s) => s.startDiscovery);
-  const continueDiscovery = useDiscoveryStore((s) => s.continueDiscovery);
   const checkActiveSessions = useDiscoveryStore((s) => s.checkActiveSessions);
   const resumeSession = useDiscoveryStore((s) => s.resumeSession);
   const abandonSession = useDiscoveryStore((s) => s.abandonSession);
@@ -168,9 +174,11 @@ export function DiscoveryView(): JSX.Element {
   const currentRoundAnswered = useMemo(() => {
     if (!interview) return 0;
     return interview.questions.filter(
-      (q) => (answerMap[q.id] ?? "").trim().length > 0
+      (q) =>
+        (answerMap[q.id] ?? "").trim().length > 0 &&
+        !skippedQuestions.includes(q.id)
     ).length;
-  }, [answerMap, interview]);
+  }, [answerMap, interview, skippedQuestions]);
 
   const liveFeedbackText = useMemo(() => {
     if (events.length === 0) return "Waiting for AI feedback...";
@@ -195,8 +203,18 @@ export function DiscoveryView(): JSX.Element {
     for (const event of events) {
       const id = extractSpecialistId(event);
       if (!id) continue;
-      if (event.message.startsWith("Starting specialist agent:")) started.add(id);
-      if (event.message.startsWith("Completed specialist agent:")) completed.add(id);
+      if (
+        event.message.startsWith("Starting specialist agent:")
+        || event.message.startsWith("Starting analysis agent:")
+      ) {
+        started.add(id);
+      }
+      if (
+        event.message.startsWith("Completed specialist agent:")
+        || event.message.startsWith("Completed analysis agent:")
+      ) {
+        completed.add(id);
+      }
     }
     return {
       started: started.size,
@@ -212,12 +230,12 @@ export function DiscoveryView(): JSX.Element {
       return `Last discovery cycle finished in ${formatDuration(lastDiscoveryDurationSec)}.`;
     }
     if (events.length === 0)
-      return "Booting discovery runtime and preparing specialist jobs...";
+      return "Booting discovery runtime and preparing dynamic analysis jobs...";
     if (secondsSinceLastEvent === null) return "Waiting for first runtime event...";
     if (secondsSinceLastEvent <= 8)
-      return "Actively receiving updates from AI specialists.";
+      return "Actively receiving updates from AI analysis agents.";
     if (secondsSinceLastEvent <= 25)
-      return "Still working. A specialist is likely processing a longer step.";
+      return "Still working. An analysis agent is likely processing a longer step.";
     return "Long-running analysis in progress. This is normal for deep codebase scans.";
   }, [loading, lastDiscoveryDurationSec, events.length, secondsSinceLastEvent]);
 
@@ -231,9 +249,9 @@ export function DiscoveryView(): JSX.Element {
     void startDiscovery();
   };
 
-  const handleContinueDiscovery = (): void => {
-    void continueDiscovery();
-  };
+  const handleSubmitBatch = useCallback((): void => {
+    void submitBatch();
+  }, [submitBatch]);
 
   const handleCreatePlanFromExistingPrd = (): void => {
     const prd = existingPrdInput.trim();
@@ -342,10 +360,10 @@ export function DiscoveryView(): JSX.Element {
         <div>
           <h2>Interactive PRD Discovery</h2>
           <p className={styles.headerNotice}>
-            Write one short goal sentence. AI specialists will inspect the project
+            Write one short goal sentence. AI analysis agents will inspect the project
             (if path is set), ask detailed questions, and build a ready-to-use PRD
-            input draft. Add <code>/refresh-stack</code> in context/answers to
-            force a stack re-analysis only when needed.
+            input draft. Add <code>/refresh-stack</code> (or <code>/refresh-context</code>)
+            in context/answers only when you want a full refresh.
           </p>
         </div>
 
@@ -356,7 +374,7 @@ export function DiscoveryView(): JSX.Element {
             value={projectPath}
             onChange={(e) => setProjectPath(e.target.value)}
             placeholder="C:\\path\\to\\repo"
-            helperText="Set this to let specialists inspect the current codebase directly."
+            helperText="Set this to let discovery analysis agents inspect the current codebase directly."
           />
 
           <UTextArea
@@ -451,7 +469,7 @@ export function DiscoveryView(): JSX.Element {
               </div>
             </div>
             <p className={styles.discoverySkeletonNotice}>
-              Specialist agents are analyzing the project. Results will stream in shortly.
+              Dynamic analysis agents are analyzing the project. Results will stream in shortly.
             </p>
           </div>
         ) : null}
@@ -496,7 +514,7 @@ export function DiscoveryView(): JSX.Element {
                   : `Last update: ${secondsSinceLastEvent}s ago`}
               </span>
               <span>
-                Specialists: {specialistProgress.completed}/
+                Agents: {specialistProgress.completed}/
                 {Math.max(
                   specialistProgress.started,
                   specialistProgress.completed
@@ -572,6 +590,14 @@ export function DiscoveryView(): JSX.Element {
         {/* ── Interview state panels ──────────────────── */}
         {interview ? (
           <>
+            {/* Progress header */}
+            <UProgressHeader
+              batchNumber={interview.round}
+              questionsAnswered={currentRoundAnswered}
+              totalQuestions={interview.questions.length}
+              readinessScore={interview.readinessScore}
+            />
+
             {/* Status card */}
             <div className={styles.statusCard}>
               <div className={styles.statusHeader}>
@@ -642,37 +668,16 @@ export function DiscoveryView(): JSX.Element {
               ) : null}
             </div>
 
-            {/* Question cards */}
-            <div className={styles.questionsCard}>
-              <h3>Detailed Questions</h3>
-              {interview.questions.length > 0 ? (
-                <ul className={styles.questionList}>
-                  {interview.questions.map((question) => (
-                    <li key={question.id} className={styles.questionItem}>
-                      <div className={styles.questionText}>
-                        {question.question}
-                      </div>
-                      <p className={styles.questionReason}>
-                        Why this matters: {question.reason}
-                      </p>
-                      <UTextArea
-                        value={answerMap[question.id] ?? ""}
-                        onChange={(e) =>
-                          setAnswer(question.id, e.target.value)
-                        }
-                        placeholder="Your answer..."
-                        autoResize
-                      />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className={styles.noQuestions}>
-                  No more questions right now. The draft is likely ready for
-                  planning.
-                </p>
-              )}
-            </div>
+            {/* Batched question cards */}
+            <UQuestionBatch
+              questions={interview.questions}
+              answers={answerMap}
+              skippedQuestions={skippedQuestions}
+              onAnswer={setAnswer}
+              onSkip={skipQuestion}
+              onSubmitBatch={handleSubmitBatch}
+              isSubmitting={loading}
+            />
 
             {/* Missing critical info */}
             {interview.missingCriticalInfo.length > 0 ? (
@@ -688,16 +693,6 @@ export function DiscoveryView(): JSX.Element {
 
             {/* Bottom actions */}
             <div className={styles.bottomActions}>
-              <UButton
-                variant="secondary"
-                onClick={handleContinueDiscovery}
-                loading={loading}
-                disabled={loading || interview.questions.length === 0}
-              >
-                {loading
-                  ? "Updating Discovery..."
-                  : "Submit Answers And Continue"}
-              </UButton>
               <UButton variant="primary" onClick={handleUsePlanInput}>
                 Use as Plan Input
               </UButton>

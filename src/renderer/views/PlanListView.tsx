@@ -59,6 +59,13 @@ function truncatePath(path: string, segments: number = 2): string {
   return ".../" + parts.slice(-segments).join("/");
 }
 
+function projectDisplayName(path: string): string {
+  const normalized = path.replace(/\\/g, "/").trim();
+  if (normalized.length === 0) return "Unassigned Project";
+  const parts = normalized.split("/").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : normalized;
+}
+
 /**
  * Simple class name joiner.
  */
@@ -72,6 +79,14 @@ interface ConfirmState {
   type: "delete" | "archive" | "unarchive";
   planId: string;
   planSummary: string;
+}
+
+interface ProjectPlanGroup {
+  key: string;
+  projectPath: string;
+  displayName: string;
+  plans: PlanSummary[];
+  newestPlanMs: number;
 }
 
 /* ── Component ─────────────────────────────────────────── */
@@ -169,6 +184,47 @@ export function PlanListView(): JSX.Element {
     );
   }, [plansList, debouncedSearch]);
 
+  const projectGroups = useMemo((): ProjectPlanGroup[] => {
+    const groups = new Map<string, ProjectPlanGroup>();
+    for (const plan of filteredPlans) {
+      const trimmedPath = plan.projectPath.trim();
+      const key = trimmedPath.length > 0 ? trimmedPath : "__unassigned_project__";
+      const createdMs = Number.isFinite(new Date(plan.createdAt).getTime())
+        ? new Date(plan.createdAt).getTime()
+        : 0;
+
+      const existing = groups.get(key);
+      if (existing) {
+        existing.plans.push(plan);
+        existing.newestPlanMs = Math.max(existing.newestPlanMs, createdMs);
+      } else {
+        groups.set(key, {
+          key,
+          projectPath: trimmedPath,
+          displayName: projectDisplayName(trimmedPath),
+          plans: [plan],
+          newestPlanMs: createdMs
+        });
+      }
+    }
+
+    const result = Array.from(groups.values());
+    for (const group of result) {
+      group.plans.sort((a, b) => {
+        const aMs = Number.isFinite(new Date(a.createdAt).getTime()) ? new Date(a.createdAt).getTime() : 0;
+        const bMs = Number.isFinite(new Date(b.createdAt).getTime()) ? new Date(b.createdAt).getTime() : 0;
+        return bMs - aMs;
+      });
+    }
+
+    result.sort((a, b) => {
+      if (a.newestPlanMs !== b.newestPlanMs) return b.newestPlanMs - a.newestPlanMs;
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    return result;
+  }, [filteredPlans]);
+
   /* ── Navigation callback ─────────────────────────────── */
   const handleCardClick = useCallback(
     (planId: string) => {
@@ -254,7 +310,7 @@ export function PlanListView(): JSX.Element {
     return (
       <section className={styles.view}>
         <div className={styles.header}>
-          <h1 className={styles.title}>Plans</h1>
+          <h1 className={styles.title}>Projects</h1>
         </div>
         <div className={styles.skeletonStack}>
           {Array.from({ length: 4 }, (_, i) => (
@@ -280,7 +336,7 @@ export function PlanListView(): JSX.Element {
     return (
       <section className={styles.view}>
         <div className={styles.header}>
-          <h1 className={styles.title}>Plans</h1>
+          <h1 className={styles.title}>Projects</h1>
         </div>
         <div className={styles.errorPanel}>
           <p>{error}</p>
@@ -293,7 +349,7 @@ export function PlanListView(): JSX.Element {
   return (
     <section className={styles.view}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Plans</h1>
+        <h1 className={styles.title}>Projects</h1>
         <button
           type="button"
           className={styles.createPlanBtn}
@@ -335,7 +391,8 @@ export function PlanListView(): JSX.Element {
       {debouncedSearch.trim().length > 0 ? (
         <p className={styles.matchCount}>
           {filteredPlans.length} of {plansList.length} plan
-          {plansList.length !== 1 ? "s" : ""} matching
+          {plansList.length !== 1 ? "s" : ""} across {projectGroups.length} project
+          {projectGroups.length !== 1 ? "s" : ""} matching
         </p>
       ) : null}
 
@@ -343,11 +400,11 @@ export function PlanListView(): JSX.Element {
       {plansList.length === 0 && !loadingList ? (
         <div className={styles.emptyState}>
           <h3 className={styles.emptyTitle}>
-            {showArchived ? "No archived plans" : "No plans yet"}
+            {showArchived ? "No archived projects" : "No projects yet"}
           </h3>
           <p className={styles.emptyText}>
             {showArchived
-              ? "Archived plans will appear here."
+              ? "Archived project plans will appear here."
               : "Create a plan by running Discovery or importing PRD text."}
           </p>
           {!showArchived ? (
@@ -365,65 +422,83 @@ export function PlanListView(): JSX.Element {
       {/* No matches from search */}
       {filteredPlans.length === 0 && debouncedSearch.trim().length > 0 && plansList.length > 0 ? (
         <div className={styles.emptyState}>
-          <h3 className={styles.emptyTitle}>No matching plans</h3>
-          <p className={styles.emptyText}>Try a different search term.</p>
+          <h3 className={styles.emptyTitle}>No matching projects or plans</h3>
+          <p className={styles.emptyText}>Try a different project path or plan summary term.</p>
         </div>
       ) : null}
 
-      {/* Plan cards grid */}
-      <div className={styles.cardGrid}>
-        {filteredPlans.map((plan) => (
-          <div
-            key={plan.id}
-            className={cn(styles.planCard, plan.archivedAt && styles.planCardArchived)}
-            role="button"
-            tabIndex={0}
-            onClick={() => handleCardClick(plan.id)}
-            onKeyDown={(e) => handleCardKeyDown(plan.id, e)}
-            aria-label={`Open plan: ${plan.summary}`}
-          >
-            <div className={styles.planCardHeader}>
-              <p className={styles.planSummary}>{plan.summary}</p>
-              <div className={styles.statusRow}>
-                <UStatusPill status={plan.status} />
-                {plan.archivedAt ? (
-                  <span className={styles.archivedBadge}>Archived</span>
-                ) : null}
+      {/* Project-first flow: each project section contains its associated plans */}
+      <div className={styles.projectSections}>
+        {projectGroups.map((group) => (
+          <section key={group.key} className={styles.projectSection}>
+            <div className={styles.projectHeader}>
+              <div className={styles.projectInfo}>
+                <h3 className={styles.projectTitle}>{group.displayName}</h3>
+                <p className={styles.projectPath}>
+                  {group.projectPath.length > 0 ? group.projectPath : "No project path provided"}
+                </p>
               </div>
+              <span className={styles.projectCount}>
+                {group.plans.length} plan{group.plans.length !== 1 ? "s" : ""}
+              </span>
             </div>
 
-            <div className={styles.planMeta}>
-              <span className={styles.metaItem}>
-                <span className={styles.metaLabel}>Path:</span>
-                {truncatePath(plan.projectPath)}
-              </span>
-              <span className={styles.metaItem}>
-                <span className={styles.metaLabel}>Created:</span>
-                {shortDate(plan.createdAt)}
-              </span>
-              <span className={styles.metaItem}>{timeAgo(plan.createdAt)}</span>
-            </div>
+            <div className={styles.cardGrid}>
+              {group.plans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={cn(styles.planCard, plan.archivedAt && styles.planCardArchived)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleCardClick(plan.id)}
+                  onKeyDown={(e) => handleCardKeyDown(plan.id, e)}
+                  aria-label={`Open plan: ${plan.summary}`}
+                >
+                  <div className={styles.planCardHeader}>
+                    <p className={styles.planSummary}>{plan.summary}</p>
+                    <div className={styles.statusRow}>
+                      <UStatusPill status={plan.status} />
+                      {plan.archivedAt ? (
+                        <span className={styles.archivedBadge}>Archived</span>
+                      ) : null}
+                    </div>
+                  </div>
 
-            {/* Action buttons */}
-            <div className={styles.cardActions}>
-              <button
-                type="button"
-                className={styles.actionBtn}
-                onClick={(e) => handleArchiveClick(e, plan)}
-                aria-label={plan.archivedAt ? `Unarchive plan: ${plan.summary}` : `Archive plan: ${plan.summary}`}
-              >
-                {plan.archivedAt ? "Unarchive" : "Archive"}
-              </button>
-              <button
-                type="button"
-                className={cn(styles.actionBtn, styles.actionBtnDanger)}
-                onClick={(e) => handleDeleteClick(e, plan)}
-                aria-label={`Delete plan: ${plan.summary}`}
-              >
-                Delete
-              </button>
+                  <div className={styles.planMeta}>
+                    <span className={styles.metaItem}>
+                      <span className={styles.metaLabel}>Path:</span>
+                      {truncatePath(plan.projectPath)}
+                    </span>
+                    <span className={styles.metaItem}>
+                      <span className={styles.metaLabel}>Created:</span>
+                      {shortDate(plan.createdAt)}
+                    </span>
+                    <span className={styles.metaItem}>{timeAgo(plan.createdAt)}</span>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className={styles.cardActions}>
+                    <button
+                      type="button"
+                      className={styles.actionBtn}
+                      onClick={(e) => handleArchiveClick(e, plan)}
+                      aria-label={plan.archivedAt ? `Unarchive plan: ${plan.summary}` : `Archive plan: ${plan.summary}`}
+                    >
+                      {plan.archivedAt ? "Unarchive" : "Archive"}
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(styles.actionBtn, styles.actionBtnDanger)}
+                      onClick={(e) => handleDeleteClick(e, plan)}
+                      aria-label={`Delete plan: ${plan.summary}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          </section>
         ))}
       </div>
 
