@@ -93,8 +93,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         appSettings,
       });
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : "Failed to load settings.";
+      const message = caught instanceof Error ? caught.message : "Failed to load settings.";
       set({ error: message });
     } finally {
       set({ loading: false });
@@ -121,8 +120,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         };
       });
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : "Failed to update model setting.";
+      const message = caught instanceof Error ? caught.message : "Failed to update model setting.";
       set({ error: message });
     }
   },

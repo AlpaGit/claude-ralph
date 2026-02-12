@@ -73,11 +73,11 @@ function getPortalRoot(): HTMLElement {
  */
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
   const selector = [
-    'a[href]',
-    'button:not([disabled])',
-    'textarea:not([disabled])',
-    'input:not([disabled])',
-    'select:not([disabled])',
+    "a[href]",
+    "button:not([disabled])",
+    "textarea:not([disabled])",
+    "input:not([disabled])",
+    "select:not([disabled])",
     '[tabindex]:not([tabindex="-1"])',
   ].join(", ");
   return Array.from(container.querySelectorAll<HTMLElement>(selector));
@@ -152,7 +152,7 @@ export function UModal({
         }
       }
     },
-    [onClose]
+    [onClose],
   );
 
   /* Close on backdrop click (not dialog click) */
@@ -162,7 +162,7 @@ export function UModal({
         onClose();
       }
     },
-    [onClose]
+    [onClose],
   );
 
   if (!open) return null;
@@ -170,11 +170,7 @@ export function UModal({
   const dialogClass = cn(styles.dialog, className);
 
   return createPortal(
-    <div
-      className={styles.backdrop}
-      onClick={handleBackdropClick}
-      aria-hidden="true"
-    >
+    <div className={styles.backdrop} onClick={handleBackdropClick} aria-hidden="true">
       <div
         ref={dialogRef}
         className={dialogClass}
@@ -204,7 +200,7 @@ export function UModal({
         {footer ? <div className={styles.footer}>{footer}</div> : null}
       </div>
     </div>,
-    getPortalRoot()
+    getPortalRoot(),
   );
 }
 
@@ -258,10 +254,7 @@ export function UConfirmModal({
           fontWeight: 700,
           fontFamily: "var(--font-sans)",
           cursor: loading ? "wait" : "pointer",
-          background:
-            confirmVariant === "danger"
-              ? "var(--color-danger)"
-              : "var(--color-accent)",
+          background: confirmVariant === "danger" ? "var(--color-danger)" : "var(--color-accent)",
           color: "var(--color-white)",
           opacity: loading ? 0.5 : 1,
         }}

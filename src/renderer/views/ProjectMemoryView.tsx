@@ -114,7 +114,9 @@ export function ProjectMemoryView(): JSX.Element {
                 <>
                   <p className={styles.stackSummary}>{item.stackProfile.stackSummary}</p>
                   <div className={styles.pillRow}>
-                    <span className={styles.metaPill}>Confidence {Math.round(item.stackProfile.confidence)}%</span>
+                    <span className={styles.metaPill}>
+                      Confidence {Math.round(item.stackProfile.confidence)}%
+                    </span>
                     {item.stackProfile.stackHints.slice(0, 5).map((hint) => (
                       <span key={hint} className={styles.metaPill}>
                         {hint}

@@ -22,7 +22,7 @@ export function UCard({
   headerAction,
   footer,
   className,
-  children
+  children,
 }: UCardProps): JSX.Element {
   const rootClass = className ? `${styles.card} ${className}` : styles.card;
 

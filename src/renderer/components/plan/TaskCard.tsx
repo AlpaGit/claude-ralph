@@ -49,9 +49,8 @@ export function TaskCard({
   onRetryTask,
   onSkipTask,
   onAbortQueue,
-  queueRunning
+  queueRunning,
 }: TaskCardProps): JSX.Element {
-
   return (
     <div className={styles.card}>
       {/* Header: ordinal + title + status pill */}
@@ -99,9 +98,7 @@ export function TaskCard({
         ) : null}
 
         {/* Technical notes */}
-        {task.technicalNotes ? (
-          <p className={styles.notes}>{task.technicalNotes}</p>
-        ) : null}
+        {task.technicalNotes ? <p className={styles.notes}>{task.technicalNotes}</p> : null}
 
         {/* Actions */}
         <div className={styles.actions}>

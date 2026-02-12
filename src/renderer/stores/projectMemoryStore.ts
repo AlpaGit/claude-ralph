@@ -35,7 +35,7 @@ export const useProjectMemoryStore = create<ProjectMemoryState>((set, get) => ({
       const api = getApi();
       const items = await api.listProjectMemory({
         search: search?.trim() || undefined,
-        limitPlans: 6
+        limitPlans: 6,
       });
       set({ items });
     } catch (caught) {
@@ -52,7 +52,7 @@ export const useProjectMemoryStore = create<ProjectMemoryState>((set, get) => ({
       const api = getApi();
       const updated = await api.refreshProjectStackProfile({ projectId });
       set((state) => ({
-        items: state.items.map((item) => (item.projectId === projectId ? updated : item))
+        items: state.items.map((item) => (item.projectId === projectId ? updated : item)),
       }));
       toastService.success(`Stack profile refreshed for ${updated.displayName}.`);
     } catch (caught) {
@@ -68,5 +68,5 @@ export const useProjectMemoryStore = create<ProjectMemoryState>((set, get) => ({
 
   clearError: (): void => {
     set({ error: null, lastIpcError: null });
-  }
+  },
 }));

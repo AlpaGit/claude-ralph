@@ -177,7 +177,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       await api.archivePlan({ planId });
       set((state) => ({
         plansList: state.plansList.map((p) =>
-          p.id === planId ? { ...p, archivedAt: new Date().toISOString() } : p
+          p.id === planId ? { ...p, archivedAt: new Date().toISOString() } : p,
         ),
       }));
       toastService.success("Plan archived.");
@@ -194,9 +194,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       const api = getApi();
       await api.unarchivePlan({ planId });
       set((state) => ({
-        plansList: state.plansList.map((p) =>
-          p.id === planId ? { ...p, archivedAt: null } : p
-        ),
+        plansList: state.plansList.map((p) => (p.id === planId ? { ...p, archivedAt: null } : p)),
       }));
       toastService.success("Plan restored from archive.");
     } catch (caught) {

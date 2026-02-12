@@ -42,10 +42,9 @@ export function success(message: string): string {
 export function error(message: string, details?: IpcError): string {
   // Use custom renderer when we have structured details worth showing
   if (details && hasIpcErrorDetails(details)) {
-    return toast.custom(
-      (t) => createElement(ErrorToast, { t, message, error: details }),
-      { duration: 12000 },
-    );
+    return toast.custom((t) => createElement(ErrorToast, { t, message, error: details }), {
+      duration: 12000,
+    });
   }
 
   return toast.error(message, {

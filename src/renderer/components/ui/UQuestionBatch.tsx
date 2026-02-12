@@ -42,8 +42,7 @@ function parseSelectedOptions(raw: string | undefined): string[] {
   if (raw.startsWith("[")) {
     try {
       const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed))
-        return parsed.filter((v): v is string => typeof v === "string");
+      if (Array.isArray(parsed)) return parsed.filter((v): v is string => typeof v === "string");
     } catch {
       /* fall through — treat as plain string */
     }
@@ -84,9 +83,7 @@ function QuestionBlock({
       // "Other" is selected when the current answer doesn't match any predefined option
       return rawAnswer.length > 0 && !question.options.includes(rawAnswer);
     }
-    return selected.some(
-      (v) => v === OTHER_OPTION_VALUE || v.startsWith("other:"),
-    );
+    return selected.some((v) => v === OTHER_OPTION_VALUE || v.startsWith("other:"));
   }, [rawAnswer, question.options, question.selectionMode, selected]);
 
   /* ── Option select handler ──────────────────────────── */
@@ -102,15 +99,11 @@ function QuestionBlock({
       } else {
         // Multi-select: toggle the option
         if (optionValue === OTHER_OPTION_VALUE) {
-          const hasOther = selected.some(
-            (v) => v === OTHER_OPTION_VALUE || v.startsWith("other:"),
-          );
+          const hasOther = selected.some((v) => v === OTHER_OPTION_VALUE || v.startsWith("other:"));
           if (hasOther) {
             onAnswer(
               question.id,
-              selected.filter(
-                (v) => v !== OTHER_OPTION_VALUE && !v.startsWith("other:"),
-              ),
+              selected.filter((v) => v !== OTHER_OPTION_VALUE && !v.startsWith("other:")),
             );
           } else {
             onAnswer(question.id, [...selected, OTHER_OPTION_VALUE]);
@@ -143,10 +136,7 @@ function QuestionBlock({
         const withoutOther = selected.filter(
           (v) => v !== OTHER_OPTION_VALUE && !v.startsWith("other:"),
         );
-        onAnswer(
-          question.id,
-          [...withoutOther, text ? `other:${text}` : OTHER_OPTION_VALUE],
-        );
+        onAnswer(question.id, [...withoutOther, text ? `other:${text}` : OTHER_OPTION_VALUE]);
       }
     },
     [question, selected, onAnswer, onOtherTextChange],
@@ -178,23 +168,15 @@ function QuestionBlock({
       </div>
 
       {/* Reason */}
-      <p className={styles.questionReason}>
-        Why this matters: {question.reason}
-      </p>
+      <p className={styles.questionReason}>Why this matters: {question.reason}</p>
 
       {/* Selection mode hint */}
       <p className={styles.selectionHint}>
-        {question.selectionMode === "single"
-          ? "Select one"
-          : "Select all that apply"}
+        {question.selectionMode === "single" ? "Select one" : "Select all that apply"}
       </p>
 
       {/* Options grid */}
-      <div
-        className={styles.optionsGrid}
-        role="listbox"
-        aria-label={question.question}
-      >
+      <div className={styles.optionsGrid} role="listbox" aria-label={question.question}>
         {optionsWithOther.map((opt) => {
           const isOther = opt.value === OTHER_OPTION_VALUE;
           const optSelected = isOther
@@ -259,20 +241,15 @@ export function UQuestionBatch({
   // Track free-text "Other" inputs per question (local state, not in store)
   const [otherTexts, setOtherTexts] = useState<Record<string, string>>({});
 
-  const handleOtherTextChange = useCallback(
-    (questionId: string, text: string) => {
-      setOtherTexts((prev) => ({ ...prev, [questionId]: text }));
-    },
-    [],
-  );
+  const handleOtherTextChange = useCallback((questionId: string, text: string) => {
+    setOtherTexts((prev) => ({ ...prev, [questionId]: text }));
+  }, []);
 
   // ── Derived counts ────────────────────────────────────
   const answeredCount = useMemo(
     () =>
       questions.filter(
-        (q) =>
-          !skippedQuestions.includes(q.id) &&
-          (answers[q.id] ?? "").trim().length > 0,
+        (q) => !skippedQuestions.includes(q.id) && (answers[q.id] ?? "").trim().length > 0,
       ).length,
     [questions, answers, skippedQuestions],
   );

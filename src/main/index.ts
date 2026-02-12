@@ -26,8 +26,8 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
-    }
+      sandbox: true,
+    },
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -47,15 +47,14 @@ async function bootstrap(): Promise<void> {
     : join(app.getAppPath(), "resources", "migrations");
 
   // E2E tests pass TEST_DB_PATH to use an isolated temporary database.
-  const dbPath = process.env.TEST_DB_PATH
-    ?? join(app.getPath("userData"), "ralph-desktop.sqlite");
+  const dbPath = process.env.TEST_DB_PATH ?? join(app.getPath("userData"), "ralph-desktop.sqlite");
   const subagentSpawnLogPath =
-    process.env.SUBAGENT_SPAWN_LOG_PATH
-    ?? join(app.getPath("userData"), "logs", "subagent-spawns.log");
+    process.env.SUBAGENT_SPAWN_LOG_PATH ??
+    join(app.getPath("userData"), "logs", "subagent-spawns.log");
 
   database = new AppDatabase(dbPath, migrationsDir);
   taskRunner = new TaskRunner(database, () => mainWindow, {
-    subagentSpawnLogPath
+    subagentSpawnLogPath,
   });
   registerIpcHandlers(taskRunner);
 

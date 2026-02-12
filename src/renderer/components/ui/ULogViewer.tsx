@@ -72,16 +72,25 @@ interface RowProps {
   searchTerm: string;
 }
 
-function RowComponent(props: {
-  ariaAttributes: {
-    "aria-posinset": number;
-    "aria-setsize": number;
-    role: "listitem";
-  };
-  index: number;
-  style: CSSProperties;
-} & RowProps): ReactElement | null {
-  const { index, style: rowStyle, filteredLines, filteredIndices, showLineNumbers, searchTerm } = props;
+function RowComponent(
+  props: {
+    ariaAttributes: {
+      "aria-posinset": number;
+      "aria-setsize": number;
+      role: "listitem";
+    };
+    index: number;
+    style: CSSProperties;
+  } & RowProps,
+): ReactElement | null {
+  const {
+    index,
+    style: rowStyle,
+    filteredLines,
+    filteredIndices,
+    showLineNumbers,
+    searchTerm,
+  } = props;
   const text = stripAnsi(filteredLines[index]);
   const lineNum = filteredIndices[index] + 1; // 1-based
   const isMatch = searchTerm.length > 0;
@@ -162,7 +171,7 @@ export function ULogViewer(props: ULogViewerProps): ReactNode {
   const handleRowsRendered = useCallback(
     (
       _visibleRows: { startIndex: number; stopIndex: number },
-      allRows: { startIndex: number; stopIndex: number }
+      allRows: { startIndex: number; stopIndex: number },
     ) => {
       const atBottom = allRows.stopIndex >= filteredLines.length - 2;
       lastVisibleRowRef.current = allRows.stopIndex;
@@ -170,7 +179,7 @@ export function ULogViewer(props: ULogViewerProps): ReactNode {
         setAutoScroll(false);
       }
     },
-    [autoScroll, filteredLines.length]
+    [autoScroll, filteredLines.length],
   );
 
   /* Scroll to bottom action */
@@ -220,14 +229,11 @@ export function ULogViewer(props: ULogViewerProps): ReactNode {
   /* Row props for the List renderer (memoised to avoid re-renders) */
   const rowProps: RowProps = useMemo(
     () => ({ filteredLines, filteredIndices, showLineNumbers, searchTerm }),
-    [filteredLines, filteredIndices, showLineNumbers, searchTerm]
+    [filteredLines, filteredIndices, showLineNumbers, searchTerm],
   );
 
   return (
-    <div
-      className={cn(styles.viewer, fullscreen && styles.fullscreen, className)}
-      style={style}
-    >
+    <div className={cn(styles.viewer, fullscreen && styles.fullscreen, className)} style={style}>
       {/* ── Toolbar ─────────────────────────── */}
       <div className={styles.toolbar}>
         <input

@@ -42,15 +42,11 @@ export function UProgressHeader({
     <div className={cn(styles.root, className)}>
       {/* ── Stat chips ──────────────────────────────────── */}
       <div className={styles.chips}>
-        <span className={styles.chip}>
-          Batch #{batchNumber}
-        </span>
+        <span className={styles.chip}>Batch #{batchNumber}</span>
         <span className={styles.chip}>
           {questionsAnswered}/{totalQuestions} answered
         </span>
-        <span className={cn(styles.chip, isComplete && styles.chipComplete)}>
-          {clamped}% ready
-        </span>
+        <span className={cn(styles.chip, isComplete && styles.chipComplete)}>{clamped}% ready</span>
       </div>
 
       {/* ── Progress bar ────────────────────────────────── */}

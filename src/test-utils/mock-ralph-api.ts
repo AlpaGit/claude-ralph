@@ -62,7 +62,7 @@ export function createMockRalphApi(): MockRalphApi {
     cancelDiscovery: vi.fn(),
     getRunEvents: vi.fn(),
     onDiscoveryEvent: vi.fn().mockReturnValue(noopUnsubscribe),
-    onRunEvent: vi.fn().mockReturnValue(noopUnsubscribe)
+    onRunEvent: vi.fn().mockReturnValue(noopUnsubscribe),
   };
 }
 
@@ -74,7 +74,10 @@ export function createMockRalphApi(): MockRalphApi {
  */
 export function installMockRalphApi(): MockRalphApi {
   const api = createMockRalphApi();
-  (globalThis as Record<string, unknown>).window = globalThis.window ?? {};
-  (window as unknown as Record<string, unknown>).ralphApi = api;
+  const globalRecord = globalThis as Record<string, unknown>;
+  if (!globalRecord.window || typeof globalRecord.window !== "object") {
+    globalRecord.window = {};
+  }
+  (globalRecord.window as Record<string, unknown>).ralphApi = api;
   return api;
 }

@@ -119,7 +119,7 @@ interface ContinueCallConfig {
   /** Build the next answer map from the returned interview state. */
   buildNextAnswerMap: (
     nextState: DiscoveryInterviewState,
-    currentAnswerMap: AnswerMap
+    currentAnswerMap: AnswerMap,
   ) => AnswerMap;
   /** Copy notice shown on success. */
   successNotice: string;
@@ -135,12 +135,8 @@ interface ContinueCallConfig {
  */
 function executeContinueCall(
   config: ContinueCallConfig,
-  set: (
-    fn:
-      | Partial<DiscoveryState>
-      | ((state: DiscoveryState) => Partial<DiscoveryState>)
-  ) => void,
-  get: () => DiscoveryState
+  set: (fn: Partial<DiscoveryState> | ((state: DiscoveryState) => Partial<DiscoveryState>)) => void,
+  get: () => DiscoveryState,
 ): Promise<void> {
   const { interview, answerMap } = get();
   if (!interview) {
@@ -148,8 +144,7 @@ function executeContinueCall(
     return Promise.resolve();
   }
 
-  const { answerPayload, buildNextAnswerMap, successNotice, successToast } =
-    config;
+  const { answerPayload, buildNextAnswerMap, successNotice, successToast } = config;
 
   const startedAt = Date.now();
   set({
@@ -191,10 +186,7 @@ function executeContinueCall(
       set({
         loading: false,
         thinkingStartedAtMs: null,
-        lastDiscoveryDurationSec: Math.max(
-          0,
-          Math.floor((Date.now() - startedAt) / 1000)
-        ),
+        lastDiscoveryDurationSec: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
       });
     });
 }
@@ -213,7 +205,7 @@ function buildFreshAnswerMap(nextState: DiscoveryInterviewState): AnswerMap {
 /** Merges new question IDs into the existing answer map, keeping prior answers. */
 function buildMergedAnswerMap(
   nextState: DiscoveryInterviewState,
-  currentMap: AnswerMap
+  currentMap: AnswerMap,
 ): AnswerMap {
   const merged: AnswerMap = { ...currentMap };
   for (const q of nextState.questions) {
@@ -303,7 +295,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
         successToast: "Batch submitted. Next questions ready.",
       },
       set,
-      get
+      get,
     );
   },
 
@@ -368,13 +360,10 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       set({ error: ipcError.message });
       toastService.error(ipcError.message, ipcError);
     } finally {
-      set((state) => ({
+      set((_state) => ({
         loading: false,
         thinkingStartedAtMs: null,
-        lastDiscoveryDurationSec: Math.max(
-          0,
-          Math.floor((Date.now() - startedAt) / 1000)
-        ),
+        lastDiscoveryDurationSec: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
       }));
     }
   },
@@ -409,7 +398,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
         successToast: "Discovery updated. PRD input refreshed.",
       },
       set,
-      get
+      get,
     );
   },
 
@@ -438,7 +427,8 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       set({
         interview: state,
         projectPath:
-          get().activeSessions.find((session) => session.id === sessionId)?.projectPath ?? get().projectPath,
+          get().activeSessions.find((session) => session.id === sessionId)?.projectPath ??
+          get().projectPath,
         seedSentence: state.directionSummary,
         answerMap: buildFreshAnswerMap(state),
         currentBatchIndex: 0,

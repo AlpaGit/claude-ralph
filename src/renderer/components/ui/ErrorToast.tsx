@@ -44,10 +44,7 @@ export function ErrorToast({ t, message, error }: ErrorToastProps): React.JSX.El
   }, []);
 
   return (
-    <div
-      className={`${styles.toast}${t.visible ? "" : ` ${styles.toastExiting}`}`}
-      role="alert"
-    >
+    <div className={`${styles.toast}${t.visible ? "" : ` ${styles.toastExiting}`}`} role="alert">
       {/* ── Header: icon + message + dismiss ──────────────── */}
       <div className={styles.header}>
         <span className={styles.icon} aria-hidden="true">
@@ -112,7 +109,8 @@ export function ErrorToast({ t, message, error }: ErrorToastProps): React.JSX.El
                             expected: <strong>{issue.expected}</strong>
                             {issue.received ? (
                               <>
-                                {" "}| received: <strong>{issue.received}</strong>
+                                {" "}
+                                | received: <strong>{issue.received}</strong>
                               </>
                             ) : null}
                           </span>

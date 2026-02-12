@@ -34,10 +34,7 @@ function readinessStatus(score: number): string {
 
 function formatDiscoveryEventLine(event: DiscoveryEvent): string {
   const time = new Date(event.ts).toLocaleTimeString();
-  const label =
-    event.type === "agent" && event.agent
-      ? `${event.type}:${event.agent}`
-      : event.type;
+  const label = event.type === "agent" && event.agent ? `${event.type}:${event.agent}` : event.type;
   const details = event.details ? `\n    ${event.details}` : "";
   return `[${time}] [${label}] ${event.message}${details}`;
 }
@@ -56,13 +53,11 @@ function extractSpecialistId(event: DiscoveryEvent): string | null {
     return event.agent.trim();
   }
 
-  const startMatch = event.message.match(
-    /^Starting (?:specialist|analysis) agent:\s(.+)$/
-  );
+  const startMatch = event.message.match(/^Starting (?:specialist|analysis) agent:\s(.+)$/);
   if (startMatch) return startMatch[1].trim();
 
   const completeMatch = event.message.match(
-    /^Completed (?:specialist|analysis) agent:\s(.+?)(\s\(|$)/
+    /^Completed (?:specialist|analysis) agent:\s(.+?)(\s\(|$)/,
   );
   if (completeMatch) return completeMatch[1].trim();
 
@@ -105,7 +100,7 @@ export function DiscoveryView(): JSX.Element {
 
   // ── Session management slices ───────────────────────
   const activeSessions = useDiscoveryStore((s) => s.activeSessions);
-  const checkingSessions = useDiscoveryStore((s) => s.checkingSessions);
+  const _checkingSessions = useDiscoveryStore((s) => s.checkingSessions);
 
   // ── Store actions ────────────────────────────────────
   const setSeedSentence = useDiscoveryStore((s) => s.setSeedSentence);
@@ -149,7 +144,7 @@ export function DiscoveryView(): JSX.Element {
       setShowResumeDialog(false);
       void resumeSession(sessionId);
     },
-    [resumeSession]
+    [resumeSession],
   );
 
   const handleStartFresh = useCallback((): void => {
@@ -174,17 +169,13 @@ export function DiscoveryView(): JSX.Element {
   const currentRoundAnswered = useMemo(() => {
     if (!interview) return 0;
     return interview.questions.filter(
-      (q) =>
-        (answerMap[q.id] ?? "").trim().length > 0 &&
-        !skippedQuestions.includes(q.id)
+      (q) => (answerMap[q.id] ?? "").trim().length > 0 && !skippedQuestions.includes(q.id),
     ).length;
   }, [answerMap, interview, skippedQuestions]);
 
   const liveFeedbackText = useMemo(() => {
     if (events.length === 0) return "Waiting for AI feedback...";
-    return events
-      .map((event) => formatDiscoveryEventLine(event))
-      .join("\n");
+    return events.map((event) => formatDiscoveryEventLine(event)).join("\n");
   }, [events]);
 
   const thinkingElapsedSec = useMemo(() => {
@@ -204,14 +195,14 @@ export function DiscoveryView(): JSX.Element {
       const id = extractSpecialistId(event);
       if (!id) continue;
       if (
-        event.message.startsWith("Starting specialist agent:")
-        || event.message.startsWith("Starting analysis agent:")
+        event.message.startsWith("Starting specialist agent:") ||
+        event.message.startsWith("Starting analysis agent:")
       ) {
         started.add(id);
       }
       if (
-        event.message.startsWith("Completed specialist agent:")
-        || event.message.startsWith("Completed analysis agent:")
+        event.message.startsWith("Completed specialist agent:") ||
+        event.message.startsWith("Completed analysis agent:")
       ) {
         completed.add(id);
       }
@@ -232,8 +223,7 @@ export function DiscoveryView(): JSX.Element {
     if (events.length === 0)
       return "Booting discovery runtime and preparing dynamic analysis jobs...";
     if (secondsSinceLastEvent === null) return "Waiting for first runtime event...";
-    if (secondsSinceLastEvent <= 8)
-      return "Actively receiving updates from AI analysis agents.";
+    if (secondsSinceLastEvent <= 8) return "Actively receiving updates from AI analysis agents.";
     if (secondsSinceLastEvent <= 25)
       return "Still working. An analysis agent is likely processing a longer step.";
     return "Long-running analysis in progress. This is normal for deep codebase scans.";
@@ -266,7 +256,8 @@ export function DiscoveryView(): JSX.Element {
         const planId = await createPlan(prd, projectPath.trim());
         navigate(`/plan/${planId}`);
       } catch (caught) {
-        const message = caught instanceof Error ? caught.message : "Failed to create plan from PRD input.";
+        const message =
+          caught instanceof Error ? caught.message : "Failed to create plan from PRD input.";
         setExistingPrdError(message);
       }
     })();
@@ -296,8 +287,8 @@ export function DiscoveryView(): JSX.Element {
     navigate("/", {
       state: {
         prdText: interview.prdInputDraft,
-        projectPath: projectPath.trim()
-      }
+        projectPath: projectPath.trim(),
+      },
     });
   };
 
@@ -329,9 +320,7 @@ export function DiscoveryView(): JSX.Element {
                             : session.projectPath}
                         </span>
                       ) : null}
-                      <span>
-                        Updated: {new Date(session.updatedAt).toLocaleString()}
-                      </span>
+                      <span>Updated: {new Date(session.updatedAt).toLocaleString()}</span>
                     </div>
                   </div>
                   <div className={styles.resumeSessionActions}>
@@ -360,10 +349,10 @@ export function DiscoveryView(): JSX.Element {
         <div>
           <h2>Interactive PRD Discovery</h2>
           <p className={styles.headerNotice}>
-            Write one short goal sentence. AI analysis agents will inspect the project
-            (if path is set), ask detailed questions, and build a ready-to-use PRD
-            input draft. Add <code>/refresh-stack</code> (or <code>/refresh-context</code>)
-            in context/answers only when you want a full refresh.
+            Write one short goal sentence. AI analysis agents will inspect the project (if path is
+            set), ask detailed questions, and build a ready-to-use PRD input draft. Add{" "}
+            <code>/refresh-stack</code> (or <code>/refresh-context</code>) in context/answers only
+            when you want a full refresh.
           </p>
         </div>
 
@@ -403,8 +392,8 @@ export function DiscoveryView(): JSX.Element {
             <div className={styles.advancedContent}>
               <div className={styles.manualPrdSection}>
                 <p className={styles.manualPrdHint}>
-                  Paste your existing PRD input to skip discovery and create the actionable plan directly.
-                  Project path above will be used if provided.
+                  Paste your existing PRD input to skip discovery and create the actionable plan
+                  directly. Project path above will be used if provided.
                 </p>
                 <UTextArea
                   label="Existing PRD Input"
@@ -430,11 +419,7 @@ export function DiscoveryView(): JSX.Element {
           </details>
 
           <div className={styles.actions}>
-            <UButton
-              variant="secondary"
-              onClick={handleStartDiscovery}
-              loading={loading}
-            >
+            <UButton variant="secondary" onClick={handleStartDiscovery} loading={loading}>
               {loading ? "Starting Discovery..." : "Start Discovery Interview"}
             </UButton>
             <UButton variant="ghost" onClick={reset}>
@@ -483,9 +468,7 @@ export function DiscoveryView(): JSX.Element {
                 <div className={styles.thinkingIndicator}>
                   <span className={styles.thinkingPulse} />
                   <span>
-                    {loading
-                      ? `Thinking for ${formatDuration(thinkingElapsedSec)}`
-                      : "Idle"}
+                    {loading ? `Thinking for ${formatDuration(thinkingElapsedSec)}` : "Idle"}
                   </span>
                   {loading ? (
                     <span className={styles.thinkingDots} aria-hidden="true">
@@ -496,11 +479,7 @@ export function DiscoveryView(): JSX.Element {
                   ) : null}
                 </div>
                 {loading ? (
-                  <UButton
-                    variant="danger"
-                    size="sm"
-                    onClick={handleCancelDiscovery}
-                  >
+                  <UButton variant="danger" size="sm" onClick={handleCancelDiscovery}>
                     Cancel Discovery
                   </UButton>
                 ) : null}
@@ -515,10 +494,7 @@ export function DiscoveryView(): JSX.Element {
               </span>
               <span>
                 Agents: {specialistProgress.completed}/
-                {Math.max(
-                  specialistProgress.started,
-                  specialistProgress.completed
-                )} done
+                {Math.max(specialistProgress.started, specialistProgress.completed)} done
               </span>
             </div>
 
@@ -532,14 +508,12 @@ export function DiscoveryView(): JSX.Element {
                       key={name}
                       className={cn(
                         styles.specialistItem,
-                        isDone ? styles.specialistDone : styles.specialistRunning
+                        isDone ? styles.specialistDone : styles.specialistRunning,
                       )}
                     >
                       <span className={styles.specialistDot} />
                       <span className={styles.specialistName}>{name}</span>
-                      <span className={styles.specialistStatus}>
-                        {isDone ? "done" : "running"}
-                      </span>
+                      <span className={styles.specialistStatus}>{isDone ? "done" : "running"}</span>
                     </div>
                   );
                 })}
@@ -548,7 +522,7 @@ export function DiscoveryView(): JSX.Element {
             <p
               className={cn(
                 styles.statusText,
-                loading && (secondsSinceLastEvent ?? 0) > 20 && styles.warningText
+                loading && (secondsSinceLastEvent ?? 0) > 20 && styles.warningText,
               )}
             >
               {liveStatusText}
@@ -577,10 +551,7 @@ export function DiscoveryView(): JSX.Element {
               <UButton variant="primary" onClick={handleUsePlanInput}>
                 Use as Plan Input
               </UButton>
-              <UButton
-                variant="ghost"
-                onClick={() => void handleCopyPrdInput()}
-              >
+              <UButton variant="ghost" onClick={() => void handleCopyPrdInput()}>
                 Copy PRD Input
               </UButton>
             </div>
@@ -611,8 +582,7 @@ export function DiscoveryView(): JSX.Element {
                 <span>Round: {interview.round}</span>
                 <span>Readiness: {interview.readinessScore}%</span>
                 <span>
-                  Questions answered this round: {currentRoundAnswered}/
-                  {interview.questions.length}
+                  Questions answered this round: {currentRoundAnswered}/{interview.questions.length}
                 </span>
               </div>
               <p className={styles.directionText}>
@@ -627,8 +597,7 @@ export function DiscoveryView(): JSX.Element {
                 <strong>Stack:</strong> {interview.inferredContext.stack}
               </p>
               <p className={styles.contextField}>
-                <strong>Documentation:</strong>{" "}
-                {interview.inferredContext.documentation}
+                <strong>Documentation:</strong> {interview.inferredContext.documentation}
               </p>
               <p className={styles.contextField}>
                 <strong>Scope:</strong> {interview.inferredContext.scope}
@@ -696,26 +665,17 @@ export function DiscoveryView(): JSX.Element {
               <UButton variant="primary" onClick={handleUsePlanInput}>
                 Use as Plan Input
               </UButton>
-              <UButton
-                variant="ghost"
-                onClick={() => void handleCopyPrdInput()}
-              >
+              <UButton variant="ghost" onClick={() => void handleCopyPrdInput()}>
                 Copy PRD Input
               </UButton>
             </div>
 
-            {copyNotice ? (
-              <p className={styles.copyNotice}>{copyNotice}</p>
-            ) : null}
+            {copyNotice ? <p className={styles.copyNotice}>{copyNotice}</p> : null}
 
             {/* PRD preview */}
             <details>
-              <summary className={styles.prdPreviewToggle}>
-                Preview Generated PRD Input
-              </summary>
-              <pre className={styles.prdPreview}>
-                {interview.prdInputDraft}
-              </pre>
+              <summary className={styles.prdPreviewToggle}>Preview Generated PRD Input</summary>
+              <pre className={styles.prdPreview}>{interview.prdInputDraft}</pre>
             </details>
           </>
         ) : null}

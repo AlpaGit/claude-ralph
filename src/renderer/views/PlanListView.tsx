@@ -53,7 +53,7 @@ function shortDate(isoDate: string): string {
 /**
  * Truncate a path string for display, showing only the last N segments.
  */
-function truncatePath(path: string, segments: number = 2): string {
+function truncatePath(path: string, segments = 2): string {
   const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
   if (parts.length <= segments) return path;
   return ".../" + parts.slice(-segments).join("/");
@@ -180,7 +180,7 @@ export function PlanListView(): JSX.Element {
     return plansList.filter(
       (plan) =>
         plan.summary.toLowerCase().includes(query) ||
-        plan.projectPath.toLowerCase().includes(query)
+        plan.projectPath.toLowerCase().includes(query),
     );
   }, [plansList, debouncedSearch]);
 
@@ -203,7 +203,7 @@ export function PlanListView(): JSX.Element {
           projectPath: trimmedPath,
           displayName: projectDisplayName(trimmedPath),
           plans: [plan],
-          newestPlanMs: createdMs
+          newestPlanMs: createdMs,
         });
       }
     }
@@ -211,8 +211,12 @@ export function PlanListView(): JSX.Element {
     const result = Array.from(groups.values());
     for (const group of result) {
       group.plans.sort((a, b) => {
-        const aMs = Number.isFinite(new Date(a.createdAt).getTime()) ? new Date(a.createdAt).getTime() : 0;
-        const bMs = Number.isFinite(new Date(b.createdAt).getTime()) ? new Date(b.createdAt).getTime() : 0;
+        const aMs = Number.isFinite(new Date(a.createdAt).getTime())
+          ? new Date(a.createdAt).getTime()
+          : 0;
+        const bMs = Number.isFinite(new Date(b.createdAt).getTime())
+          ? new Date(b.createdAt).getTime()
+          : 0;
         return bMs - aMs;
       });
     }
@@ -230,7 +234,7 @@ export function PlanListView(): JSX.Element {
     (planId: string) => {
       navigate(`/plan/${planId}`);
     },
-    [navigate]
+    [navigate],
   );
 
   const handleCardKeyDown = useCallback(
@@ -240,30 +244,24 @@ export function PlanListView(): JSX.Element {
         navigate(`/plan/${planId}`);
       }
     },
-    [navigate]
+    [navigate],
   );
 
   /* ── Action handlers ─────────────────────────────────── */
 
-  const handleDeleteClick = useCallback(
-    (e: React.MouseEvent, plan: PlanSummary) => {
-      e.stopPropagation();
-      setConfirmState({ type: "delete", planId: plan.id, planSummary: plan.summary });
-    },
-    []
-  );
+  const handleDeleteClick = useCallback((e: React.MouseEvent, plan: PlanSummary) => {
+    e.stopPropagation();
+    setConfirmState({ type: "delete", planId: plan.id, planSummary: plan.summary });
+  }, []);
 
-  const handleArchiveClick = useCallback(
-    (e: React.MouseEvent, plan: PlanSummary) => {
-      e.stopPropagation();
-      if (plan.archivedAt) {
-        setConfirmState({ type: "unarchive", planId: plan.id, planSummary: plan.summary });
-      } else {
-        setConfirmState({ type: "archive", planId: plan.id, planSummary: plan.summary });
-      }
-    },
-    []
-  );
+  const handleArchiveClick = useCallback((e: React.MouseEvent, plan: PlanSummary) => {
+    e.stopPropagation();
+    if (plan.archivedAt) {
+      setConfirmState({ type: "unarchive", planId: plan.id, planSummary: plan.summary });
+    } else {
+      setConfirmState({ type: "archive", planId: plan.id, planSummary: plan.summary });
+    }
+  }, []);
 
   const handleConfirm = useCallback(async () => {
     if (!confirmState) return;
@@ -303,7 +301,8 @@ export function PlanListView(): JSX.Element {
         : "Unarchive"
     : "";
 
-  const confirmVariant: "primary" | "danger" = confirmState?.type === "delete" ? "danger" : "primary";
+  const confirmVariant: "primary" | "danger" =
+    confirmState?.type === "delete" ? "danger" : "primary";
 
   /* ── Loading state ───────────────────────────────────── */
   if (loadingList && plansList.length === 0) {
@@ -482,7 +481,11 @@ export function PlanListView(): JSX.Element {
                       type="button"
                       className={styles.actionBtn}
                       onClick={(e) => handleArchiveClick(e, plan)}
-                      aria-label={plan.archivedAt ? `Unarchive plan: ${plan.summary}` : `Archive plan: ${plan.summary}`}
+                      aria-label={
+                        plan.archivedAt
+                          ? `Unarchive plan: ${plan.summary}`
+                          : `Archive plan: ${plan.summary}`
+                      }
                     >
                       {plan.archivedAt ? "Unarchive" : "Archive"}
                     </button>
@@ -514,18 +517,18 @@ export function PlanListView(): JSX.Element {
       >
         {confirmState?.type === "delete" ? (
           <p>
-            This will permanently delete the plan and all associated tasks, runs, and logs.
-            This cannot be undone.
+            This will permanently delete the plan and all associated tasks, runs, and logs. This
+            cannot be undone.
           </p>
         ) : confirmState?.type === "archive" ? (
           <p>
-            Archive <strong>{confirmState.planSummary}</strong>? Archived plans are hidden
-            from the default view but can be restored at any time.
+            Archive <strong>{confirmState.planSummary}</strong>? Archived plans are hidden from the
+            default view but can be restored at any time.
           </p>
         ) : confirmState?.type === "unarchive" ? (
           <p>
-            Restore <strong>{confirmState.planSummary}</strong> from the archive? It will
-            appear in the main plans list again.
+            Restore <strong>{confirmState.planSummary}</strong> from the archive? It will appear in
+            the main plans list again.
           </p>
         ) : null}
       </UConfirmModal>
