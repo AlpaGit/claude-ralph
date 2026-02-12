@@ -1,0 +1,205 @@
+/*
+ * UQuestionBatch CSS Module
+ * Batch container rendering all questions simultaneously with staggered
+ * slide-in animations. Each question shows an option grid (UOptionCard),
+ * skip control, and a submit-batch footer.
+ * Brutalist style: solid borders, clean typography.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Root container ──────────────────────────────────── */
+
+.root {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+/* ── Question item (one per question in the batch) ──── */
+
+.questionItem {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-sm);
+  animation: slideInLeft 300ms ease-out both;
+}
+
+.questionItem:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.questionItem:nth-child(2) {
+  animation-delay: 100ms;
+}
+
+.questionItem:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ── Question header ─────────────────────────────────── */
+
+.questionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.questionText {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.questionNumber {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  flex-shrink: 0;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.questionReason {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+}
+
+.selectionHint {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── Options grid ────────────────────────────────────── */
+
+.optionsGrid {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+/* ── Skip control row ────────────────────────────────── */
+
+.skipRow {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.skipBtn {
+  background: none;
+  border: none;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.skipBtn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-warm);
+}
+
+.skipBtn:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: 2px;
+}
+
+.skipBtn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+/* ── Skipped question state ──────────────────────────── */
+
+.skipped {
+  opacity: 0.55;
+}
+
+.skipped .optionsGrid {
+  pointer-events: none;
+}
+
+.skippedBadge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  background: var(--color-status-pending-bg);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-pill);
+}
+
+/* ── Submit batch footer ─────────────────────────────── */
+
+.batchFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--color-border-dashed);
+}
+
+.batchHint {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--color-muted);
+  margin: 0;
+}
+
+/* ── No-questions state ──────────────────────────────── */
+
+.emptyState {
+  border: 2px dashed var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-lg);
+  text-align: center;
+}
+
+.emptyText {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Reduced motion ──────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .questionItem {
+    animation: none;
+  }
+}
