@@ -273,3 +273,52 @@ p1-11: Implement ErrorBoundary components   [DONE]
     - All five routes (/, /plan/:planId, /discovery, /run/:runId, /settings) wrapped
   - Uses UCard and UButton from existing UI primitives for error display
   - Build and typecheck pass
+
+p1-12: Decompose App.tsx into PlanDetailView   [DONE]
+  - src/renderer/views/PlanDetailView.tsx
+    - Replaced stub with full plan detail view reading planId from useParams()
+    - Loads plan from planStore on mount and when planId changes
+    - Subscribes to run events via initRunEventSubscription() from runStore
+    - Re-loads plan when run completed/failed/cancelled/task_status events arrive
+    - Filters recentEvents to current planId for scoped event display
+    - Builds latestRunByTask map from plan.runs for TaskCard run association
+    - Handles runTask, runAll, cancelRun via window.ralphApi calls
+    - Loading state: USkeleton placeholders while plan loads
+    - Error state: styled error panel when loadPlan fails
+    - Empty states: messages for missing planId or plan not found
+    - 12-column CSS grid layout: overview + tech pack (6col each), checklist + live run + events (12col)
+    - Responsive: collapses to single-column below 1080px
+  - src/renderer/views/PlanDetailView.module.css
+    - Grid layout, skeleton stack, error panel, checklist header, live run card, log box, responsive breakpoint
+    - All values reference tokens.css custom properties
+  - src/renderer/components/plan/PlanOverview.tsx
+    - Displays plan summary, UStatusPill for plan status, metadata row (project, tasks, runs, created date)
+    - Uses UCard with title and headerAction props
+  - src/renderer/components/plan/PlanOverview.module.css
+    - Summary paragraph and mono-font meta row styling
+  - src/renderer/components/plan/TechnicalPackPanel.tsx
+    - Shows architecture notes, risks, dependencies, test strategy in two-column grid
+    - Internal Section helper renders title + bulleted list or "No items" placeholder
+    - Uses UCard with title prop
+  - src/renderer/components/plan/TechnicalPackPanel.module.css
+    - Auto-fit grid layout (minmax 210px), section title and list styling
+  - src/renderer/components/plan/TaskCard.tsx
+    - Self-contained card: task title with ordinal, UStatusPill, collapsible body
+    - Chevron toggle with rotation animation; expand/collapse via CSS grid-template-rows transition
+    - Body shows: description, meta (ID + dependencies), acceptance criteria list, technical notes
+    - Action buttons: "Run Task" and conditional "Open Latest Run"
+    - Props: task, latestRun, onRunTask callback, onOpenRun callback
+    - Accessible: aria-expanded, aria-label on toggle, focus-visible outlines
+  - src/renderer/components/plan/TaskCard.module.css
+    - Card border, header flex layout, chevron rotation, collapsible body animation
+    - Criteria list, notes, action buttons with brutalist styling
+    - focus-visible outlines on toggle and buttons
+  - src/renderer/components/plan/RecentEvents.tsx
+    - Scrollable list of RunEvents with timestamp formatting (toLocaleTimeString)
+    - Each row: formatted timestamp, event type (bold), task ID (truncated)
+    - Empty state: "No events yet" message
+    - Uses UCard with title prop
+  - src/renderer/components/plan/RecentEvents.module.css
+    - Three-column grid rows, max-height scroll, dashed border separators
+    - Responsive: single-column below 1080px
+  - Build and typecheck pass

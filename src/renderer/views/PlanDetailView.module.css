@@ -1,0 +1,176 @@
+/* PlanDetailView -- main layout for the plan detail page */
+
+.view {
+  padding: var(--space-lg);
+  max-width: var(--max-width-app);
+  margin: 0 auto;
+}
+
+/* ── Grid layout ───────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  gap: var(--space-lg);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.spanHalf {
+  grid-column: span 6;
+}
+
+.spanFull {
+  grid-column: span 12;
+}
+
+/* ── Skeleton loading ──────────────────────────────────── */
+
+.skeletonStack {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+/* ── Empty / error states ──────────────────────────────── */
+
+.emptyMessage {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+}
+
+.errorPanel {
+  border: 2px solid var(--color-error);
+  border-radius: var(--radius-panel);
+  background: var(--color-error-bg);
+  padding: var(--space-lg);
+}
+
+.errorPanel p {
+  margin: 0;
+}
+
+/* ── Checklist section ─────────────────────────────────── */
+
+.checklistHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.taskList {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.runAllBtn {
+  border: 2px solid var(--color-border-btn);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.8rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  background: var(--color-accent-2);
+  color: var(--color-white);
+}
+
+.runAllBtn:hover {
+  transform: translateY(-1px);
+}
+
+/* ── Live Run panel ────────────────────────────────────── */
+
+.liveRunCard {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+}
+
+.liveRunHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.liveRunActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.runStatus {
+  border: 1px solid var(--color-black);
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.cancelBtn {
+  border: 2px solid var(--color-border-btn);
+  border-radius: var(--radius-md);
+  padding: 0.45rem 0.7rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  background: var(--color-danger);
+  color: var(--color-white);
+}
+
+.cancelBtn:hover {
+  transform: translateY(-1px);
+}
+
+.cancelBtn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.runContent {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.runMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.todoList {
+  margin: 0;
+  padding-left: var(--space-lg);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.logBox {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-log-border);
+  background: var(--color-log-bg);
+  color: var(--color-log-text);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .spanHalf {
+    grid-column: span 12;
+  }
+}

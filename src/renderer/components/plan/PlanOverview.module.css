@@ -1,0 +1,19 @@
+/* PlanOverview -- plan summary card */
+
+.overview {
+  /* Inherits UCard panel styling; no extra border needed */
+}
+
+.summary {
+  margin: 0 0 var(--space-sm) 0;
+  line-height: 1.55;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
