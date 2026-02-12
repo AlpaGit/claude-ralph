@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import {
+  abortQueueInputSchema,
   archivePlanInputSchema,
   cancelRunInputSchema,
   continueDiscoveryInputSchema,
@@ -12,8 +13,10 @@ import {
   inferStackInputSchema,
   IPC_CHANNELS,
   listPlansInputSchema,
+  retryTaskInputSchema,
   runAllInputSchema,
   runTaskInputSchema,
+  skipTaskInputSchema,
   startDiscoveryInputSchema,
   unarchivePlanInputSchema,
   updateModelConfigInputSchema
@@ -105,6 +108,33 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = cancelRunInputSchema.parse(rawInput);
       return await taskRunner.cancelRun(input);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.retryTask, async (_event, rawInput) => {
+    try {
+      const input = retryTaskInputSchema.parse(rawInput);
+      return await taskRunner.retryTask(input);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.skipTask, async (_event, rawInput) => {
+    try {
+      const input = skipTaskInputSchema.parse(rawInput);
+      taskRunner.skipTask(input);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.abortQueue, async (_event, rawInput) => {
+    try {
+      const input = abortQueueInputSchema.parse(rawInput);
+      taskRunner.abortQueue(input);
     } catch (error) {
       throw new Error(formatIpcError(error));
     }

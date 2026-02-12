@@ -101,6 +101,7 @@ interface RunRow {
   result_text: string | null;
   stop_reason: string | null;
   error_text: string | null;
+  retry_count: number;
 }
 
 interface DiscoverySessionRow {
@@ -156,6 +157,7 @@ interface CreateRunInput {
   planId: string;
   taskId: string;
   status: RunStatus;
+  retryCount?: number;
 }
 
 interface UpdateRunInput {
@@ -307,7 +309,8 @@ export class AppDatabase {
       totalCostUsd: row.total_cost_usd,
       resultText: row.result_text,
       stopReason: row.stop_reason,
-      errorText: row.error_text
+      errorText: row.error_text,
+      retryCount: row.retry_count ?? 0
     }));
 
     return {
@@ -402,9 +405,9 @@ export class AppDatabase {
     this.db
       .prepare(`
         INSERT INTO runs (
-          id, plan_id, task_id, session_id, status, started_at, ended_at, duration_ms, total_cost_usd, result_text, stop_reason, error_text
+          id, plan_id, task_id, session_id, status, started_at, ended_at, duration_ms, total_cost_usd, result_text, stop_reason, error_text, retry_count
         ) VALUES (
-          @id, @plan_id, @task_id, NULL, @status, @started_at, NULL, NULL, NULL, NULL, NULL, NULL
+          @id, @plan_id, @task_id, NULL, @status, @started_at, NULL, NULL, NULL, NULL, NULL, NULL, @retry_count
         );
       `)
       .run({
@@ -412,7 +415,8 @@ export class AppDatabase {
         plan_id: input.planId,
         task_id: input.taskId,
         status: input.status,
-        started_at: nowIso()
+        started_at: nowIso(),
+        retry_count: input.retryCount ?? 0
       });
   }
 
@@ -461,7 +465,8 @@ export class AppDatabase {
       totalCostUsd: row.total_cost_usd,
       resultText: row.result_text,
       stopReason: row.stop_reason,
-      errorText: row.error_text
+      errorText: row.error_text,
+      retryCount: row.retry_count ?? 0
     };
   }
 
@@ -513,7 +518,10 @@ export class AppDatabase {
         return false;
       }
 
-      return task.dependencies.every((dependencyId) => statusById.get(dependencyId) === "completed");
+      return task.dependencies.every((dependencyId) => {
+        const depStatus = statusById.get(dependencyId);
+        return depStatus === "completed" || depStatus === "skipped";
+      });
     }).length;
   }
 
@@ -526,9 +534,10 @@ export class AppDatabase {
         continue;
       }
 
-      const hasOpenDependencies = task.dependencies.some(
-        (dependencyId) => statusById.get(dependencyId) !== "completed"
-      );
+      const hasOpenDependencies = task.dependencies.some((dependencyId) => {
+        const depStatus = statusById.get(dependencyId);
+        return depStatus !== "completed" && depStatus !== "skipped";
+      });
 
       if (!hasOpenDependencies) {
         return task;
@@ -536,6 +545,38 @@ export class AppDatabase {
     }
 
     return null;
+  }
+
+  /**
+   * Get the most recent failed run for a given task within a plan.
+   * Used by the retry flow to extract previous error context.
+   */
+  getLatestFailedRun(planId: string, taskId: string): TaskRun | null {
+    const row = this.db
+      .prepare(
+        "SELECT * FROM runs WHERE plan_id = ? AND task_id = ? AND status = 'failed' ORDER BY started_at DESC LIMIT 1;"
+      )
+      .get(planId, taskId) as RunRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      taskId: row.task_id,
+      sessionId: row.session_id,
+      status: row.status,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      durationMs: row.duration_ms,
+      totalCostUsd: row.total_cost_usd,
+      resultText: row.result_text,
+      stopReason: row.stop_reason,
+      errorText: row.error_text,
+      retryCount: row.retry_count ?? 0
+    };
   }
 
   /**

@@ -10,6 +10,9 @@ export const IPC_CHANNELS = {
   runTask: "task:run",
   runAll: "task:runAll",
   cancelRun: "run:cancel",
+  retryTask: "task:retry",
+  skipTask: "task:skip",
+  abortQueue: "queue:abort",
   startDiscovery: "discovery:start",
   continueDiscovery: "discovery:continue",
   discoveryEvent: "discovery:event",
@@ -62,6 +65,20 @@ export const runAllInputSchema = z.object({
 
 export const cancelRunInputSchema = z.object({
   runId: z.string().uuid()
+});
+
+export const retryTaskInputSchema = z.object({
+  planId: z.string().uuid(),
+  taskId: z.string().min(1)
+});
+
+export const skipTaskInputSchema = z.object({
+  planId: z.string().uuid(),
+  taskId: z.string().min(1)
+});
+
+export const abortQueueInputSchema = z.object({
+  planId: z.string().uuid()
 });
 
 export const startDiscoveryInputSchema = z.object({

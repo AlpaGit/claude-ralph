@@ -42,10 +42,16 @@ interface RunTaskCallbacks {
   onQuery: (queryHandle: { interrupt: () => Promise<void> }) => void;
 }
 
+interface RetryContext {
+  retryCount: number;
+  previousError: string;
+}
+
 interface RunTaskArgs {
   plan: RalphPlan;
   task: RalphTask;
   callbacks: RunTaskCallbacks;
+  retryContext?: RetryContext;
 }
 
 interface RunTaskResult {
@@ -1071,9 +1077,15 @@ Rules:
       throw new Error("Unable to start a cleared task session.");
     }
 
+    const retryInjection = args.retryContext
+      ? `
+IMPORTANT: A previous attempt at this task failed with the following error: ${args.retryContext.previousError}. Please analyze this failure and take a different approach to avoid the same issue. This is retry attempt #${args.retryContext.retryCount}.
+`
+      : "";
+
     const taskPrompt = `
 You are executing a strict Ralph iteration.
-
+${retryInjection}
 Plan summary:
 ${args.plan.summary}
 

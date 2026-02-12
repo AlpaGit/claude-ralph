@@ -12,6 +12,14 @@ export interface TaskCardProps {
   onRunTask: (task: RalphTask) => void;
   /** Called when the user clicks "Open Latest Run". */
   onOpenRun: (runId: string) => void;
+  /** Called when the user clicks "Retry" on a failed task. */
+  onRetryTask?: (task: RalphTask) => void;
+  /** Called when the user clicks "Skip" on a failed task. */
+  onSkipTask?: (task: RalphTask) => void;
+  /** Called when the user clicks "Abort Queue". */
+  onAbortQueue?: () => void;
+  /** Whether a queue is currently running for this plan. */
+  queueRunning?: boolean;
 }
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -28,7 +36,16 @@ function cn(...classes: (string | false | undefined | null)[]): string {
  * Displays task title, status pill, collapsible description,
  * dependencies, acceptance criteria, technical notes, and action buttons.
  */
-export function TaskCard({ task, latestRun, onRunTask, onOpenRun }: TaskCardProps): JSX.Element {
+export function TaskCard({
+  task,
+  latestRun,
+  onRunTask,
+  onOpenRun,
+  onRetryTask,
+  onSkipTask,
+  onAbortQueue,
+  queueRunning
+}: TaskCardProps): JSX.Element {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -84,13 +101,45 @@ export function TaskCard({ task, latestRun, onRunTask, onOpenRun }: TaskCardProp
 
         {/* Actions */}
         <div className={styles.actions}>
-          <button
-            type="button"
-            className={cn(styles.btn, styles.btnPrimary)}
-            onClick={() => onRunTask(task)}
-          >
-            Run Task
-          </button>
+          {task.status === "failed" ? (
+            <>
+              {onRetryTask ? (
+                <button
+                  type="button"
+                  className={cn(styles.btn, styles.btnPrimary)}
+                  onClick={() => onRetryTask(task)}
+                >
+                  Retry
+                </button>
+              ) : null}
+              {onSkipTask ? (
+                <button
+                  type="button"
+                  className={cn(styles.btn, styles.btnGhost)}
+                  onClick={() => onSkipTask(task)}
+                >
+                  Skip
+                </button>
+              ) : null}
+              {onAbortQueue && queueRunning ? (
+                <button
+                  type="button"
+                  className={cn(styles.btn, styles.btnDanger)}
+                  onClick={() => onAbortQueue()}
+                >
+                  Abort Queue
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <button
+              type="button"
+              className={cn(styles.btn, styles.btnPrimary)}
+              onClick={() => onRunTask(task)}
+            >
+              Run Task
+            </button>
+          )}
           {latestRun ? (
             <button
               type="button"

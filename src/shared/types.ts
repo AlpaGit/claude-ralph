@@ -1,4 +1,4 @@
-export type TaskStatus = "pending" | "in_progress" | "completed" | "failed";
+export type TaskStatus = "pending" | "in_progress" | "completed" | "failed" | "skipped";
 export type PlanStatus = "draft" | "ready" | "running" | "completed" | "failed";
 export type RunStatus = "queued" | "in_progress" | "completed" | "failed" | "cancelled";
 
@@ -58,6 +58,7 @@ export interface TaskRun {
   resultText: string | null;
   stopReason: string | null;
   errorText: string | null;
+  retryCount: number;
 }
 
 export interface RalphPlan {
@@ -161,6 +162,28 @@ export interface CancelRunInput {
 
 export interface CancelRunResponse {
   ok: boolean;
+}
+
+/** Input for retrying a failed task. */
+export interface RetryTaskInput {
+  planId: string;
+  taskId: string;
+}
+
+/** Response from retrying a failed task. */
+export interface RetryTaskResponse {
+  runId: string;
+}
+
+/** Input for skipping a failed task. */
+export interface SkipTaskInput {
+  planId: string;
+  taskId: string;
+}
+
+/** Input for aborting the queue for a plan. */
+export interface AbortQueueInput {
+  planId: string;
 }
 
 export type WizardStepId =
@@ -346,6 +369,9 @@ export interface RalphApi {
   runTask(input: RunTaskInput): Promise<RunTaskResponse>;
   runAll(input: RunAllInput): Promise<RunAllResponse>;
   cancelRun(input: CancelRunInput): Promise<CancelRunResponse>;
+  retryTask(input: RetryTaskInput): Promise<RetryTaskResponse>;
+  skipTask(input: SkipTaskInput): Promise<void>;
+  abortQueue(input: AbortQueueInput): Promise<void>;
   startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState>;
   continueDiscovery(input: ContinueDiscoveryInput): Promise<DiscoveryInterviewState>;
   getWizardGuidance(input: GetWizardGuidanceInput): Promise<WizardGuidanceResult>;

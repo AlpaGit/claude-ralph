@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrowserWindow } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
+  AbortQueueInput,
   AgentRole,
   CancelRunInput,
   CancelRunResponse,
@@ -19,11 +20,14 @@ import type {
   PlanListItem,
   RalphPlan,
   RalphTask,
+  RetryTaskInput,
+  RetryTaskResponse,
   RunAllInput,
   RunAllResponse,
   RunEvent,
   RunTaskInput,
   RunTaskResponse,
+  SkipTaskInput,
   StartDiscoveryInput,
   TodoItem
 } from "@shared/types";
@@ -63,10 +67,14 @@ function normalizeTaskId(raw: string, fallbackOrdinal: number): string {
   return `task-${fallbackOrdinal}`;
 }
 
+/** Maximum number of retries allowed for a single task. Configurable at build time. */
+const MAX_RETRIES = 3;
+
 export class TaskRunner {
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly runCompletion = new Map<string, { promise: Promise<void>; resolve: () => void }>();
   private readonly runningPlanQueues = new Set<string>();
+  private readonly abortedPlanQueues = new Set<string>();
   private readonly discoverySessions = new Map<string, DiscoverySession>();
   private readonly agentService: RalphAgentService;
 
@@ -489,24 +497,212 @@ export class TaskRunner {
     return { ok: true };
   }
 
+  /**
+   * Retry a failed task by creating a new run with retry context.
+   * Injects the previous error into the prompt so the agent can take a different approach.
+   * Max retries are configurable (default: 3).
+   */
+  async retryTask(input: RetryTaskInput): Promise<RetryTaskResponse> {
+    const plan = this.db.getPlan(input.planId);
+    if (!plan) {
+      throw new Error(`Plan not found: ${input.planId}`);
+    }
+
+    const task = plan.tasks.find((candidate) => candidate.id === input.taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${input.taskId}`);
+    }
+
+    if (task.status !== "failed") {
+      throw new Error(`Task ${input.taskId} is not in a failed state (current: ${task.status}). Only failed tasks can be retried.`);
+    }
+
+    const failedRun = this.db.getLatestFailedRun(input.planId, input.taskId);
+    const previousRetryCount = failedRun?.retryCount ?? 0;
+    const newRetryCount = previousRetryCount + 1;
+
+    if (newRetryCount > MAX_RETRIES) {
+      throw new Error(`Task ${input.taskId} has reached the maximum retry limit (${MAX_RETRIES}). Consider skipping this task or adjusting the approach manually.`);
+    }
+
+    const previousError = failedRun?.errorText ?? "Unknown error from previous attempt.";
+
+    const runId = randomUUID();
+
+    this.db.createRun({
+      id: runId,
+      planId: input.planId,
+      taskId: input.taskId,
+      status: "in_progress",
+      retryCount: newRetryCount
+    });
+
+    this.db.updateTaskStatus(input.taskId, "in_progress");
+    this.db.updatePlanStatus(input.planId, "running");
+
+    this.emitEvent({
+      runId,
+      planId: input.planId,
+      taskId: input.taskId,
+      type: "started",
+      level: "info",
+      payload: {
+        message: `Task retry #${newRetryCount} started.`,
+        taskTitle: task.title,
+        retryCount: newRetryCount
+      }
+    });
+
+    this.emitEvent({
+      runId,
+      planId: input.planId,
+      taskId: input.taskId,
+      type: "task_status",
+      level: "info",
+      payload: {
+        status: "in_progress"
+      }
+    });
+
+    let resolveRun: () => void = () => undefined;
+    const completionPromise = new Promise<void>((resolve) => {
+      resolveRun = resolve;
+    });
+    this.runCompletion.set(runId, { promise: completionPromise, resolve: resolveRun });
+    this.activeRuns.set(runId, { cancelRequested: false });
+
+    void this.executeRun({
+      runId,
+      plan,
+      task,
+      retryContext: {
+        retryCount: newRetryCount,
+        previousError
+      }
+    });
+
+    return { runId };
+  }
+
+  /**
+   * Skip a failed task: marks the task as 'skipped' so the queue can continue
+   * past it. Downstream dependencies treat 'skipped' as satisfied.
+   */
+  skipTask(input: SkipTaskInput): void {
+    const plan = this.db.getPlan(input.planId);
+    if (!plan) {
+      throw new Error(`Plan not found: ${input.planId}`);
+    }
+
+    const task = plan.tasks.find((candidate) => candidate.id === input.taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${input.taskId}`);
+    }
+
+    if (task.status !== "failed") {
+      throw new Error(`Task ${input.taskId} is not in a failed state (current: ${task.status}). Only failed tasks can be skipped.`);
+    }
+
+    this.db.updateTaskStatus(input.taskId, "skipped");
+
+    // Update plan status: if all tasks are completed or skipped, mark plan as completed
+    const allTasks = this.db.getTasks(input.planId);
+    const allDone = allTasks.every((t) => t.status === "completed" || t.status === "skipped");
+    if (allDone) {
+      this.db.updatePlanStatus(input.planId, "completed");
+    } else {
+      this.db.updatePlanStatus(input.planId, "ready");
+    }
+
+    this.emitEvent({
+      runId: "",
+      planId: input.planId,
+      taskId: input.taskId,
+      type: "task_status",
+      level: "info",
+      payload: {
+        status: "skipped",
+        message: `Task ${input.taskId} skipped by user.`
+      }
+    });
+  }
+
+  /**
+   * Abort queue execution for a plan.
+   * Stops the current queue loop and marks remaining queued tasks as pending.
+   * If there is an active run in the queue, it is cancelled.
+   */
+  abortQueue(input: AbortQueueInput): void {
+    if (!this.runningPlanQueues.has(input.planId)) {
+      return;
+    }
+
+    // Signal the queue loop to stop
+    this.abortedPlanQueues.add(input.planId);
+
+    // Cancel any active run belonging to this plan
+    for (const [runId, active] of this.activeRuns) {
+      const runRecord = this.db.getRun(runId);
+      if (runRecord && runRecord.planId === input.planId && !active.cancelRequested) {
+        active.cancelRequested = true;
+        if (active.interrupt) {
+          void active.interrupt();
+        }
+      }
+    }
+
+    // Update plan status to ready
+    this.db.updatePlanStatus(input.planId, "ready");
+
+    this.emitEvent({
+      runId: "",
+      planId: input.planId,
+      taskId: "",
+      type: "info",
+      level: "info",
+      payload: {
+        message: "Queue execution aborted by user."
+      }
+    });
+  }
+
   private async executeQueue(planId: string): Promise<void> {
-    while (true) {
-      const task = this.db.findNextRunnableTask(planId);
-      if (!task) {
-        break;
-      }
+    try {
+      while (true) {
+        // Check if the queue has been aborted
+        if (this.abortedPlanQueues.has(planId)) {
+          break;
+        }
 
-      const run = await this.runTask({ planId, taskId: task.id });
-      await this.waitForRun(run.runId);
+        const task = this.db.findNextRunnableTask(planId);
+        if (!task) {
+          break;
+        }
 
-      const runState = this.db.getRun(run.runId);
-      if (!runState || runState.status !== "completed") {
-        break;
+        const run = await this.runTask({ planId, taskId: task.id });
+        await this.waitForRun(run.runId);
+
+        // Check abort again after run completes
+        if (this.abortedPlanQueues.has(planId)) {
+          break;
+        }
+
+        const runState = this.db.getRun(run.runId);
+        if (!runState || runState.status !== "completed") {
+          break;
+        }
       }
+    } finally {
+      this.abortedPlanQueues.delete(planId);
     }
   }
 
-  private async executeRun(input: { runId: string; plan: RalphPlan; task: RalphTask }): Promise<void> {
+  private async executeRun(input: {
+    runId: string;
+    plan: RalphPlan;
+    task: RalphTask;
+    retryContext?: { retryCount: number; previousError: string };
+  }): Promise<void> {
     const startedAt = Date.now();
     let sessionId: string | null = null;
 
@@ -514,6 +710,7 @@ export class TaskRunner {
       const result = await this.agentService.runTask({
         plan: input.plan,
         task: input.task,
+        retryContext: input.retryContext,
         callbacks: {
           onLog: (line) => {
             this.emitEvent({

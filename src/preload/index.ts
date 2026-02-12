@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
   AbandonDiscoveryInput,
+  AbortQueueInput,
   ArchivePlanInput,
   CancelRunInput,
   CancelRunResponse,
@@ -21,11 +22,14 @@ import type {
   RalphApi,
   RalphPlan,
   ResumeDiscoveryInput,
+  RetryTaskInput,
+  RetryTaskResponse,
   RunAllInput,
   RunAllResponse,
   RunEvent,
   RunTaskInput,
   RunTaskResponse,
+  SkipTaskInput,
   StartDiscoveryInput,
   UnarchivePlanInput,
   UpdateModelConfigInput,
@@ -67,6 +71,18 @@ const api: RalphApi = {
 
   cancelRun(input: CancelRunInput): Promise<CancelRunResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.cancelRun, input);
+  },
+
+  retryTask(input: RetryTaskInput): Promise<RetryTaskResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.retryTask, input);
+  },
+
+  skipTask(input: SkipTaskInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.skipTask, input);
+  },
+
+  abortQueue(input: AbortQueueInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.abortQueue, input);
   },
 
   startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState> {

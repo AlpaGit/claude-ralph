@@ -23,7 +23,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   draft: "#6b7280",
   ready: "#156f67",
   running: "#d97706",
-  queued: "#6b7280"
+  queued: "#6b7280",
+  skipped: "#9333ea"
 };
 
 const STATUS_BG_MAP: Record<string, string> = {
@@ -35,7 +36,8 @@ const STATUS_BG_MAP: Record<string, string> = {
   draft: "#eceff1",
   ready: "#d1faf0",
   running: "#fde68a",
-  queued: "#eceff1"
+  queued: "#eceff1",
+  skipped: "#f3e8ff"
 };
 
 export interface UStatusPillProps {

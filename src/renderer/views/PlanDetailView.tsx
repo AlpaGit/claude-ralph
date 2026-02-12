@@ -150,6 +150,48 @@ export function PlanDetailView(): JSX.Element {
     }
   }, [selectedRunId]);
 
+  const handleRetryTask = useCallback(
+    async (task: RalphTask) => {
+      if (!plan) return;
+      const api = window.ralphApi;
+      if (!api) return;
+      try {
+        const result = await api.retryTask({ planId: plan.id, taskId: task.id });
+        selectRun(result.runId);
+      } catch {
+        // Error will be surfaced by planStore if the plan reloads
+      }
+    },
+    [plan, selectRun]
+  );
+
+  const handleSkipTask = useCallback(
+    async (task: RalphTask) => {
+      if (!plan) return;
+      const api = window.ralphApi;
+      if (!api) return;
+      try {
+        await api.skipTask({ planId: plan.id, taskId: task.id });
+        void loadPlan(plan.id);
+      } catch {
+        // Error will be surfaced on next plan reload
+      }
+    },
+    [plan, loadPlan]
+  );
+
+  const handleAbortQueue = useCallback(async () => {
+    if (!plan) return;
+    const api = window.ralphApi;
+    if (!api) return;
+    try {
+      await api.abortQueue({ planId: plan.id });
+      void loadPlan(plan.id);
+    } catch {
+      // Swallow; plan reload will reflect the latest status
+    }
+  }, [plan, loadPlan]);
+
   const handleOpenRun = useCallback(
     (runId: string) => {
       selectRun(runId);
@@ -231,6 +273,10 @@ export function PlanDetailView(): JSX.Element {
                 latestRun={latestRunByTask.get(task.id) ?? null}
                 onRunTask={(t) => void handleRunTask(t)}
                 onOpenRun={handleOpenRun}
+                onRetryTask={(t) => void handleRetryTask(t)}
+                onSkipTask={(t) => void handleSkipTask(t)}
+                onAbortQueue={() => void handleAbortQueue()}
+                queueRunning={plan.status === "running"}
               />
             ))}
           </div>
