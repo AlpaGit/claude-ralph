@@ -1472,3 +1472,36 @@ p4-05: Write unit tests for MigrationRunner               [DONE]
     - Idempotent on second run
   - Test results: 208 passed, 105 skipped (native ABI; Electron holding lock)
   - Build and typecheck pass (pre-existing TS error in task-runner.ts unrelated)
+
+p4-06: Set up Playwright with Electron fixture for E2E tests   [DONE]
+  - Installed @playwright/test@1.58.2 as devDependency
+  - playwright.config.ts
+    - testDir: ./tests/e2e, testMatch: **/*.e2e.ts
+    - timeout: 60s per test, expect timeout: 10s
+    - Sequential execution: fullyParallel false, workers 1 (Electron limitation)
+    - Retries: 1 in CI, 0 locally
+    - Reporter: dot (CI) / list (local)
+    - No browser projects (Electron fixture handles launch)
+  - tests/e2e/electron-fixture.ts
+    - Uses _electron.launch() from playwright to start the built Electron app
+    - Passes TEST_DB_PATH env var pointing to a temp database per test
+    - createTempDbPath(): creates unique temp dir + ralph-test.sqlite per test
+    - cleanupTempDb(): removes DB file, WAL/SHM journals, and temp dir after test
+    - electronApp fixture: launches app with MAIN_ENTRY (out/main/index.js),
+      verifies build exists, passes TEST_DB_PATH + NODE_ENV=test, cleans up on teardown
+    - appPage fixture: awaits firstWindow(), waits for domcontentloaded
+    - helpers fixture (PageHelpers interface):
+      - clickSidebarLink(label): clicks nav link by text, waits 300ms for navigation
+      - waitForPlanLoad(): waits for Loading skeleton to disappear
+      - fillInput(label): fills input/textarea by label text or aria association
+    - Exports test (extended base) and expect from @playwright/test
+  - tests/e2e/app-launch.e2e.ts
+    - Smoke test suite (3 tests): app window opens, sidebar nav visible, sidebar navigation works
+  - src/main/index.ts
+    - bootstrap(): reads TEST_DB_PATH env var for database path
+    - Falls back to userData/ralph-desktop.sqlite when not set (production behavior)
+    - Enables E2E test database isolation without modifying AppDatabase
+  - package.json scripts
+    - pretest:e2e: electron-vite build (ensures app is built before E2E tests)
+    - test:e2e: npx playwright test --config playwright.config.ts
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
