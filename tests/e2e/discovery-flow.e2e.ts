@@ -48,17 +48,45 @@ const CANNED_INTERVIEW_STATE_ROUND_1 = {
     {
       id: "q-arch-1",
       question: "What is the current API versioning strategy, if any?",
-      reason: "Understanding versioning helps plan backward-compatible changes."
+      reason: "Understanding versioning helps plan backward-compatible changes.",
+      question_type: "multiple_choice" as const,
+      options: [
+        "URL prefix versioning (e.g. /v1/)",
+        "Header-based versioning",
+        "Query parameter versioning",
+        "No versioning strategy"
+      ],
+      recommendedOption: "URL prefix versioning (e.g. /v1/)",
+      selectionMode: "single" as const
     },
     {
       id: "q-test-1",
       question: "Which integration tests are flaky and what do they cover?",
-      reason: "Identifying flaky tests allows targeted reliability improvements."
+      reason: "Identifying flaky tests allows targeted reliability improvements.",
+      question_type: "multiple_choice" as const,
+      options: [
+        "Payment processing tests",
+        "Authentication flow tests",
+        "Database migration tests",
+        "Third-party API integration tests"
+      ],
+      recommendedOption: "Payment processing tests",
+      selectionMode: "multi" as const
     },
     {
       id: "q-deploy-1",
       question: "What is your current deployment pipeline (CI provider, stages)?",
-      reason: "Deployment pipeline details inform the canary strategy design."
+      reason: "Deployment pipeline details inform the canary strategy design.",
+      question_type: "multiple_choice" as const,
+      options: [
+        "GitHub Actions with staging + production",
+        "GitLab CI with manual promotion",
+        "Jenkins with blue-green deployment",
+        "AWS CodePipeline",
+        "Other or custom pipeline"
+      ],
+      recommendedOption: "GitHub Actions with staging + production",
+      selectionMode: "single" as const
     }
   ],
   prdInputDraft: "## API Reliability Improvement Plan\n\nGoal: Improve API reliability and deployment confidence.\n\n### Scope\n- Fix flaky integration tests\n- Implement canary deployments\n- Add API versioning\n\n### Constraints\n- Maintain backward compatibility with v1\n- Zero-downtime deployments required",
@@ -99,12 +127,45 @@ const CANNED_INTERVIEW_STATE_ROUND_2 = {
     {
       id: "q-perf-1",
       question: "What are the current p95 latency targets for critical endpoints?",
-      reason: "Latency targets inform performance testing requirements."
+      reason: "Latency targets inform performance testing requirements.",
+      question_type: "multiple_choice" as const,
+      options: [
+        "Under 100ms",
+        "Under 250ms",
+        "Under 500ms",
+        "No defined latency targets"
+      ],
+      recommendedOption: "Under 250ms",
+      selectionMode: "single" as const
     },
     {
       id: "q-monitor-1",
       question: "What monitoring and alerting tools are currently in use?",
-      reason: "Monitoring setup affects the canary rollback automation design."
+      reason: "Monitoring setup affects the canary rollback automation design.",
+      question_type: "multiple_choice" as const,
+      options: [
+        "Datadog",
+        "Prometheus + Grafana",
+        "AWS CloudWatch",
+        "New Relic",
+        "No monitoring in place"
+      ],
+      recommendedOption: "Prometheus + Grafana",
+      selectionMode: "multi" as const
+    },
+    {
+      id: "q-rollback-1",
+      question: "What is your preferred rollback strategy for failed deployments?",
+      reason: "Rollback strategy determines canary automation complexity.",
+      question_type: "multiple_choice" as const,
+      options: [
+        "Automatic rollback on error rate spike",
+        "Manual rollback via CI trigger",
+        "Blue-green swap",
+        "No rollback strategy defined"
+      ],
+      recommendedOption: "Automatic rollback on error rate spike",
+      selectionMode: "single" as const
     }
   ],
   prdInputDraft: "## API Reliability Improvement Plan\n\nGoal: Improve API reliability and deployment confidence.\n\n### Current State\n- 40+ endpoints on Express/Node.js/TypeScript\n- 72% test coverage, 3 flaky tests in payment module\n- GitHub Actions CI, no canary strategy\n- URL-prefix versioning, inconsistently applied\n\n### Scope\n- Stabilize flaky payment tests\n- Implement canary deployment via GitHub Actions\n- Standardize API versioning across all endpoints\n- Add deployment confidence checks\n\n### Constraints\n- Maintain v1 backward compatibility\n- Zero-downtime deployments\n- 2000 min/month GitHub Actions budget\n\n### Success Criteria\n- Pipeline failure rate < 5%\n- Canary catches breaking changes before full rollout\n- All endpoints consistently versioned",

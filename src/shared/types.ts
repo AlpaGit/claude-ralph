@@ -288,14 +288,14 @@ export interface DiscoveryQuestion {
   id: string;
   question: string;
   reason: string;
-  /** Determines how the question is rendered in the UI. Defaults to 'text'. */
-  question_type?: DiscoveryQuestionType;
-  /** Available options when question_type is 'multiple_choice'. Defaults to []. */
-  options?: string[];
-  /** Suggested best option (one of the options values) when question_type is 'multiple_choice'. Defaults to null. */
-  recommendedOption?: string | null;
-  /** Whether the user can pick one option or multiple. Defaults to 'single'. */
-  selectionMode?: "single" | "multi";
+  /** Determines how the question is rendered in the UI. Always 'multiple_choice' for batched discovery. */
+  question_type: DiscoveryQuestionType;
+  /** Available options (4–5 items) for multiple-choice questions. */
+  options: string[];
+  /** AI-recommended best option (must match one of the options values exactly). */
+  recommendedOption: string;
+  /** Whether the user can pick one option ('single') or several ('multi'). */
+  selectionMode: "single" | "multi";
 }
 
 export interface DiscoveryInferredContext {

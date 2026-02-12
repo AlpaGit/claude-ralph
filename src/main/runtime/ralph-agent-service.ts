@@ -95,10 +95,10 @@ interface DiscoveryOutput {
     id: string;
     question: string;
     reason: string;
-    question_type?: "text" | "multiple_choice";
-    options?: string[];
-    recommendedOption?: string | null;
-    selectionMode?: "single" | "multi";
+    question_type: "multiple_choice";
+    options: string[];
+    recommendedOption: string;
+    selectionMode: "single" | "multi";
   }>;
   prdInputDraft: string;
   readinessScore: number;
@@ -315,10 +315,10 @@ const discoveryOutputSchema = z.object({
       id: z.string().min(1),
       question: z.string().min(8),
       reason: z.string().min(8),
-      question_type: z.enum(["text", "multiple_choice"]).default("text"),
-      options: z.array(z.string()).default([]),
-      recommendedOption: z.string().nullable().default(null),
-      selectionMode: z.enum(["single", "multi"]).default("single")
+      question_type: z.literal("multiple_choice"),
+      options: z.array(z.string()).min(4).max(5),
+      recommendedOption: z.string().min(1),
+      selectionMode: z.enum(["single", "multi"])
     })
   ),
   prdInputDraft: z.string().min(120),
@@ -355,6 +355,8 @@ const discoveryOutputJsonSchema = {
     },
     questions: {
       type: "array",
+      minItems: 3,
+      maxItems: 3,
       items: {
         type: "object",
         additionalProperties: false,
@@ -362,12 +364,12 @@ const discoveryOutputJsonSchema = {
           id: { type: "string" },
           question: { type: "string" },
           reason: { type: "string" },
-          question_type: { type: "string", enum: ["text", "multiple_choice"], default: "text" },
-          options: { type: "array", items: { type: "string" }, default: [] },
-          recommendedOption: { type: ["string", "null"], default: null },
-          selectionMode: { type: "string", enum: ["single", "multi"], default: "single" }
+          question_type: { type: "string", enum: ["multiple_choice"] },
+          options: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 5 },
+          recommendedOption: { type: "string" },
+          selectionMode: { type: "string", enum: ["single", "multi"] }
         },
-        required: ["id", "question", "reason"]
+        required: ["id", "question", "reason", "question_type", "options", "recommendedOption", "selectionMode"]
       }
     },
     prdInputDraft: { type: "string" },
@@ -1266,9 +1268,14 @@ ${failedSpecialistSummary}
 Synthesis requirements:
 1) Merge specialist findings into one coherent direction summary.
 2) Build inferredContext with practical stack/docs/scope/pain/constraints/signals.
-3) Produce high-impact clarification questions:
-   - initial discovery: 8 to 14 questions
-   - continuation with strong readiness: fewer questions is allowed
+3) Produce EXACTLY 3 high-impact clarification questions per round:
+   - Every question MUST have question_type set to "multiple_choice".
+   - Every question MUST have an "options" array with 4 to 5 distinct, actionable choices.
+   - Every question MUST have a "recommendedOption" string that matches one of the options values exactly.
+   - Every question MUST have a "selectionMode" of either "single" or "multi" depending on whether the user should pick one answer or can pick several.
+   - Questions should be ordered by impact: most critical uncertainty first.
+   - Do NOT produce text-only questions; all questions must be multiple-choice with concrete options.
+   - Always return exactly 3 questions, even during continuation rounds with strong readiness.
 4) Generate a polished prdInputDraft ready for plan generation.
 5) readinessScore must reflect real confidence.
 6) missingCriticalInfo must list blockers that can still change implementation decisions.
@@ -1357,7 +1364,77 @@ Synthesis requirements:
       throw new Error("No structured discovery output received.");
     }
 
-    return discoveryOutputSchema.parse(structuredOutput);
+    const parsed = discoveryOutputSchema.parse(structuredOutput);
+
+    // --- Post-processing: enforce exactly 3 questions per batch ---
+    const BATCH_SIZE = 3;
+    if (parsed.questions.length > BATCH_SIZE) {
+      callbacks?.onEvent({
+        type: "log",
+        level: "info",
+        message: `[synth] AI returned ${parsed.questions.length} questions; trimming to ${BATCH_SIZE}.`
+      });
+      parsed.questions = parsed.questions.slice(0, BATCH_SIZE);
+    } else if (parsed.questions.length < BATCH_SIZE) {
+      callbacks?.onEvent({
+        type: "log",
+        level: "info",
+        message: `[synth] AI returned only ${parsed.questions.length} question(s); padding to ${BATCH_SIZE} with generic clarifiers.`
+      });
+      const FALLBACK_QUESTIONS: DiscoveryOutput["questions"] = [
+        {
+          id: "fallback-scope",
+          question: "How would you describe the overall scope of this project?",
+          reason: "Scope clarity helps narrow implementation decisions.",
+          question_type: "multiple_choice",
+          options: [
+            "Small feature addition",
+            "Medium feature set",
+            "Large system overhaul",
+            "Greenfield application"
+          ],
+          recommendedOption: "Medium feature set",
+          selectionMode: "single"
+        },
+        {
+          id: "fallback-priority",
+          question: "What is most important for the first deliverable?",
+          reason: "Prioritization drives task ordering in the plan.",
+          question_type: "multiple_choice",
+          options: [
+            "Speed of delivery",
+            "Code quality and maintainability",
+            "Feature completeness",
+            "User experience polish"
+          ],
+          recommendedOption: "Feature completeness",
+          selectionMode: "single"
+        },
+        {
+          id: "fallback-constraints",
+          question: "Are there any hard constraints on this project?",
+          reason: "Constraints materially affect architecture and implementation choices.",
+          question_type: "multiple_choice",
+          options: [
+            "Must use existing tech stack only",
+            "Strict deadline within 1–2 weeks",
+            "Must maintain backward compatibility",
+            "No significant constraints"
+          ],
+          recommendedOption: "No significant constraints",
+          selectionMode: "multi"
+        }
+      ];
+      const existingIds = new Set(parsed.questions.map((q) => q.id));
+      for (const fallback of FALLBACK_QUESTIONS) {
+        if (parsed.questions.length >= BATCH_SIZE) break;
+        if (!existingIds.has(fallback.id)) {
+          parsed.questions.push(fallback);
+        }
+      }
+    }
+
+    return parsed;
   }
 
   private async runSpecialistAnalysis(input: {
