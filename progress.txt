@@ -370,3 +370,53 @@ p1-13: Decompose PromptTemplateBuilder into DiscoveryView   [DONE]
     - Renders placeholder message pointing to /discovery route
     - Marked with @deprecated JSDoc tag
   - Build and typecheck pass
+
+p1-14: Create PlanListView and LiveRunView stubs with real data   [DONE]
+  - src/renderer/views/PlanListView.tsx
+    - Replaced stub with full plan list view reading from planStore.plansList
+    - Loads plansList on mount via loadPlanList action
+    - Search input filters plans by summary or project path (case-insensitive)
+    - Responsive card grid: auto-fill with minmax(320px, 1fr)
+    - Each plan card shows: summary, UStatusPill status, project path (truncated), created date, time ago
+    - Cards are clickable (role="button") with keyboard support (Enter/Space), navigate to /plan/:id
+    - Loading state: USkeleton placeholders while list loads
+    - Error state: styled error panel when loadPlanList fails
+    - Empty state: message suggesting Discovery or PRD import
+    - No-matches state when search yields zero results, shows match count
+    - Helpers: timeAgo(), shortDate(), truncatePath()
+  - src/renderer/views/PlanListView.module.css
+    - Header with title, search row with mono font input
+    - Card grid with auto-fill columns, hover translateY(-2px) micro-interaction
+    - Plan card: brutalist panel with 2px border, shadow, cursor pointer
+    - Meta row with labeled items (Path, Created, time ago)
+    - Skeleton stack, empty state (dashed border), error panel
+    - Responsive: single-column below 768px
+    - All values reference tokens.css custom properties
+  - src/renderer/views/LiveRunView.tsx
+    - Replaced stub with full run detail view reading runId from useParams()
+    - Subscribes to run events via initRunEventSubscription() from runStore
+    - Locates TaskRun record from currentPlan.runs array
+    - Re-loads plan when run completed/failed/cancelled events arrive for this runId
+    - Run status: prefers live activeRuns state, falls back to TaskRun record
+    - Metadata card: status (UStatusPill), run ID, task ID, started/ended timestamps, duration, cost, stop reason
+    - Duration formatted as human-readable (ms, s, m s, h m) via formatDuration()
+    - Cost formatted as USD with 4 decimal places via formatCostUsd()
+    - Todo snapshot panel: list of TodoItem entries with color-coded status badges
+    - ULogViewer with full streamed log output (height 500px, auto-scroll when active)
+    - Cancel button shown only for active runs (in_progress or queued)
+    - Back button navigates to /plan/:planId or / as fallback
+    - Result text section: shown when run has resultText
+    - Error text section: shown when run has errorText
+    - Missing runId state: message directing to plan detail page
+  - src/renderer/views/LiveRunView.module.css
+    - Header with back button, title, cancel button
+    - Metadata card: flex-wrap row of labeled metadata items
+    - Cost value highlighted in accent-2 color
+    - Two-column content grid: todo panel + log section
+    - Todo panel: brutalist card, list with dashed separators, status badges color-coded
+    - Log section: full-width spanning both columns
+    - Result card: dark terminal theme pre block
+    - Error card: red border with error-bg background
+    - Responsive: single-column below 900px
+    - All values reference tokens.css custom properties
+  - Build and typecheck pass
