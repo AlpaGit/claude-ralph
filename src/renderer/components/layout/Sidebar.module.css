@@ -1,0 +1,401 @@
+/*
+ * Sidebar CSS Module
+ * Primary navigation sidebar for Ralph Desktop Orchestrator.
+ * Brutalist theme: warm background, hard borders, bold typography.
+ * Width: ~280px expanded, ~60px collapsed.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Sidebar root ─────────────────────────────────────────── */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  min-width: 280px;
+  max-height: 100vh;
+  padding: var(--space-lg);
+  border-right: 2px solid var(--color-panel-border);
+  background: var(--color-panel);
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 150ms ease-in-out, min-width 150ms ease-in-out;
+}
+
+.sidebarCollapsed {
+  width: 60px;
+  min-width: 60px;
+  padding: var(--space-lg) var(--space-sm);
+  align-items: center;
+}
+
+/* ── Brand ────────────────────────────────────────────────── */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  flex-shrink: 0;
+}
+
+.brandBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+
+.brandTitle {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ── Navigation ───────────────────────────────────────────── */
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  text-decoration: none;
+  border: 2px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.navLink:hover {
+  background: var(--color-surface-warm);
+}
+
+.navLinkActive {
+  background: var(--color-wizard-active-bg);
+  border-color: var(--color-wizard-active-border);
+  font-weight: 700;
+}
+
+.navIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  border: 1.5px solid var(--color-border-mid);
+  border-radius: 4px;
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+
+.navLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Collapsed: center nav links */
+.sidebarCollapsed .navLink {
+  justify-content: center;
+  padding: var(--space-sm);
+}
+
+/* ── Plan section (below Plans link) ──────────────────────── */
+
+.planSection {
+  margin-left: 0.5rem;
+  margin-top: 0.25rem;
+  margin-bottom: var(--space-sm);
+}
+
+.planToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem var(--space-sm);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: color var(--transition-fast);
+}
+
+.planToggle:hover {
+  color: var(--color-text);
+}
+
+.planToggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.planChevron {
+  display: inline-block;
+  font-size: 0.55rem;
+  transition: transform 150ms ease-in-out;
+  transform: rotate(0deg);
+}
+
+.planChevronOpen {
+  transform: rotate(90deg);
+}
+
+.planToggleLabel {
+  white-space: nowrap;
+}
+
+/* ── Plan list ────────────────────────────────────────────── */
+
+.planList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.25rem;
+  padding-left: 0.25rem;
+  border-left: 2px solid var(--color-border-soft);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.planItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--color-text);
+  border: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.planItem:hover {
+  background: var(--color-surface-warm);
+}
+
+.planItemActive {
+  background: var(--color-wizard-active-bg);
+  border-color: var(--color-wizard-active-border);
+}
+
+.planSummary {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.planPill {
+  font-size: 0.6rem;
+  padding: 0.05rem 0.35rem;
+}
+
+.planTime {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+/* ── Collapsed plan items ─────────────────────────────────── */
+
+.planListCollapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.planItemCollapsed {
+  flex-direction: row;
+  justify-content: center;
+  padding: 0.2rem;
+}
+
+.planDotOnly {
+  font-size: 0;
+  padding: 0.15rem;
+  border: none;
+  background: none;
+}
+
+/* ── Spacer ───────────────────────────────────────────────── */
+
+.spacer {
+  flex: 1;
+}
+
+/* ── New Plan button ──────────────────────────────────────── */
+
+.newPlanBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 2px solid var(--color-border-btn);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-white);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-bottom: var(--space-sm);
+}
+
+.newPlanBtn:hover {
+  transform: translateY(-1px);
+}
+
+.newPlanBtn:active {
+  transform: translateY(0);
+}
+
+.newPlanBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.newPlanIcon {
+  font-size: 1.1rem;
+  line-height: 1;
+  font-weight: 700;
+}
+
+/* Collapsed: icon only */
+.sidebarCollapsed .newPlanBtn {
+  padding: var(--space-sm);
+}
+
+/* ── Collapse toggle ──────────────────────────────────────── */
+
+.collapseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1.5px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.collapseBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-mid);
+}
+
+.collapseBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.collapseIcon {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 150ms ease-in-out;
+}
+
+.collapseIconFlipped {
+  transform: rotate(180deg);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: unset;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 2px solid var(--color-panel-border);
+    padding: var(--space-sm) var(--space-lg);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .sidebarCollapsed {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .brand {
+    margin-bottom: 0;
+    margin-right: var(--space-lg);
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: 0.25rem;
+  }
+
+  .planSection,
+  .planListCollapsed,
+  .collapseBtn {
+    display: none;
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .newPlanBtn {
+    margin-bottom: 0;
+    width: auto;
+  }
+}

@@ -1,24 +1,7 @@
 import type { JSX } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
+import { Sidebar } from "../layout/Sidebar";
 import styles from "./AppShell.module.css";
-
-/** Navigation entry rendered in the sidebar. */
-interface NavItem {
-  to: string;
-  label: string;
-  /** End prop for NavLink -- true means exact match only. */
-  end?: boolean;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Plans", end: true },
-  { to: "/discovery", label: "Discovery" },
-  { to: "/settings", label: "Settings" },
-];
-
-function cn(...classes: (string | false | undefined | null)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
 
 /**
  * AppShell -- layout route that wraps every page with a sidebar and main content area.
@@ -27,27 +10,7 @@ function cn(...classes: (string | false | undefined | null)[]): string {
 export function AppShell(): JSX.Element {
   return (
     <div className={styles.shell}>
-      <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <span className={styles.brandBadge}>RALPH</span>
-          <span className={styles.brandTitle}>Orchestrator</span>
-        </div>
-
-        <nav className={styles.nav}>
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(styles.navLink, isActive && styles.navLinkActive)
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
+      <Sidebar />
 
       <main className={styles.content}>
         <Outlet />

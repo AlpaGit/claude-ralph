@@ -1,79 +1,14 @@
 /* ── AppShell layout ──────────────────────────────────── */
 
 .shell {
-  display: grid;
-  grid-template-columns: 220px 1fr;
+  display: flex;
   min-height: 100vh;
-}
-
-/* ── Sidebar ─────────────────────────────────────────── */
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-  padding: var(--space-lg);
-  border-right: 2px solid var(--color-panel-border);
-  background: var(--color-panel);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.brandBadge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-accent);
-  border: 1px solid var(--color-accent);
-  padding: var(--space-xs) 0.45rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-}
-
-.brandTitle {
-  font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-/* ── Navigation ──────────────────────────────────────── */
-
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.navLink {
-  display: block;
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--color-text);
-  text-decoration: none;
-  transition: background var(--transition-fast);
-}
-
-.navLink:hover {
-  background: var(--color-surface-warm);
-}
-
-.navLinkActive {
-  background: var(--color-wizard-active-bg);
-  border: 1px solid var(--color-wizard-active-border);
-  font-weight: 700;
 }
 
 /* ── Main content ────────────────────────────────────── */
 
 .content {
+  flex: 1;
   padding: var(--space-xl);
   overflow-y: auto;
   max-height: 100vh;
@@ -83,21 +18,7 @@
 
 @media (max-width: 768px) {
   .shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  .sidebar {
-    flex-direction: row;
-    align-items: center;
-    border-right: none;
-    border-bottom: 2px solid var(--color-panel-border);
-    padding: var(--space-sm) var(--space-lg);
-    overflow-x: auto;
-  }
-
-  .nav {
-    flex-direction: row;
+    flex-direction: column;
   }
 
   .content {
