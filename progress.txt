@@ -1329,3 +1329,52 @@ p4-02: Write unit tests for AppDatabase methods   [DONE]
     - Added tests/**/*.test.ts and tests/**/*.test.tsx to include patterns
   - Test results: 5 passed (jsdom), 78 skipped (node/native ABI mismatch expected)
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p4-03: Write unit tests for Zod schemas and IPC validation   [DONE]
+  - tests/unit/zod-schemas.test.ts
+    - 130 comprehensive unit tests covering all 21 Zod schemas in @shared/ipc.ts
+    - Uses z.safeParse() for success/error branch testing throughout
+    - createPlanInputSchema tests (11): valid full input, missing prdText, missing projectPath,
+      wrong type projectPath, empty projectPath string accepted, prdText too short (<20),
+      prdText at exactly 20 chars (boundary pass), prdText at 19 chars (boundary fail),
+      wrong type prdText, null input, undefined input
+    - getPlanInputSchema tests (6): valid UUID, non-UUID string, partial UUID, missing planId,
+      number planId, empty string planId
+    - listPlansInputSchema tests (7): empty object, filter with archived, filter with search,
+      both filter fields, undefined filter, invalid archived type, invalid search type
+    - deletePlanInputSchema tests (3): valid UUID, non-UUID, missing planId
+    - archivePlanInputSchema tests (3): valid UUID, non-UUID, missing planId
+    - unarchivePlanInputSchema tests (3): valid UUID, non-UUID, missing planId
+    - runTaskInputSchema tests (7): valid UUIDs, non-UUID planId, empty taskId, missing planId,
+      missing taskId, number taskId, UUID-format taskId
+    - runAllInputSchema tests (3): valid UUID, non-UUID, missing planId
+    - cancelRunInputSchema tests (4): valid UUID, non-UUID, missing runId, empty string runId
+    - retryTaskInputSchema tests (4): valid input, non-UUID planId, empty taskId, missing both
+    - skipTaskInputSchema tests (3): valid input, non-UUID planId, empty taskId
+    - abortQueueInputSchema tests (3): valid UUID, non-UUID, missing planId
+    - startDiscoveryInputSchema tests (9): valid full input, missing projectPath, missing
+      seedSentence, missing additionalContext, seedSentence too short (<5), seedSentence at
+      exactly 5 chars (boundary pass), seedSentence at 4 chars (boundary fail), empty
+      additionalContext accepted, empty projectPath accepted
+    - continueDiscoveryInputSchema tests (10): valid single answer, valid multiple answers,
+      non-UUID sessionId, empty answers array, empty questionId, empty answer string,
+      missing sessionId, missing answers, answer missing questionId, answer missing answer
+    - wizardStepDataSchema tests (10): valid step, all 6 valid stepId enum values, invalid
+      stepId, empty title, empty goal, empty currentData, empty note accepted, missing
+      stepId, missing title, non-string title
+    - getWizardGuidanceInputSchema tests (8): valid full input, empty draftPrompt, empty
+      allSteps array, missing step, missing allSteps, missing projectPath, empty projectPath
+      accepted, invalid step within allSteps
+    - inferStackInputSchema tests (9): valid existing mode, valid new mode, invalid
+      projectMode, empty projectGoal, missing projectGoal, empty constraints accepted,
+      empty currentStack accepted, empty projectPath accepted, missing projectMode
+    - updateModelConfigInputSchema tests (7): discovery_specialist role, plan_synthesis role,
+      task_execution role, invalid agentRole, empty modelId, missing agentRole, missing modelId
+    - discoveryResumeInputSchema tests (4): valid UUID, non-UUID, missing sessionId, empty string
+    - discoveryAbandonInputSchema tests (3): valid UUID, non-UUID, missing sessionId
+    - discoveryCancelInputSchema tests (4): valid UUID, non-UUID, missing sessionId, null sessionId
+    - IPC handler validation wrapper tests (9): schema.parse throws on invalid createPlan,
+      getPlan, runTask, continueDiscovery, updateModelConfig, startDiscovery, inferStack,
+      wizardStepData inputs; valid input returns parsed data without throwing
+  - Test results: 135 passed (130 zod-schemas + 5 jsdom), 78 skipped (node/native ABI)
+  - Build and typecheck pass
