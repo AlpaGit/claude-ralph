@@ -446,3 +446,42 @@ p1-15: Create SettingsView stub   [DONE]
     - All values reference tokens.css custom properties
   - Route /settings already wired in router.tsx from p1-09
   - Build and typecheck pass
+
+p1-16: Migrate styles.css to CSS Modules   [DONE]
+  - src/renderer/App.module.css (new)
+    - Co-located CSS Module for legacy App.tsx component
+    - Contains all 30+ class selectors previously in global styles.css
+    - Scoped versions: appShell, hero, heroBadge, heroTitle, heroDescription,
+      panel, panelHeader, panelHeaderActions, layoutGrid, checklistPanel,
+      runPanel, planInput, label, textInput, textArea, actionBtn + variants
+      (primary, secondary, ghost, danger), statusPill + status variants
+      (statusPending, statusInProgress, statusCompleted, statusFailed,
+      statusCancelled), metaRow, twoCol, taskList, taskCard, taskHeader,
+      acceptanceList, notes, taskActions, runContent, logBox, eventList,
+      errorPanel
+    - Responsive media query (max-width 1080px) for layout-grid collapse
+  - src/renderer/App.tsx
+    - Replaced all global className strings with CSS Module references (styles.*)
+    - statusClass() helper now maps status strings to CSS Module class names
+      via STATUS_CLASS_MAP lookup object
+    - Compound classes use template literal concatenation (e.g. `${styles.panel} ${styles.planInput}`)
+    - Import: `import styles from "./App.module.css"`
+  - src/renderer/styles.css
+    - Trimmed from 537 lines to 44 lines
+    - Retained only: Google Fonts @import, tokens.css @import, box-sizing reset,
+      body base styles (margin, font-family, color, background gradient),
+      heading/paragraph/list margin resets
+    - Removed all component classes: app-shell, hero, panel, layout-grid,
+      checklist-panel, run-panel, plan-input, template-builder, wizard-*,
+      discovery-live-header, thinking-*, suggested-edits, template-*,
+      compact-area, checkbox-row, weight-*, advanced-settings, notice-text,
+      error-text, warning-text, prompt-preview, label, text-input, text-area,
+      action-btn, status-pill, status-*, meta-row, two-col, task-list,
+      task-card, task-header, acceptance-list, notes, task-actions,
+      run-content, log-box, event-list, error-panel
+    - Removed orphan @keyframes: discovery-pulse, thinking-dot
+    - Removed orphan @media query (1080px breakpoint)
+    - Added header comment documenting the global-only policy
+  - No orphan wizard/template/discovery global classes remain (verified via grep)
+  - All modern views/components (P1-04 through P1-15) already use CSS Modules
+  - Build and typecheck pass
