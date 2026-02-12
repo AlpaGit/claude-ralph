@@ -263,36 +263,25 @@ export class DiscoveryAgent {
   // Context-change heuristics
   // -------------------------------------------------------------------------
 
-  private shouldRefreshStackAnalysis(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
-    const combined = [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
+  /**
+   * Combines additional context and latest discovery answers into a single
+   * string for pattern matching, filtering out blank entries.
+   * Returns an empty string when there is no meaningful content.
+   */
+  private buildCombinedContext(additionalContext: string, latestAnswers: DiscoveryAnswer[]): string {
+    return [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
       .filter((value) => value.trim().length > 0)
       .join("\n");
+  }
 
-    if (combined.length === 0) {
-      return false;
-    }
-
-    if (STACK_REFRESH_TOKEN_PATTERN.test(combined)) {
-      return true;
-    }
-
-    return STACK_CHANGE_HINT_PATTERN.test(combined);
+  private shouldRefreshStackAnalysis(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
+    const combined = this.buildCombinedContext(additionalContext, latestAnswers);
+    return combined.length > 0 && (STACK_REFRESH_TOKEN_PATTERN.test(combined) || STACK_CHANGE_HINT_PATTERN.test(combined));
   }
 
   private shouldForceFullDiscoveryRefresh(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
-    const combined = [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
-      .filter((value) => value.trim().length > 0)
-      .join("\n");
-
-    if (combined.length === 0) {
-      return false;
-    }
-
-    if (FULL_DISCOVERY_REFRESH_TOKEN_PATTERN.test(combined)) {
-      return true;
-    }
-
-    return DISCOVERY_CONTEXT_CHANGE_HINT_PATTERN.test(combined);
+    const combined = this.buildCombinedContext(additionalContext, latestAnswers);
+    return combined.length > 0 && (FULL_DISCOVERY_REFRESH_TOKEN_PATTERN.test(combined) || DISCOVERY_CONTEXT_CHANGE_HINT_PATTERN.test(combined));
   }
 
   // -------------------------------------------------------------------------
