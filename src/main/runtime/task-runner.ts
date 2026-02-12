@@ -27,7 +27,7 @@ import type {
   TodoItem
 } from "@shared/types";
 import { AppDatabase } from "./app-database";
-import { RalphAgentService } from "./ralph-agent-service";
+import { RalphAgentService, type ModelConfigMap } from "./ralph-agent-service";
 
 interface ActiveRun {
   interrupt?: () => Promise<void>;
@@ -67,12 +67,37 @@ export class TaskRunner {
   private readonly runCompletion = new Map<string, { promise: Promise<void>; resolve: () => void }>();
   private readonly runningPlanQueues = new Set<string>();
   private readonly discoverySessions = new Map<string, DiscoverySession>();
-  private readonly agentService = new RalphAgentService();
+  private readonly agentService: RalphAgentService;
 
   constructor(
     private readonly db: AppDatabase,
     private readonly getWindow: () => BrowserWindow | null
-  ) {}
+  ) {
+    this.agentService = new RalphAgentService(this.buildModelConfigMap());
+  }
+
+  /**
+   * Build a ModelConfigMap from the current model_config DB rows.
+   * Used at construction time and can be refreshed via refreshModelConfig().
+   */
+  private buildModelConfigMap(): ModelConfigMap {
+    const entries = this.db.getModelConfig();
+    const map: ModelConfigMap = new Map();
+    for (const entry of entries) {
+      map.set(entry.agentRole, entry.modelId);
+    }
+    return map;
+  }
+
+  /**
+   * Rebuild the agent service with fresh model configuration from the database.
+   * Called after model config changes so subsequent SDK calls use updated models.
+   */
+  refreshModelConfig(): void {
+    const newService = new RalphAgentService(this.buildModelConfigMap());
+    // Replace agentService reference -- requires dropping readonly for this controlled mutation
+    (this as { agentService: RalphAgentService }).agentService = newService;
+  }
 
   getPlan(planId: string): RalphPlan | null {
     return this.db.getPlan(planId);
@@ -100,6 +125,7 @@ export class TaskRunner {
 
   updateModelForRole(role: AgentRole, modelId: string): void {
     this.db.updateModelForRole(role, modelId);
+    this.refreshModelConfig();
   }
 
   async startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState> {

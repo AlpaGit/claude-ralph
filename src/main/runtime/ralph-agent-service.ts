@@ -3,6 +3,7 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync } from "node:fs";
 import { z } from "zod";
 import type {
+  AgentRole,
   DiscoveryAnswer,
   DiscoveryInferredContext,
   GetWizardGuidanceInput,
@@ -18,6 +19,9 @@ import {
   technicalPackSchema,
   type TechnicalPackOutput
 } from "./ralph-schema";
+
+/** Map of agent role to model ID, loaded from model_config DB table. */
+export type ModelConfigMap = Map<AgentRole, string>;
 
 interface CreatePlanArgs {
   projectPath: string;
@@ -467,6 +471,20 @@ const SPECIALIST_JOBS: SpecialistJob[] = [
 ];
 
 export class RalphAgentService {
+  private readonly modelConfig: ModelConfigMap;
+
+  constructor(modelConfig?: ModelConfigMap) {
+    this.modelConfig = modelConfig ?? new Map();
+  }
+
+  /**
+   * Resolve the model ID for a given agent role.
+   * Returns undefined when no configuration exists (SDK will use its default).
+   */
+  private getModel(role: AgentRole): string | undefined {
+    return this.modelConfig.get(role);
+  }
+
   async startDiscovery(args: StartDiscoveryArgs): Promise<DiscoveryOutput> {
     const hasProjectPath = args.projectPath.trim().length > 0 && existsSync(args.projectPath.trim());
     const cwd = resolveQueryCwd(args.projectPath);
@@ -628,6 +646,7 @@ Synthesis requirements:
       prompt: synthesisPrompt,
       options: {
         ...baseOptions,
+        model: this.getModel("discovery_specialist"),
         cwd,
         maxTurns,
         includePartialMessages: true,
@@ -732,6 +751,7 @@ Output requirements:
       prompt: specialistPrompt,
       options: {
         ...baseOptions,
+        model: this.getModel("discovery_specialist"),
         cwd: input.cwd,
         maxTurns: input.maxTurns,
         includePartialMessages: true,
@@ -850,6 +870,7 @@ Instructions:
       prompt,
       options: {
         ...baseOptions,
+        model: this.getModel("plan_synthesis"),
         cwd,
         maxTurns: 10,
         outputFormat: {
@@ -934,6 +955,7 @@ Important:
       prompt,
       options: {
         ...baseOptions,
+        model: this.getModel("plan_synthesis"),
         cwd,
         maxTurns: 8,
         outputFormat: {
@@ -992,6 +1014,7 @@ Rules:
       prompt,
       options: {
         ...baseOptions,
+        model: this.getModel("plan_synthesis"),
         cwd,
         includePartialMessages: true,
         maxTurns: 10,
@@ -1025,10 +1048,12 @@ Rules:
 
   async runTask(args: RunTaskArgs): Promise<RunTaskResult> {
     const cwd = resolveQueryCwd(args.plan.projectPath);
+    const taskModel = this.getModel("task_execution");
     const clearResponse = query({
       prompt: "/clear",
       options: {
         ...baseOptions,
+        model: taskModel,
         cwd,
         maxTurns: 1
       }
@@ -1092,6 +1117,7 @@ Execution instruction:
       prompt: taskPrompt,
       options: {
         ...baseOptions,
+        model: taskModel,
         cwd,
         resume: clearSessionId,
         includePartialMessages: true,
