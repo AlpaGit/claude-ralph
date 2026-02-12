@@ -179,6 +179,58 @@
   color: var(--color-accent-2);
 }
 
+/* -- Webhook test actions ------------------------------------------- */
+
+.webhookActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.testWebhookBtn {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+}
+
+.testWebhookBtn:hover:not(:disabled) {
+  border-color: var(--color-accent-2);
+  color: var(--color-accent-2);
+}
+
+.testWebhookBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.webhookStatusSuccess {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-success);
+}
+
+.webhookStatusError {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-error);
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* -- About section -------------------------------------------------- */
 
 .aboutGrid {

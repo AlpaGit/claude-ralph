@@ -56,6 +56,7 @@ export function createMockRalphApi(): MockRalphApi {
     updateModelConfig: vi.fn(),
     getAppSettings: vi.fn(),
     updateAppSettings: vi.fn(),
+    testDiscordWebhook: vi.fn(),
     getDiscoverySessions: vi.fn(),
     resumeDiscoverySession: vi.fn(),
     abandonDiscoverySession: vi.fn(),

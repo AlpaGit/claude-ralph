@@ -31,7 +31,8 @@ export const IPC_CHANNELS = {
   discoveryResume: "discovery:resume",
   discoveryAbandon: "discovery:abandon",
   discoveryCancel: "discovery:cancel",
-  getRunEvents: "run:getEvents"
+  getRunEvents: "run:getEvents",
+  testDiscordWebhook: "config:testDiscordWebhook"
 } as const;
 
 export const listPlansInputSchema = z.object({
@@ -181,6 +182,16 @@ export const discoveryAbandonInputSchema = z.object({
 
 export const discoveryCancelInputSchema = z.object({
   sessionId: z.string().uuid()
+});
+
+export const testDiscordWebhookInputSchema = z.object({
+  webhookUrl: z
+    .string()
+    .transform((value) => value.trim())
+    .refine(
+      (value) => /^https?:\/\//i.test(value),
+      "webhookUrl must be a valid URL."
+    )
 });
 
 export const getRunEventsInputSchema = z.object({

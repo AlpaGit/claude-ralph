@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useSettingsStore, AVAILABLE_MODELS } from "../stores/settingsStore";
 import type { AgentRole } from "../stores/settingsStore";
@@ -97,6 +97,49 @@ export function SettingsView(): JSX.Element {
     });
   }
 
+  /* -- Discord Webhook Test -- */
+  const [webhookTestStatus, setWebhookTestStatus] = useState<
+    { kind: "idle" } | { kind: "sending" } | { kind: "success" } | { kind: "error"; message: string }
+  >({ kind: "idle" });
+  const webhookTestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Clear any pending auto-reset timer on unmount. */
+  useEffect(() => {
+    return () => {
+      if (webhookTestTimer.current) clearTimeout(webhookTestTimer.current);
+    };
+  }, []);
+
+  const handleTestWebhook = useCallback(async (): Promise<void> => {
+    const url = discordWebhookUrl.trim();
+    if (!url) return;
+
+    // Clear previous timer if user clicks again quickly
+    if (webhookTestTimer.current) {
+      clearTimeout(webhookTestTimer.current);
+      webhookTestTimer.current = null;
+    }
+
+    setWebhookTestStatus({ kind: "sending" });
+    try {
+      const result = await window.ralphApi.testDiscordWebhook({ webhookUrl: url });
+      if (result.ok) {
+        setWebhookTestStatus({ kind: "success" });
+      } else {
+        setWebhookTestStatus({ kind: "error", message: result.error ?? "Unknown error" });
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Failed to test webhook.";
+      setWebhookTestStatus({ kind: "error", message });
+    }
+
+    // Auto-clear the status after 3 seconds
+    webhookTestTimer.current = setTimeout(() => {
+      setWebhookTestStatus({ kind: "idle" });
+      webhookTestTimer.current = null;
+    }, 3000);
+  }, [discordWebhookUrl]);
+
   return (
     <section className={styles.view}>
       <div className={styles.header}>
@@ -177,13 +220,29 @@ export function SettingsView(): JSX.Element {
               When set, each specialist/stage agent posts what it is doing and what it found.
               Leave empty to disable Discord notifications.
             </p>
-            <button
-              type="button"
-              className={styles.savePreferencesBtn}
-              onClick={handleSaveAppSettings}
-            >
-              Save Preferences
-            </button>
+            <div className={styles.webhookActions}>
+              <button
+                type="button"
+                className={styles.savePreferencesBtn}
+                onClick={handleSaveAppSettings}
+              >
+                Save Preferences
+              </button>
+              <button
+                type="button"
+                className={styles.testWebhookBtn}
+                disabled={!discordWebhookUrl.trim() || webhookTestStatus.kind === "sending"}
+                onClick={() => void handleTestWebhook()}
+              >
+                {webhookTestStatus.kind === "sending" ? "Sending\u2026" : "Test Webhook"}
+              </button>
+              {webhookTestStatus.kind === "success" && (
+                <span className={styles.webhookStatusSuccess}>Delivered successfully</span>
+              )}
+              {webhookTestStatus.kind === "error" && (
+                <span className={styles.webhookStatusError}>{webhookTestStatus.message}</span>
+              )}
+            </div>
           </div>
         </UCard>
 

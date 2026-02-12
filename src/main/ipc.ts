@@ -18,6 +18,7 @@ import {
   inferStackInputSchema,
   IPC_CHANNELS,
   listPlansInputSchema,
+  testDiscordWebhookInputSchema,
   listProjectMemoryInputSchema,
   refreshProjectStackProfileInputSchema,
   retryTaskInputSchema,
@@ -316,6 +317,15 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = updateAppSettingsInputSchema.parse(rawInput);
       taskRunner.updateAppSettings(input);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.testDiscordWebhook, async (_event, rawInput) => {
+    try {
+      const input = testDiscordWebhookInputSchema.parse(rawInput);
+      return await taskRunner.testDiscordWebhook(input);
     } catch (error) {
       throw createIpcError(error);
     }

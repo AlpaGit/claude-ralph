@@ -436,6 +436,17 @@ export interface UpdateAppSettingsInput {
   discordWebhookUrl: string;
 }
 
+/** Input for testing a Discord webhook URL by sending a test embed. */
+export interface TestDiscordWebhookInput {
+  webhookUrl: string;
+}
+
+/** Result of a Discord webhook test. */
+export interface TestDiscordWebhookResult {
+  ok: boolean;
+  error?: string;
+}
+
 /** Lightweight summary of a discovery session for the resume dialog. */
 export interface DiscoverySessionSummary {
   id: string;
@@ -525,6 +536,7 @@ export interface RalphApi {
   updateModelConfig(input: UpdateModelConfigInput): Promise<void>;
   getAppSettings(): Promise<AppSettings>;
   updateAppSettings(input: UpdateAppSettingsInput): Promise<void>;
+  testDiscordWebhook(input: TestDiscordWebhookInput): Promise<TestDiscordWebhookResult>;
   getDiscoverySessions(): Promise<DiscoverySessionSummary[]>;
   resumeDiscoverySession(input: ResumeDiscoveryInput): Promise<DiscoveryInterviewState>;
   abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void>;

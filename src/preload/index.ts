@@ -41,6 +41,8 @@ import type {
   RunTaskResponse,
   SkipTaskInput,
   StartDiscoveryInput,
+  TestDiscordWebhookInput,
+  TestDiscordWebhookResult,
   UnarchivePlanInput,
   UpdateModelConfigInput,
   UpdateAppSettingsInput,
@@ -80,7 +82,8 @@ const IPC_CHANNELS = {
   discoveryResume: "discovery:resume",
   discoveryAbandon: "discovery:abandon",
   discoveryCancel: "discovery:cancel",
-  getRunEvents: "run:getEvents"
+  getRunEvents: "run:getEvents",
+  testDiscordWebhook: "config:testDiscordWebhook"
 } as const;
 
 const api: RalphApi = {
@@ -178,6 +181,10 @@ const api: RalphApi = {
 
   updateAppSettings(input: UpdateAppSettingsInput): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.updateAppSettings, input);
+  },
+
+  testDiscordWebhook(input: TestDiscordWebhookInput): Promise<TestDiscordWebhookResult> {
+    return ipcRenderer.invoke(IPC_CHANNELS.testDiscordWebhook, input);
   },
 
   getDiscoverySessions(): Promise<DiscoverySessionSummary[]> {
