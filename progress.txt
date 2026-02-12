@@ -558,3 +558,36 @@ p1-21: Fix bug: Deduplicate IPC_CHANNELS in preload   [DONE]
   - No other files changed; all IPC_CHANNELS usages in preload already used
     property access (IPC_CHANNELS.createPlan, etc.) so they work unchanged
   - Build and typecheck pass
+
+p2-01: Add archived_at column and plan management DB methods   [DONE]
+  - resources/migrations/002_plan_archive.sql
+    - ALTER TABLE plans ADD COLUMN archived_at TEXT (nullable, null = not archived)
+  - src/shared/types.ts
+    - RalphPlan: added archivedAt: string | null field
+    - PlanListItem interface (new): id, summary, status, projectPath, createdAt, archivedAt
+    - ListPlansFilter interface (new): archived?: boolean, search?: string
+    - ListPlansInput, DeletePlanInput, ArchivePlanInput, UnarchivePlanInput interfaces (new)
+    - RalphApi: added listPlans, deletePlan, archivePlan, unarchivePlan methods
+  - src/shared/ipc.ts
+    - IPC_CHANNELS: added listPlans, deletePlan, archivePlan, unarchivePlan channel names
+    - Zod schemas: listPlansInputSchema, deletePlanInputSchema, archivePlanInputSchema, unarchivePlanInputSchema
+  - src/main/runtime/app-database.ts
+    - PlanRow: added archived_at field; PlanListRow interface (new)
+    - getPlan(): now returns archivedAt from plan row
+    - listPlans(filter?): SELECT with dynamic WHERE conditions (archived, search), ORDER BY created_at DESC
+    - deletePlan(planId): DELETE FROM plans (CASCADE handles tasks/runs/events/snapshots)
+    - archivePlan(planId): UPDATE archived_at to ISO timestamp
+    - unarchivePlan(planId): UPDATE archived_at to NULL
+  - src/main/runtime/task-runner.ts
+    - Pass-through methods: listPlans, deletePlan, archivePlan, unarchivePlan
+  - src/main/ipc.ts
+    - Registered IPC handlers for plan:list, plan:delete, plan:archive, plan:unarchive
+  - src/preload/index.ts
+    - Bridge methods: listPlans, deletePlan, archivePlan, unarchivePlan
+  - src/renderer/stores/planStore.ts
+    - PlanSummary: added archivedAt field
+    - loadPlanList(): wired to real IPC, accepts filter param
+    - deletePlan(): wired to real IPC, then removes from local list
+    - archivePlan(): wired to real IPC, updates local archivedAt
+    - unarchivePlan() (new): wired to real IPC, clears local archivedAt
+  - Build and typecheck pass
