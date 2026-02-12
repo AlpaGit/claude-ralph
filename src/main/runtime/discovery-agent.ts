@@ -233,6 +233,32 @@ export class DiscoveryAgent {
     };
   }
 
+  /**
+   * Formats a cached stack profile as a `### stack-cache` markdown block with
+   * pretty-printed JSON matching the specialist analysis shape.
+   */
+  private formatStackCacheSummary(cache: StackProfileCache): string {
+    return (
+      `### stack-cache\n` +
+      JSON.stringify(
+        {
+          summary: cache.stackSummary,
+          findings: [],
+          signals: cache.signals,
+          painPoints: [],
+          constraints: [],
+          scopeHints: [],
+          stackHints: cache.stackHints,
+          documentationHints: [],
+          questions: [],
+          confidence: cache.confidence
+        },
+        null,
+        2
+      )
+    );
+  }
+
   // -------------------------------------------------------------------------
   // Context-change heuristics
   // -------------------------------------------------------------------------
@@ -762,25 +788,7 @@ Planning rules:
         `### carried-context\n${JSON.stringify(carryForwardSnapshot, null, 2)}`
       ];
       if (options?.stackCache) {
-        summaries.push(
-          `### stack-cache\n` +
-            JSON.stringify(
-              {
-                summary: options.stackCache.stackSummary,
-                findings: [],
-                signals: options.stackCache.signals,
-                painPoints: [],
-                constraints: [],
-                scopeHints: [],
-                stackHints: options.stackCache.stackHints,
-                documentationHints: [],
-                questions: [],
-                confidence: options.stackCache.confidence
-              },
-              null,
-              2
-            )
-        );
+        summaries.push(this.formatStackCacheSummary(options.stackCache));
       }
 
       specialistSummary = summaries.join("\n\n");
@@ -930,25 +938,7 @@ Planning rules:
         );
 
       if (!stackReport && options?.stackCache) {
-        specialistSummaries.push(
-          `### stack-cache\n` +
-            JSON.stringify(
-              {
-                summary: options.stackCache.stackSummary,
-                findings: [],
-                signals: options.stackCache.signals,
-                painPoints: [],
-                constraints: [],
-                scopeHints: [],
-                stackHints: options.stackCache.stackHints,
-                documentationHints: [],
-                questions: [],
-                confidence: options.stackCache.confidence
-              },
-              null,
-              2
-            )
-        );
+        specialistSummaries.push(this.formatStackCacheSummary(options.stackCache));
       }
 
       specialistSummary = specialistSummaries.join("\n\n");
