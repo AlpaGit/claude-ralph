@@ -244,6 +244,7 @@ export function LiveRunView(): JSX.Element {
             type="button"
             className={styles.cancelBtn}
             onClick={() => void handleCancel()}
+            title="Cancel Run (Esc)"
           >
             Cancel Run
           </button>

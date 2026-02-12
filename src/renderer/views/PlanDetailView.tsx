@@ -362,6 +362,7 @@ export function PlanDetailView(): JSX.Element {
                 type="button"
                 className={styles.runAllBtn}
                 onClick={() => void handleRunAll()}
+                title="Run Next Available Tasks (Ctrl+R)"
               >
                 Run Next Available Tasks
               </button>
@@ -400,6 +401,7 @@ export function PlanDetailView(): JSX.Element {
                   className={styles.cancelBtn}
                   onClick={() => void handleCancelRun()}
                   disabled={!selectedRunId}
+                  title="Cancel Run (Esc)"
                 >
                   Cancel Run
                 </button>

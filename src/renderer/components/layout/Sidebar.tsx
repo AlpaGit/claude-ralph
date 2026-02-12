@@ -54,12 +54,14 @@ interface NavItem {
   label: string;
   /** End prop for NavLink -- true means exact match only. */
   end?: boolean;
+  /** Keyboard shortcut hint shown in tooltip. */
+  shortcutHint?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Plans", end: true },
-  { to: "/discovery", label: "Discovery" },
-  { to: "/settings", label: "Settings" },
+  { to: "/discovery", label: "Discovery", shortcutHint: "Ctrl+N" },
+  { to: "/settings", label: "Settings", shortcutHint: "Ctrl+," },
 ];
 
 /* ── PlanListItem ────────────────────────────────────────── */
@@ -169,7 +171,15 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
               className={({ isActive }) =>
                 cn(styles.navLink, isActive && styles.navLinkActive)
               }
-              title={collapsed ? item.label : undefined}
+              title={
+                collapsed
+                  ? item.shortcutHint
+                    ? `${item.label} (${item.shortcutHint})`
+                    : item.label
+                  : item.shortcutHint
+                    ? `${item.label} (${item.shortcutHint})`
+                    : undefined
+              }
             >
               <span className={styles.navIcon}>{item.label.charAt(0)}</span>
               {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
@@ -237,7 +247,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
         type="button"
         className={styles.newPlanBtn}
         onClick={handleNewPlan}
-        title={collapsed ? "New Plan" : undefined}
+        title={collapsed ? "New Plan (Ctrl+N)" : "New Plan (Ctrl+N)"}
       >
         <span className={styles.newPlanIcon} aria-hidden="true">+</span>
         {!collapsed && <span>New Plan</span>}

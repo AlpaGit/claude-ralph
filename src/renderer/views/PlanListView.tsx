@@ -304,10 +304,11 @@ export function PlanListView(): JSX.Element {
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="Search plans by summary or path..."
+          placeholder="Search plans by summary or path... (Ctrl+F)"
           value={searchInput}
           onChange={(e) => handleSearchChange(e.target.value)}
           aria-label="Search plans"
+          title="Search plans (Ctrl+F)"
         />
 
         <button
