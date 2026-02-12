@@ -7,7 +7,7 @@
  *
  * Responsibilities:
  * - runTask: multi-stage pipeline (implementation → architecture-review → refactor → tester → committer)
- * - runStage: reusable inner stage runner with tool policy, logging, and subagent tracking
+ * - executeStage: reusable private stage runner with tool policy, logging, and subagent tracking
  * - mergePhaseWithCommitter: phase-level branch merge via committer agent
  * - stabilizePhaseIntegrationWithCommitter: phase integration stabilization via committer agent
  *
@@ -224,15 +224,6 @@ export class TaskAgent {
       expectedHead = currentHead;
     };
 
-    const runStage = async (input: RunStageInput): Promise<RunStageResult> => {
-      return this.executeStage(input, {
-        cwd,
-        callbacks: args.callbacks,
-        sessionIdRef: { current: runSessionId ?? clearSessionId },
-        clearSessionId
-      });
-    };
-
     const consumeStageResult = (result: RunStageResult, stageName: string): void => {
       // Update the shared session id for stage chaining
       // (executeStage updates sessionIdRef.current internally)
@@ -276,10 +267,10 @@ Technical notes:
 ${args.task.technicalNotes}
 `;
 
-    // Use a mutable ref object so runStage can update the session id
+    // Mutable ref so executeStage can propagate session id changes across stages
     const sessionIdRef = { current: runSessionId };
 
-    // Override runStage to use shared ref
+    // Stage runner that updates the shared sessionIdRef after each stage
     const runStageTracked = async (input: RunStageInput): Promise<RunStageResult> => {
       const result = await this.executeStage(input, {
         cwd,
@@ -715,8 +706,8 @@ Stabilization policy (strict):
   /**
    * Execute a single agent stage within the task pipeline.
    *
-   * This is the extracted `runStage` inner function, now a private method
-   * that receives shared mutable state via the `context` parameter.
+   * Receives shared mutable state via the `context` parameter so that
+   * session ID changes propagate across chained stages.
    */
   private async executeStage(
     input: RunStageInput,
