@@ -47,3 +47,22 @@ p1-08: Install and configure Zustand stores       [DONE]
     - Actions: loadSettings, updateModelForRole
     - Defaults all roles to claude-opus-4-6; stubs pending backend settings IPC
   - Build and typecheck pass
+
+p1-04: Create UButton component with CSS Module   [DONE]
+  - src/renderer/components/ui/UButton.tsx
+    - forwardRef component accepting all ButtonHTMLAttributes
+    - Variants: primary, secondary, ghost, danger (default: primary)
+    - Sizes: sm, md, lg (default: md)
+    - Loading state: renders a CSS spinner, sets aria-busy, disables interaction
+    - Disabled state: reduced opacity, not-allowed cursor
+    - Exports UButtonProps, UButtonVariant, UButtonSize types
+    - Uses simple cn() helper for conditional class composition (no clsx dep)
+  - src/renderer/components/ui/UButton.module.css
+    - Extracted .action-btn base + variant styles from styles.css into CSS Module
+    - Brutalist style: 2px solid border, bold weight, Space Grotesk font
+    - Hover translateY(-1px), active translateY(0) micro-interaction
+    - focus-visible outline (2px solid accent, 2px offset) for accessibility
+    - Size presets with appropriate padding and font-size
+    - Loading spinner via CSS animation (border-based spinner)
+    - All values reference tokens.css custom properties
+  - Build and typecheck pass
