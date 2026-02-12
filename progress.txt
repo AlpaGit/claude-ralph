@@ -1431,3 +1431,44 @@ p4-04: Write unit tests for Zustand stores   [DONE]
     - Full lifecycle test (1): started -> log -> todo_update -> completed end-to-end
   - Test results: 208 passed (73 store + 130 zod + 5 jsdom), 78 skipped (node/native ABI)
   - Build and typecheck pass
+
+p4-05: Write unit tests for MigrationRunner               [DONE]
+  - tests/unit/migrations.test.ts (27 tests in 7 describe blocks)
+  - Uses in-memory SQLite + temp migration dirs (fs.mkdtempSync)
+  - Same skipIf(!sqliteAvailable) guard pattern as app-database tests
+  - schema_migrations table tests (2):
+    - Creates table on first run
+    - Does not fail if table already exists
+  - Apply all migrations to empty DB tests (5):
+    - Single migration file creates table and records in schema_migrations
+    - Multiple migrations applied in order with correct tracking
+    - Empty migrations directory handled gracefully
+    - Non-existent migrations directory handled gracefully
+    - applied_at recorded as valid ISO timestamp within expected range
+  - Skip already-applied migrations tests (3):
+    - Does not re-apply on second run
+    - Only applies new migrations added after first run
+    - Skips even if migration file content changed (name-based matching)
+  - Migration ordering tests (4):
+    - Numeric sort regardless of filesystem order
+    - Non-contiguous migration numbers handled correctly
+    - Numeric sort beats lexicographic (2 < 10, not "10" < "2")
+    - Ignores non-SQL files and SQL files without numeric prefix
+  - Transaction rollback on SQL error tests (4):
+    - Invalid SQL rolls back; prior migrations preserved
+    - Multi-statement migration with partial failure fully rolled back
+    - Retry succeeds after fixing broken migration file
+    - Failed migration name not recorded in schema_migrations
+  - Corrupt migration state tests (3):
+    - Stale entries for deleted files do not block new migrations
+    - Extra columns in schema_migrations table handled gracefully
+    - Multiple run() calls do not duplicate entries
+  - schema_migrations tracking tests (3):
+    - Tracks each migration with full filename
+    - Timestamps in chronological order
+    - Full filename including .sql extension used as name
+  - Real project migrations integration tests (2):
+    - Applies all resources/migrations files, verifies core tables exist
+    - Idempotent on second run
+  - Test results: 208 passed, 105 skipped (native ABI; Electron holding lock)
+  - Build and typecheck pass (pre-existing TS error in task-runner.ts unrelated)
