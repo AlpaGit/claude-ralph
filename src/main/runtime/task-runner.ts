@@ -70,6 +70,12 @@ function normalizeTaskId(raw: string, fallbackOrdinal: number): string {
 /** Maximum number of retries allowed for a single task. Configurable at build time. */
 const MAX_RETRIES = 3;
 
+/** Default timeout (ms) to wait for SDK interrupt before force-cancelling a run. */
+const CANCEL_TIMEOUT_MS = 10_000;
+
+/** Stale run threshold: runs in_progress for longer than this (ms) with no active tracking are cleaned up. */
+const STALE_RUN_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+
 export class TaskRunner {
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly runCompletion = new Map<string, { promise: Promise<void>; resolve: () => void }>();
@@ -83,6 +89,7 @@ export class TaskRunner {
     private readonly getWindow: () => BrowserWindow | null
   ) {
     this.agentService = new RalphAgentService(this.buildModelConfigMap());
+    this.cleanupStaleRuns();
   }
 
   /**
@@ -490,11 +497,106 @@ export class TaskRunner {
     }
 
     active.cancelRequested = true;
+
+    // If we have an interrupt handle, race it against a timeout
     if (active.interrupt) {
-      await active.interrupt();
+      const interruptPromise = active.interrupt().catch(() => {
+        // SDK interrupt failed; the timeout will handle force-cancel
+      });
+
+      const timeoutPromise = new Promise<"timeout">((resolve) => {
+        setTimeout(() => resolve("timeout"), CANCEL_TIMEOUT_MS);
+      });
+
+      const result = await Promise.race([
+        interruptPromise.then(() => "interrupted" as const),
+        timeoutPromise
+      ]);
+
+      if (result === "timeout") {
+        // SDK did not respond within timeout -- force-cancel
+        this.forceCancelRun(input.runId);
+      }
+    } else {
+      // No interrupt handle available -- force-cancel immediately
+      this.forceCancelRun(input.runId);
     }
 
     return { ok: true };
+  }
+
+  /**
+   * Force-cancel a run by directly updating the DB record and cleaning up
+   * the in-memory activeRuns map.  Called when the SDK doesn't respond to
+   * interrupt within the configured timeout.
+   */
+  private forceCancelRun(runId: string): void {
+    const runRecord = this.db.getRun(runId);
+
+    // Only force-cancel if the run is still in_progress (not already finalized by executeRun)
+    if (runRecord && runRecord.status === "in_progress") {
+      this.db.updateRun({
+        runId,
+        status: "cancelled",
+        endedAt: nowIso(),
+        errorText: "Cancelled (forced after timeout)"
+      });
+
+      // Reset the task status back to pending so it can be re-run
+      this.db.updateTaskStatus(runRecord.taskId, "pending");
+
+      // Update plan status
+      this.db.updatePlanStatus(runRecord.planId, "ready");
+
+      this.emitEvent({
+        runId,
+        planId: runRecord.planId,
+        taskId: runRecord.taskId,
+        type: "cancelled",
+        level: "info",
+        payload: {
+          message: "Run cancelled (forced after timeout)."
+        }
+      });
+    }
+
+    // Clean up in-memory tracking
+    this.activeRuns.delete(runId);
+    const completion = this.runCompletion.get(runId);
+    completion?.resolve();
+    this.runCompletion.delete(runId);
+  }
+
+  /**
+   * Clean up stale runs on initialization.
+   * Finds runs marked as in_progress in the DB that are older than STALE_RUN_THRESHOLD_MS
+   * and have no corresponding entry in the activeRuns map (indicating they were orphaned
+   * by a previous app session). Marks them as cancelled with an explanatory error.
+   */
+  private cleanupStaleRuns(): void {
+    const threshold = new Date(Date.now() - STALE_RUN_THRESHOLD_MS).toISOString();
+    const staleRuns = this.db.getStaleInProgressRuns(threshold);
+
+    for (const run of staleRuns) {
+      // Only clean up runs that are NOT tracked in-memory (should be all at startup)
+      if (!this.activeRuns.has(run.id)) {
+        console.warn(`[TaskRunner] Cleaning up stale run ${run.id} (started ${run.startedAt})`);
+
+        this.db.updateRun({
+          runId: run.id,
+          status: "cancelled",
+          endedAt: nowIso(),
+          errorText: "Cancelled (stale run cleaned up on startup)"
+        });
+
+        this.db.updateTaskStatus(run.taskId, "pending");
+        this.db.updatePlanStatus(run.planId, "ready");
+      }
+    }
+
+    if (staleRuns.length > 0) {
+      console.info(`[TaskRunner] Cleaned up ${staleRuns.length} stale run(s) from previous session.`);
+    }
   }
 
   /**

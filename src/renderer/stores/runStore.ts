@@ -2,10 +2,13 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { RunEvent, TodoItem } from "@shared/types";
 
+/** Cancel timeout in ms -- must match the backend CANCEL_TIMEOUT_MS. */
+const CANCEL_TIMEOUT_MS = 10_000;
+
 interface RunState {
   /**
    * Map of runId -> run status string.
-   * Tracks which runs are currently active (in_progress / queued).
+   * Tracks which runs are currently active (in_progress / queued / cancelling).
    */
   activeRuns: Record<string, string>;
 
@@ -21,12 +24,18 @@ interface RunState {
   /** Ring buffer of the most recent RunEvents (max 50). */
   recentEvents: RunEvent[];
 
+  /**
+   * Map of runId -> timestamp (ms) when cancel was requested.
+   * Used by the UI to show cancel timeout progress.
+   */
+  cancelRequestedAt: Record<string, number>;
+
   // ── Actions ──────────────────────────────────────────────
 
   /** Start a task run via the backend. Returns the runId. */
   startRun: (planId: string, taskId: string) => Promise<string>;
 
-  /** Cancel an active run. */
+  /** Cancel an active run. Transitions to 'cancelling' state with timeout progress. */
   cancelRun: (runId: string) => Promise<void>;
 
   /** Append a single log line for a run (called from the IPC event handler). */
@@ -40,6 +49,9 @@ interface RunState {
 
   /** Process an incoming RunEvent from the IPC bridge. Internal use. */
   _handleRunEvent: (event: RunEvent) => void;
+
+  /** Returns the cancel timeout constant for UI display purposes. */
+  getCancelTimeoutMs: () => number;
 }
 
 function getApi(): typeof window.ralphApi {
@@ -57,6 +69,7 @@ export const useRunStore = create<RunState>()(
     runTodos: {},
     selectedRunId: null,
     recentEvents: [],
+    cancelRequestedAt: {},
 
     startRun: async (planId: string, taskId: string): Promise<string> => {
       const api = getApi();
@@ -69,12 +82,30 @@ export const useRunStore = create<RunState>()(
     },
 
     cancelRun: async (runId: string): Promise<void> => {
-      const api = getApi();
-      await api.cancelRun({ runId });
+      // Transition to 'cancelling' immediately so the UI can show progress
       set((draft) => {
-        draft.activeRuns[runId] = "cancelled";
+        draft.activeRuns[runId] = "cancelling";
+        draft.cancelRequestedAt[runId] = Date.now();
+      });
+
+      const api = getApi();
+      try {
+        await api.cancelRun({ runId });
+      } catch {
+        // Swallow; the event stream or timeout will handle final state
+      }
+
+      // After the backend responds (timeout or interrupt), mark as cancelled
+      // if the event stream hasn't already transitioned the status
+      set((draft) => {
+        if (draft.activeRuns[runId] === "cancelling") {
+          draft.activeRuns[runId] = "cancelled";
+        }
+        delete draft.cancelRequestedAt[runId];
       });
     },
+
+    getCancelTimeoutMs: (): number => CANCEL_TIMEOUT_MS,
 
     appendLog: (runId: string, line: string): void => {
       set((draft) => {
@@ -133,6 +164,8 @@ export const useRunStore = create<RunState>()(
           case "failed":
           case "cancelled": {
             draft.activeRuns[event.runId] = event.type;
+            // Clear cancel tracking when a terminal event arrives
+            delete draft.cancelRequestedAt[event.runId];
             break;
           }
 

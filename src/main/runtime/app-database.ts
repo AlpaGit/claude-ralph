@@ -824,6 +824,35 @@ export class AppDatabase {
     };
   }
 
+  /**
+   * Return all runs still marked as 'in_progress' whose started_at is older
+   * than the given threshold (ISO timestamp).  Used to detect stale runs that
+   * lost their in-memory ActiveRun tracking (e.g. after app restart).
+   */
+  getStaleInProgressRuns(olderThan: string): TaskRun[] {
+    const rows = this.db
+      .prepare(
+        "SELECT * FROM runs WHERE status = 'in_progress' AND started_at < ? ORDER BY started_at ASC;"
+      )
+      .all(olderThan) as RunRow[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      planId: row.plan_id,
+      taskId: row.task_id,
+      sessionId: row.session_id,
+      status: row.status,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      durationMs: row.duration_ms,
+      totalCostUsd: row.total_cost_usd,
+      resultText: row.result_text,
+      stopReason: row.stop_reason,
+      errorText: row.error_text,
+      retryCount: row.retry_count ?? 0
+    }));
+  }
+
   close(): void {
     this.db.close();
   }

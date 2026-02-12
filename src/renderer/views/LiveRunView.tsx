@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type { TaskRun, TodoItem } from "@shared/types";
@@ -107,6 +107,8 @@ export function LiveRunView(): JSX.Element {
   const runLogs = useRunStore((s) => s.runLogs);
   const runTodos = useRunStore((s) => s.runTodos);
   const recentEvents = useRunStore((s) => s.recentEvents);
+  const cancelRequestedAt = useRunStore((s) => s.cancelRequestedAt);
+  const getCancelTimeoutMs = useRunStore((s) => s.getCancelTimeoutMs);
 
   /* ── Subscribe to run events ─────────────────────────── */
   useEffect(() => {
@@ -149,6 +151,32 @@ export function LiveRunView(): JSX.Element {
   }, [runId, activeRuns, run]);
 
   const isActive = runStatus === "in_progress" || runStatus === "queued";
+  const isCancelling = runStatus === "cancelling";
+
+  /* ── Cancel timeout progress ────────────────────────── */
+  const cancelStartMs = runId ? (cancelRequestedAt[runId] ?? null) : null;
+  const cancelTimeoutMs = getCancelTimeoutMs();
+  const [cancelElapsedMs, setCancelElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (cancelStartMs === null) {
+      setCancelElapsedMs(0);
+      return;
+    }
+
+    const tick = () => {
+      const elapsed = Date.now() - cancelStartMs;
+      setCancelElapsedMs(Math.min(elapsed, cancelTimeoutMs));
+    };
+
+    tick();
+    const interval = setInterval(tick, 200);
+    return () => clearInterval(interval);
+  }, [cancelStartMs, cancelTimeoutMs]);
+
+  const cancelProgressPct = cancelTimeoutMs > 0
+    ? Math.round((cancelElapsedMs / cancelTimeoutMs) * 100)
+    : 0;
 
   /* ── Callbacks ───────────────────────────────────────── */
   const handleCancel = useCallback(async () => {
@@ -198,7 +226,20 @@ export function LiveRunView(): JSX.Element {
           <h1 className={styles.title}>Live Run</h1>
         </div>
 
-        {isActive ? (
+        {isCancelling ? (
+          <div className={styles.cancellingGroup}>
+            <span className={styles.cancellingLabel}>Cancelling...</span>
+            <div className={styles.cancelProgressTrack}>
+              <div
+                className={styles.cancelProgressBar}
+                style={{ width: `${cancelProgressPct}%` }}
+              />
+            </div>
+            <span className={styles.cancelProgressText}>
+              {Math.ceil((cancelTimeoutMs - cancelElapsedMs) / 1000)}s
+            </span>
+          </div>
+        ) : isActive ? (
           <button
             type="button"
             className={styles.cancelBtn}
