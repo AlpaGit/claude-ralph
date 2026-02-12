@@ -1,0 +1,163 @@
+/*
+ * PlanCreationProgress CSS Module
+ * Rich progress panel for the 30-60s plan creation operation.
+ * Shows elapsed time, phase steps, animated progress bar.
+ */
+
+.container {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.elapsed {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-accent-2);
+  white-space: nowrap;
+}
+
+/* ── Progress bar ─────────────────────────────────────── */
+
+.progressTrack {
+  height: 8px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border-soft);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: var(--color-accent-2);
+  border-radius: var(--radius-pill);
+  transition: width 1s linear;
+  position: relative;
+}
+
+.progressBar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* ── Phase steps ──────────────────────────────────────── */
+
+.phaseSteps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+}
+
+.phaseStep {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.phaseDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-circle);
+  flex-shrink: 0;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.phaseLabel {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Phase states */
+
+.phaseStepDone .phaseDot {
+  background: var(--color-completed);
+  border: 1.5px solid var(--color-completed);
+}
+
+.phaseStepDone .phaseLabel {
+  color: var(--color-completed);
+}
+
+.phaseStepActive .phaseDot {
+  background: var(--color-accent-2);
+  border: 1.5px solid var(--color-accent-2);
+  animation: phasePulse 1.2s ease-in-out infinite;
+}
+
+.phaseStepActive .phaseLabel {
+  color: var(--color-accent-2);
+  font-weight: 700;
+}
+
+.phaseStepPending .phaseDot {
+  background: var(--color-border-soft);
+  border: 1.5px solid var(--color-border-soft);
+}
+
+.phaseStepPending .phaseLabel {
+  color: var(--color-muted);
+}
+
+@keyframes phasePulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ── Phase description ────────────────────────────────── */
+
+.phaseDescription {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--color-muted);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* ── Error state ──────────────────────────────────────── */
+
+.errorText {
+  margin: 0;
+  color: var(--color-error);
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}

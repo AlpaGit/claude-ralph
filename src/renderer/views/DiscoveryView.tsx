@@ -6,6 +6,7 @@ import { useDiscoveryStore } from "../stores/discoveryStore";
 import { UButton } from "../components/ui/UButton";
 import { UTextArea } from "../components/UTextArea/UTextArea";
 import { UStatusPill } from "../components/UStatusPill/UStatusPill";
+import { USkeleton } from "../components/USkeleton/USkeleton";
 import { toastService } from "../services/toastService";
 import styles from "./DiscoveryView.module.css";
 
@@ -189,7 +190,12 @@ export function DiscoveryView(): JSX.Element {
       if (event.message.startsWith("Starting specialist agent:")) started.add(id);
       if (event.message.startsWith("Completed specialist agent:")) completed.add(id);
     }
-    return { started: started.size, completed: completed.size };
+    return {
+      started: started.size,
+      completed: completed.size,
+      startedNames: Array.from(started),
+      completedNames: Array.from(completed),
+    };
   }, [events]);
 
   const liveStatusText = useMemo(() => {
@@ -351,6 +357,34 @@ export function DiscoveryView(): JSX.Element {
         {/* ── Error notice ────────────────────────────── */}
         {error ? <p className={styles.errorText}>{error}</p> : null}
 
+        {/* ── Discovery skeleton (initial analysis, no events yet) ── */}
+        {loading && !interview && events.length === 0 ? (
+          <div className={styles.discoverySkeleton}>
+            <div className={styles.discoverySkeletonHeader}>
+              <USkeleton variant="text" width="45%" height="1.3em" />
+              <USkeleton variant="text" width="80px" height="1.3em" />
+            </div>
+            <USkeleton variant="text" lines={2} />
+            <div className={styles.discoverySkeletonCards}>
+              <div className={styles.discoverySkeletonCard}>
+                <USkeleton variant="text" width="60%" height="1.1em" />
+                <USkeleton variant="text" lines={3} />
+              </div>
+              <div className={styles.discoverySkeletonCard}>
+                <USkeleton variant="text" width="50%" height="1.1em" />
+                <USkeleton variant="text" lines={2} />
+              </div>
+              <div className={styles.discoverySkeletonCard}>
+                <USkeleton variant="text" width="55%" height="1.1em" />
+                <USkeleton variant="text" lines={2} />
+              </div>
+            </div>
+            <p className={styles.discoverySkeletonNotice}>
+              Specialist agents are analyzing the project. Results will stream in shortly.
+            </p>
+          </div>
+        ) : null}
+
         {/* ── AI Feedback panel (live events) ─────────── */}
         {loading || events.length > 0 ? (
           <div className={styles.feedbackCard}>
@@ -391,10 +425,34 @@ export function DiscoveryView(): JSX.Element {
                   : `Last update: ${secondsSinceLastEvent}s ago`}
               </span>
               <span>
-                Specialists done: {specialistProgress.completed}/
-                {Math.max(5, specialistProgress.started)}
+                Specialists: {specialistProgress.completed}/
+                {Math.max(5, specialistProgress.started)} done
               </span>
             </div>
+
+            {/* Specialist progress tracker */}
+            {specialistProgress.started > 0 ? (
+              <div className={styles.specialistTracker}>
+                {specialistProgress.startedNames.map((name) => {
+                  const isDone = specialistProgress.completedNames.includes(name);
+                  return (
+                    <div
+                      key={name}
+                      className={cn(
+                        styles.specialistItem,
+                        isDone ? styles.specialistDone : styles.specialistRunning
+                      )}
+                    >
+                      <span className={styles.specialistDot} />
+                      <span className={styles.specialistName}>{name}</span>
+                      <span className={styles.specialistStatus}>
+                        {isDone ? "done" : "running"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             <p
               className={cn(
                 styles.statusText,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import type { RalphPlan, RalphTask, RunEvent, TaskRun, TodoItem } from "@shared/types";
 import { PromptTemplateBuilder } from "./components/PromptTemplateBuilder";
+import { PlanCreationProgress } from "./components/plan/PlanCreationProgress";
 import styles from "./App.module.css";
 
 type RunLogState = Record<string, string[]>;
@@ -263,8 +264,11 @@ export function App(): JSX.Element {
           onClick={() => void handleCreatePlan()}
           disabled={creatingPlan || prdText.trim().length < 20}
         >
-          {creatingPlan ? "Generating..." : "Generate Ralph Plan"}
+          Generate Ralph Plan
         </button>
+
+        {/* Rich progress panel replaces simple "Creating plan..." text */}
+        <PlanCreationProgress active={creatingPlan} error={error && creatingPlan ? error : null} />
       </section>
 
       {error ? <section className={`${styles.panel} ${styles.errorPanel}`}>{error}</section> : null}

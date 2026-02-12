@@ -29,6 +29,35 @@
   gap: var(--space-lg);
 }
 
+.skeletonPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border: 2px solid var(--color-border-soft);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+}
+
+.skeletonPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.skeletonMetaRow {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.skeletonTwoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
 /* ── Empty / error states ──────────────────────────────── */
 
 .emptyMessage {

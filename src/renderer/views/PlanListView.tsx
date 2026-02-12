@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { JSX } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { usePlanStore } from "../stores/planStore";
 import type { PlanSummary } from "../stores/planStore";
 import { UStatusPill, USkeleton, UConfirmModal } from "../components/ui";
+import { PlanCreationProgress } from "../components/plan/PlanCreationProgress";
 import styles from "./PlanListView.module.css";
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -87,12 +88,15 @@ interface ConfirmState {
  */
 export function PlanListView(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
 
   /* ── Zustand store selectors ─────────────────────────── */
   const plansList = usePlanStore((s) => s.plansList);
   const loadingList = usePlanStore((s) => s.loadingList);
+  const creating = usePlanStore((s) => s.creating);
   const error = usePlanStore((s) => s.error);
   const loadPlanList = usePlanStore((s) => s.loadPlanList);
+  const createPlan = usePlanStore((s) => s.createPlan);
   const deletePlan = usePlanStore((s) => s.deletePlan);
   const archivePlan = usePlanStore((s) => s.archivePlan);
   const unarchivePlan = usePlanStore((s) => s.unarchivePlan);
@@ -103,6 +107,27 @@ export function PlanListView(): JSX.Element {
   const [showArchived, setShowArchived] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+
+  /* ── Plan creation from Discovery (location.state.prdText) ── */
+  const incomingPrd = (location.state as { prdText?: string } | null)?.prdText ?? null;
+  const prdConsumedRef = useRef(false);
+
+  useEffect(() => {
+    if (incomingPrd && !prdConsumedRef.current && !creating) {
+      prdConsumedRef.current = true;
+      setCreationError(null);
+      void (async () => {
+        try {
+          const planId = await createPlan(incomingPrd, "");
+          navigate(`/plan/${planId}`, { replace: true });
+        } catch (caught) {
+          const msg = caught instanceof Error ? caught.message : "Failed to create plan.";
+          setCreationError(msg);
+        }
+      })();
+    }
+  }, [incomingPrd, creating, createPlan, navigate]);
 
   /* ── Debounce search input (300ms) ───────────────────── */
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -230,9 +255,19 @@ export function PlanListView(): JSX.Element {
           <h1 className={styles.title}>Plans</h1>
         </div>
         <div className={styles.skeletonStack}>
-          <USkeleton variant="card" height="120px" />
-          <USkeleton variant="card" height="120px" />
-          <USkeleton variant="card" height="120px" />
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className={styles.skeletonCard}>
+              <div className={styles.skeletonCardHeader}>
+                <USkeleton variant="text" width="70%" />
+                <USkeleton variant="text" width="60px" height="1.4em" />
+              </div>
+              <USkeleton variant="text" lines={2} />
+              <div className={styles.skeletonCardMeta}>
+                <USkeleton variant="text" width="40%" />
+                <USkeleton variant="text" width="25%" />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     );
@@ -258,6 +293,11 @@ export function PlanListView(): JSX.Element {
       <div className={styles.header}>
         <h1 className={styles.title}>Plans</h1>
       </div>
+
+      {/* Plan creation progress panel */}
+      {creating || creationError ? (
+        <PlanCreationProgress active={creating} error={creationError} />
+      ) : null}
 
       {/* Search and filter controls */}
       <div className={styles.controlsRow}>

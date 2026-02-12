@@ -212,10 +212,47 @@ export function PlanDetailView(): JSX.Element {
   if (loadingPlan && !plan) {
     return (
       <section className={styles.view}>
-        <div className={styles.skeletonStack}>
-          <USkeleton variant="card" height="120px" />
-          <USkeleton variant="card" height="160px" />
-          <USkeleton variant="text" lines={4} />
+        <div className={styles.grid}>
+          {/* Overview skeleton */}
+          <div className={styles.spanHalf}>
+            <div className={styles.skeletonPanel}>
+              <div className={styles.skeletonPanelHeader}>
+                <USkeleton variant="text" width="40%" height="1.4em" />
+                <USkeleton variant="text" width="70px" height="1.4em" />
+              </div>
+              <USkeleton variant="text" lines={3} />
+              <div className={styles.skeletonMetaRow}>
+                <USkeleton variant="text" width="30%" />
+                <USkeleton variant="text" width="20%" />
+                <USkeleton variant="text" width="25%" />
+              </div>
+            </div>
+          </div>
+          {/* Technical pack skeleton */}
+          <div className={styles.spanHalf}>
+            <div className={styles.skeletonPanel}>
+              <USkeleton variant="text" width="50%" height="1.4em" />
+              <div className={styles.skeletonTwoCol}>
+                <div>
+                  <USkeleton variant="text" width="60%" height="1.1em" />
+                  <USkeleton variant="text" lines={3} />
+                </div>
+                <div>
+                  <USkeleton variant="text" width="50%" height="1.1em" />
+                  <USkeleton variant="text" lines={2} />
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Checklist skeleton */}
+          <div className={styles.spanFull}>
+            <div className={styles.skeletonPanel}>
+              <USkeleton variant="text" width="30%" height="1.4em" />
+              <USkeleton variant="card" height="80px" />
+              <USkeleton variant="card" height="80px" />
+              <USkeleton variant="card" height="80px" />
+            </div>
+          </div>
         </div>
       </section>
     );

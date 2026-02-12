@@ -997,3 +997,87 @@ p3-04: Install and configure toast notification system   [DONE]
   - src/renderer/components/ui/ULogViewer.tsx
     - copyAll: success toast "Logs copied to clipboard." after copy
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-05: Add loading skeletons and streaming progress indicators   [DONE]
+  - src/renderer/views/PlanListView.tsx
+    - Enhanced skeleton loading state: 4 skeleton cards matching plan card layout
+    - Each skeleton card: header row (title line + status pill placeholder),
+      2-line text skeleton, meta row with path and date placeholders
+    - Integrated PlanCreationProgress panel for plan creation from Discovery
+    - Reads location.state.prdText from Discovery "Use as Plan Input" navigation
+    - Auto-triggers createPlan on arrival, navigates to /plan/:id on success
+    - Shows PlanCreationProgress component during creation with error fallback
+    - Added useLocation import, creating/createPlan store selectors, creationError state
+  - src/renderer/views/PlanListView.module.css
+    - .skeletonCard: flex column container matching planCard padding and border
+    - .skeletonCardHeader: flex row for title + pill alignment
+    - .skeletonCardMeta: flex row for path + date spacing
+  - src/renderer/views/PlanDetailView.tsx
+    - Enhanced skeleton loading state: full 12-col grid layout matching main render
+    - Overview skeleton (spanHalf): panel header row, 3-line text, meta row
+    - Technical pack skeleton (spanHalf): title line, 2-col grid with section skeletons
+    - Checklist skeleton (spanFull): title line + 3 card skeletons
+    - Replaced flat skeletonStack with structured grid matching actual content layout
+  - src/renderer/views/PlanDetailView.module.css
+    - .skeletonPanel: flex column with padding, soft border, panel background
+    - .skeletonPanelHeader: flex row for title + status alignment
+    - .skeletonMetaRow: flex-wrap row for metadata spacing
+    - .skeletonTwoCol: 2-column grid for tech pack section pairs
+  - src/renderer/views/DiscoveryView.tsx
+    - Added USkeleton import for discovery skeleton placeholders
+    - Discovery skeleton: shown when loading && !interview && events.length === 0
+    - Skeleton layout: header row, 2-line text, 3-column specialist analysis cards
+    - Each skeleton card: title line + multi-line text placeholder
+    - Notice text: "Specialist agents are analyzing the project..."
+    - Enhanced specialistProgress memo: now tracks startedNames and completedNames arrays
+    - Specialist tracker panel: shown when specialistProgress.started > 0
+    - Individual specialist pills: name, running/done status, color-coded dot
+    - Running specialists: amber border + background, pulsing dot animation
+    - Completed specialists: green border + background, solid dot
+  - src/renderer/views/DiscoveryView.module.css
+    - .discoverySkeleton: flex column container with soft border, panel background
+    - .discoverySkeletonHeader: flex row for header alignment
+    - .discoverySkeletonCards: auto-fit grid for specialist card placeholders
+    - .discoverySkeletonCard: dashed border card with gap spacing
+    - .discoverySkeletonNotice: muted italic font for loading message
+    - .specialistTracker: flex-wrap row for specialist progress pills
+    - .specialistItem: pill container with border, mono font, transition
+    - .specialistDone: green border + completed background color
+    - .specialistRunning: amber border + in-progress background color
+    - .specialistDot: 6px dot with color and pulse animation for running state
+    - .specialistName: bold, truncated with ellipsis at 140px
+    - .specialistStatus: uppercase muted status label
+    - @keyframes specialistPulse: opacity animation for running dots
+  - src/renderer/components/plan/PlanCreationProgress.tsx (new)
+    - Rich progress panel for 30-60s plan creation operation
+    - Props: active (boolean), error (string | null)
+    - Elapsed timer: setInterval at 1s, resets on active transition
+    - 5 time-based phases: Initializing (0s), Analyzing PRD (3s),
+      Generating Technical Pack (10s), Building Checklist (20s), Finalizing Plan (35s)
+    - Phase steps: dot indicators with done/active/pending states
+    - Done phases: green dot + text; Active: accent-2 dot with pulse; Pending: muted
+    - Animated progress bar: fills to 95% based on elapsed/expected ratio (45s expected)
+    - Shimmer animation on progress bar fill for visual feedback
+    - Phase description: italic text describing current operation
+    - Error state: replaces progress with red error message
+    - formatElapsed helper: "Xs" or "Xm YYs" format
+    - Accessible: role="progressbar" with aria-valuenow/min/max
+  - src/renderer/components/plan/PlanCreationProgress.module.css (new)
+    - .container: brutalist panel with border, shadow, flex column layout
+    - .header: flex row with title and elapsed timer
+    - .elapsed: mono font, accent-2 color for timer display
+    - .progressTrack: 8px height, bordered, rounded pill
+    - .progressBar: accent-2 fill, 1s linear width transition
+    - .progressBar::after: shimmer gradient animation (2s infinite)
+    - .phaseSteps: flex-wrap row of phase step indicators
+    - .phaseStep: flex row with dot + label
+    - .phaseStepDone: green dot + text
+    - .phaseStepActive: accent-2 dot with phasePulse animation + bold text
+    - .phaseStepPending: muted soft dot + text
+    - .phaseDescription: italic muted text for current phase info
+    - .errorText: red bold text for error display
+  - src/renderer/App.tsx
+    - Added PlanCreationProgress import
+    - Replaced "Generating..." button text with static "Generate Ralph Plan"
+    - Added PlanCreationProgress panel below button (active=creatingPlan, error during creation)
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)

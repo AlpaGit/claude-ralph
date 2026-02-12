@@ -138,6 +138,48 @@
   margin: 0;
 }
 
+/* ── Discovery skeleton (initial analysis phase) ─────── */
+
+.discoverySkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border: 2px solid var(--color-border-soft);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+}
+
+.discoverySkeletonHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.discoverySkeletonCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-md);
+}
+
+.discoverySkeletonCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px dashed var(--color-border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.discoverySkeletonNotice {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
 /* ── AI Feedback panel ────────────────────────────────── */
 
 .feedbackCard {
@@ -250,6 +292,74 @@
   font-size: 0.8rem;
   white-space: pre-wrap;
   line-height: 1.5;
+}
+
+/* ── Specialist progress tracker ──────────────────────── */
+
+.specialistTracker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.specialistItem {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border: 1.5px solid var(--color-border-soft);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.specialistDone {
+  border-color: var(--color-completed);
+  background: var(--color-status-completed-bg);
+}
+
+.specialistRunning {
+  border-color: var(--color-in-progress);
+  background: var(--color-status-in-progress-bg);
+}
+
+.specialistDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-circle);
+  flex-shrink: 0;
+}
+
+.specialistDone .specialistDot {
+  background: var(--color-completed);
+}
+
+.specialistRunning .specialistDot {
+  background: var(--color-in-progress);
+  animation: specialistPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes specialistPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.specialistName {
+  font-weight: 600;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.specialistStatus {
+  color: var(--color-muted);
+  font-weight: 400;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
 }
 
 /* ── Discovery output ─────────────────────────────────── */
