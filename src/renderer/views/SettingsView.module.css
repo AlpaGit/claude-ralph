@@ -1,0 +1,143 @@
+/* SettingsView -- model configuration, preferences, and about */
+
+.view {
+  padding: var(--space-lg);
+  max-width: var(--max-width-app);
+  margin: 0 auto;
+}
+
+/* -- Header --------------------------------------------------------- */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+/* -- Sections stack ------------------------------------------------- */
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* -- Model config table --------------------------------------------- */
+
+.modelTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+}
+
+.modelTable th,
+.modelTable td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px dashed var(--color-border-dashed);
+}
+
+.modelTable th {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+  border-bottom: 2px solid var(--color-panel-border);
+}
+
+.roleCell {
+  font-weight: 600;
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.modelCell {
+  color: var(--color-accent-2);
+}
+
+.readOnlyHint {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+/* -- Preferences placeholder ---------------------------------------- */
+
+.placeholderText {
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+/* -- About section -------------------------------------------------- */
+
+.aboutGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-sm) var(--space-lg);
+  font-size: 0.88rem;
+}
+
+.aboutLabel {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.aboutValue {
+  font-family: var(--font-mono);
+  color: var(--color-muted);
+}
+
+/* -- Loading / error states ----------------------------------------- */
+
+.loadingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+}
+
+.errorPanel {
+  border: 2px solid var(--color-error);
+  border-radius: var(--radius-panel);
+  background: var(--color-error-bg);
+  padding: var(--space-lg);
+}
+
+.errorPanel p {
+  margin: 0;
+}
+
+/* -- Responsive ----------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .aboutGrid {
+    grid-template-columns: 1fr;
+    gap: var(--space-xs) 0;
+  }
+
+  .aboutLabel {
+    margin-top: var(--space-sm);
+  }
+}
