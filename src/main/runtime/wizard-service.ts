@@ -17,6 +17,7 @@ import type { GetWizardGuidanceInput, WizardGuidanceResult } from "@shared/types
 import { baseOptions, type ModelResolver } from "./agent-constants";
 import { wizardGuidanceJsonSchema, wizardGuidanceSchema } from "./agent-schemas";
 import { tryParseStructuredOutputFromText } from "./agent-utils";
+import { prompts, PROMPT_NAMES } from "./prompts";
 
 // ---------------------------------------------------------------------------
 // WizardService
@@ -39,42 +40,15 @@ export class WizardService {
       )
       .join("\n\n");
 
-    const prompt = `
-You are an interactive PRD planning coach.
-
-You must help users build a complete, high-quality PRD prompt step by step.
-Focus only on the current step, but use all prior steps for consistency.
-
-Current step:
-- stepId: ${input.step.stepId}
-- title: ${input.step.title}
-- goal: ${input.step.goal}
-- currentData: ${input.step.currentData}
-- note: ${input.step.note || "none"}
-
-All steps summary:
-${allStepsSummary}
-
-Draft prompt so far:
----
-${input.draftPrompt}
----
-
-Instructions:
-1) Ask one high-impact next question that unlocks better technical decisions.
-2) Provide a concrete recommendation for this step (not generic advice).
-3) Explain rationale and tradeoff briefly.
-4) Score completeness 0-100 for this step only.
-5) List missing points that should be added before finalizing.
-6) Provide a polished prompt fragment the user can paste into the PRD prompt.
-7) Provide suggestedEdits with explicit field names from the step data when possible.
-
-Important:
-- Keep output concise and actionable.
-- Avoid repeating the entire PRD.
-- Treat this as an iterative interview.
-- Use the "prd-interviewer" agent via Task to reason deeply before returning final guidance.
-`;
+    const prompt = prompts.render(PROMPT_NAMES.WIZARD_GUIDANCE, {
+      stepId: input.step.stepId,
+      stepTitle: input.step.title,
+      stepGoal: input.step.goal,
+      stepCurrentData: input.step.currentData,
+      stepNote: input.step.note || "",
+      allStepsSummary,
+      draftPrompt: input.draftPrompt
+    });
 
     const cwd = input.projectPath.trim().length > 0 ? input.projectPath : process.cwd();
     let structuredOutput: unknown;
@@ -95,11 +69,7 @@ Important:
           "prd-interviewer": {
             description:
               "PRD interviewer agent specialized in extracting missing product and technical context.",
-            prompt: `
-You are a PRD interviewing specialist.
-Given a current step and previous context, produce precise guidance that improves plan quality.
-Optimize for actionable, implementation-ready outcomes.
-`
+            prompt: prompts.render(PROMPT_NAMES.SUBAGENT_PRD_INTERVIEWER, {})
           }
         }
       }

@@ -42,6 +42,7 @@ import {
   summarizeArchitectureFindings,
   validateCommitPolicyForRange
 } from "./agent-utils";
+import { prompts, PROMPT_NAMES } from "./prompts";
 
 // ---------------------------------------------------------------------------
 // Re-export for backward compatibility
@@ -290,26 +291,14 @@ ${args.task.technicalNotes}
         "ralph-worker": {
           description:
             "Strict implementation worker for one task. Never run git commit or git merge.",
-          prompt: `
-You implement only the requested task.
-Stay in scope, update code, and prepare for architecture review.
-Do NOT run git commit or git merge.
-`
+          prompt: prompts.render(PROMPT_NAMES.SUBAGENT_RALPH_WORKER_IMPL, {})
         }
       },
-      prompt: `
-You are running stage: implementation.
-${retryInjection}
-${worktreeInjection}
-${taskContext}
-
-Instructions:
-1) Use the in-prompt PRD and plan progress history as authoritative context.
-2) Implement only this task.
-3) Keep code changes scoped and production-safe.
-4) Do NOT run git commit or git merge.
-5) Return concise changed-files summary.
-`
+      prompt: prompts.render(PROMPT_NAMES.TASK_IMPLEMENTATION, {
+        taskContext,
+        retryInjection,
+        worktreeInjection
+      })
     });
     consumeStageResult(implResult, "implementation");
     await ensureNoCommitYet("implementation");
@@ -325,30 +314,9 @@ Instructions:
         model: architectureModel,
         maxTurns: 16,
         outputSchema: architectureReviewJsonSchema,
-        prompt: `
-You are running stage: architecture-review.
-${taskContext}
-
-Return ONLY valid JSON for this schema.
-
-Review objectives:
-- Check if the task changes are in the right service/module.
-- Enforce SOLID with strong SRP focus.
-- Detect duplicate code and suggest safe DRY refactors.
-- Recommend concrete refactor actions when needed.
-
-Status policy:
-- pass: zero findings and no actionable quality issue.
-- pass_with_notes: non-critical findings are present and still require targeted code changes before continuation.
-- needs_refactor: any structural/code-quality issue that should be fixed before testing.
-- blocked: critical issue that prevents safe continuation.
-
-Quality gate rules (strict):
-- Any critical finding => blocked.
-- Any high finding => needs_refactor or blocked.
-- Any medium finding on boundary/srp/duplication/solid => needs_refactor.
-- If findings exist, recommendedActions must be concrete and non-empty.
-`
+        prompt: prompts.render(PROMPT_NAMES.TASK_ARCHITECTURE_REVIEW, {
+          taskContext
+        })
       });
 
       const parsedReview = architectureReviewSchema.parse(reviewResult.structuredOutput);
@@ -391,29 +359,15 @@ Quality gate rules (strict):
           "ralph-worker": {
             description:
               "Focused refactor worker for architecture findings. Never run git commit or git merge.",
-            prompt: `
-Apply only targeted refactors from architecture findings.
-Do not widen scope.
-Do NOT run git commit or git merge.
-`
+            prompt: prompts.render(PROMPT_NAMES.SUBAGENT_RALPH_WORKER_REFACTOR, {})
           }
         },
-        prompt: `
-You are running stage: architecture-refactor.
-${taskContext}
-
-Architecture findings to fix now:
-${summarizeArchitectureFindings(review)}
-
-Recommended actions:
-${review.recommendedActions.length > 0 ? review.recommendedActions.join("\n") : "- none provided"}
-
-Instructions:
-1) Apply only necessary refactors to resolve findings.
-2) Preserve task scope and behavior.
-3) Do NOT run git commit or git merge.
-4) Return concise summary of refactors.
-`
+        prompt: prompts.render(PROMPT_NAMES.TASK_ARCHITECTURE_REFACTOR, {
+          taskContext,
+          architectureFindings: summarizeArchitectureFindings(review),
+          recommendedActions:
+            review.recommendedActions.length > 0 ? review.recommendedActions.join("\n") : "- none provided"
+        })
       });
       consumeStageResult(refactorResult, `architecture-refactor-${architectureReviewIteration}`);
       await ensureNoCommitYet(`architecture-refactor-${architectureReviewIteration}`);
@@ -425,17 +379,9 @@ Instructions:
       stageName: "tester",
       model: testerModel,
       maxTurns: 28,
-      prompt: `
-You are running stage: tester.
-${taskContext}
-
-Testing policy (strict):
-1) Prefer integration/e2e/system tests in real runtime conditions whenever available.
-2) If integration tests are not feasible, run strongest fallback and explain why.
-3) Unit tests are fallback-only.
-4) Provide commands run and pass/fail evidence.
-5) Do NOT run git commit or git merge.
-`
+      prompt: prompts.render(PROMPT_NAMES.TASK_TESTER, {
+        taskContext
+      })
     });
     consumeStageResult(testerResult, "tester");
     await ensureNoCommitYet("tester");
@@ -449,20 +395,10 @@ Testing policy (strict):
       stageName: "committer",
       model: committerModel,
       maxTurns: 24,
-      prompt: `
-You are running stage: committer.
-${taskContext}
-${worktreeInjection}
-
-Commit policy (strict):
-1) Review current diff and ensure task scope is respected.
-2) Create commit(s) using Conventional Commits:
-   <type>[optional scope]: <description>
-3) Allowed examples: feat, fix, docs, refactor, test, chore, perf, improvement.
-4) Never include "Co-authored-by" trailer mentioning Claude.
-5) Do NOT run git merge in this stage.
-6) Return commit hash(es) and commit message(s).
-`
+      prompt: prompts.render(PROMPT_NAMES.TASK_COMMITTER, {
+        taskContext,
+        worktreeInjection
+      })
     });
     consumeStageResult(committerResult, "committer");
 
@@ -517,38 +453,14 @@ Commit policy (strict):
         ? args.validationCommands.map((command, index) => `${index + 1}. ${command}`).join("\n")
         : "(none)";
 
-    const mergePrompt = `
-You are the dedicated Ralph committer agent for queue merge.
-
-Repository root: ${cwd}
-Target branch: ${args.targetBranch}
-Phase number: ${args.phaseNumber}
-Branches to merge in order:
-${args.branches.map((branch, index) => `${index + 1}. ${branch}`).join("\n")}
-
-Merge context (task intent + execution outcomes):
-${mergeContext}
-
-Validation commands (must all pass before you finish):
-${validationCommands}
-
-Merge policy (strict):
-1) Verify working tree is clean before merging.
-2) Checkout the target branch.
-3) Merge each branch in listed order using no-fast-forward merge commits.
-4) Merge commit messages MUST follow Conventional Commits:
-   <type>[optional scope]: <description>
-5) Never include any Co-authored-by trailer that mentions Claude.
-6) If a merge conflict occurs, resolve it using the merge context above:
-   - preserve intended behavior of already-merged work on target branch
-   - preserve the incoming task's stated acceptance criteria
-   - keep fixes minimal and scoped to conflict/integration correctness
-7) After merges, run every validation command. If a command fails, make minimal integration fixes, commit with Conventional Commits, and rerun until all pass or truly blocked.
-8) If blocked, report concrete blockers (files + why) and leave the repo in a clean, non-conflicted state.
-9) Provide a concise summary of merged branches, conflict resolutions, validation command results, and resulting commit hashes.
-
-You are the only agent allowed to run git merge in this step.
-`;
+    const mergePrompt = prompts.render(PROMPT_NAMES.PHASE_MERGE, {
+      cwd,
+      targetBranch: args.targetBranch,
+      phaseNumber: args.phaseNumber,
+      branchesList: args.branches.map((branch, index) => `${index + 1}. ${branch}`).join("\n"),
+      mergeContext,
+      validationCommands
+    });
 
     const mergeResponse = query({
       prompt: mergePrompt,
@@ -588,29 +500,14 @@ You are the only agent allowed to run git merge in this step.
         ? args.validationCommands.map((command, index) => `${index + 1}. ${command}`).join("\n")
         : "(none)";
 
-    const stabilizePrompt = `
-You are the dedicated Ralph committer agent for phase integration stabilization.
-
-Repository root: ${cwd}
-Phase number: ${args.phaseNumber}
-Integration branch: ${args.integrationBranch}
-Target branch for promotion: ${args.targetBranch}
-
-Phase context (what was intended + what already landed):
-${contextSummary}
-
-Validation commands:
-${validationCommands}
-
-Stabilization policy (strict):
-1) Checkout ${args.integrationBranch}.
-2) If any merge/cherry-pick/rebase conflict state exists, resolve it or cleanly abort the operation. Never leave the repository conflicted.
-3) Review integration diff relative to ${args.targetBranch}; keep changes minimal and aligned with phase intent.
-4) Run all validation commands. If any fail, make minimal integration fixes, commit with Conventional Commits, and rerun until all pass or truly blocked.
-5) Never include any Co-authored-by trailer that mentions Claude.
-6) Before finishing, ensure git status is clean and branch is ready for fast-forward promotion.
-7) Provide a concise summary of fixes, validations, and resulting commit hashes.
-`;
+    const stabilizePrompt = prompts.render(PROMPT_NAMES.PHASE_STABILIZE, {
+      cwd,
+      phaseNumber: args.phaseNumber,
+      integrationBranch: args.integrationBranch,
+      targetBranch: args.targetBranch,
+      contextSummary,
+      validationCommands
+    });
 
     const stabilizeResponse = query({
       prompt: stabilizePrompt,

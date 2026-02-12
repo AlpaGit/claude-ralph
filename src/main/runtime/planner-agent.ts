@@ -23,6 +23,7 @@ import {
   resolveQueryCwd,
   tryParseStructuredOutputFromText
 } from "./agent-utils";
+import { prompts, PROMPT_NAMES } from "./prompts";
 
 // ---------------------------------------------------------------------------
 // Re-export for backward compatibility
@@ -60,27 +61,10 @@ export class PlannerAgent {
   async createPlan(args: CreatePlanArgs): Promise<CreatePlanResult> {
     const cwd = resolveQueryCwd(args.projectPath);
     const projectHistoryContext = args.projectHistoryContext?.trim() ?? "";
-    const prompt = `
-You are a Ralph planning engine for strict single-task execution.
-
-Generate a complete technical plan from this PRD text:
----
-${args.prdText}
----
-
-Project history context (same project path, optional):
-${projectHistoryContext.length > 0 ? projectHistoryContext : "none"}
-
-Output MUST match the provided JSON schema exactly.
-
-Rules:
-- Build an implementation checklist where each item is atomic and can be done in exactly one Ralph iteration.
-- Dependencies must use checklist item IDs.
-- Acceptance criteria must be testable.
-- Keep architecture notes practical and implementation-focused.
-- Include realistic risks, assumptions, and test strategy.
-- Avoid duplicating already-completed scope from project history unless the PRD explicitly requests it.
-`;
+    const prompt = prompts.render(PROMPT_NAMES.CREATE_PLAN, {
+      prdText: args.prdText,
+      projectHistoryContext
+    });
 
     let structuredOutput: unknown;
     let resultText = "";
