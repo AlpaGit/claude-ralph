@@ -1108,3 +1108,62 @@ p3-06: Make TaskCards collapsible with summary/expand behavior   [DONE]
     - .expandCollapseBtn: ghost-style brutalist button (2px border, bold, --font-sans)
     - Hover translateY(-1px) micro-interaction, focus-visible outline for accessibility
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-07: Add keyboard shortcuts for common actions   [DONE]
+  - src/renderer/hooks/useKeyboardShortcuts.ts (new)
+    - ShortcutDefinition interface: id, key, ctrl?, shift?, alt?, label, description,
+      category?, preventDefault?, handler
+    - formatShortcutKeys(def): returns human-readable key label, adapts to macOS vs Windows
+      (uses Cmd symbol on Mac, "Ctrl" on Windows/Linux)
+    - useKeyboardShortcuts(shortcuts, enabled?): global keydown listener on document
+      in capture phase
+    - Skips shortcuts when focused on INPUT/TEXTAREA/SELECT/contentEditable elements,
+      unless the shortcut requires Ctrl (Ctrl+key combos are not normal typing)
+    - Uses stable ref pattern to avoid re-registering listener on handler changes
+    - Fires only the first matching shortcut per keystroke
+    - Exports ShortcutDefinition, formatShortcutKeys, useKeyboardShortcuts
+  - src/renderer/components/KeyboardShortcutHelp/KeyboardShortcutHelp.tsx (new)
+    - Modal dialog showing all registered keyboard shortcuts grouped by category
+    - Uses UModal with title "Keyboard Shortcuts"
+    - Groups shortcuts by category field (defaults to "General")
+    - Each shortcut rendered as row: kbd badge (mono font, bordered, shadow) + description
+    - Category headings: uppercase, bold, dashed border separator
+    - Footer hint: "Press Esc to close this dialog."
+    - Exports KeyboardShortcutHelpProps, KeyboardShortcutHelp
+  - src/renderer/components/KeyboardShortcutHelp/KeyboardShortcutHelp.module.css (new)
+    - .dialog: max-width 600px override for UModal
+    - .kbd: inline-flex badge with mono font, 2px border, box-shadow (key-cap style)
+    - .kbdInline: smaller inline key badge for footer hint
+    - .groupTitle: uppercase, bold, dashed border-bottom category header
+    - .row: flex row with kbd + desc, soft border separators
+    - .hint: centered muted footer text
+    - Responsive: smaller kbd badges below 480px
+    - All values reference tokens.css custom properties
+  - src/renderer/components/AppShell/AppShell.tsx
+    - Added useNavigate, useState, useMemo, useCallback imports
+    - Registers 7 keyboard shortcut definitions via useKeyboardShortcuts:
+      Ctrl+N -> navigate to /discovery (new plan/discovery)
+      Ctrl+R -> run all tasks on current plan detail page (preventDefault)
+      Escape -> cancel current run on /run/:runId page
+      Ctrl+F -> focus search input on plan list page (querySelector by aria-label)
+      Ctrl+, -> navigate to /settings
+      Ctrl+/ -> open keyboard shortcut help dialog
+      ? (Shift+/) -> open keyboard shortcut help dialog
+    - helpOpen state + openHelp/closeHelp callbacks control help dialog visibility
+    - Shortcuts stored in config object (useMemo) for easy maintenance
+    - Renders KeyboardShortcutHelp dialog at root level, receives full shortcuts array
+    - Ctrl+N, Ctrl+R, Ctrl+F, Ctrl+, all call preventDefault to suppress browser defaults
+  - src/renderer/components/layout/Sidebar.tsx
+    - NavItem interface: added optional shortcutHint field
+    - NAV_ITEMS: Discovery gets "Ctrl+N" hint, Settings gets "Ctrl+," hint
+    - NavLink title attribute: shows "Label (shortcutHint)" when hint exists
+    - "New Plan" button: title set to "New Plan (Ctrl+N)"
+  - src/renderer/views/PlanDetailView.tsx
+    - "Run Next Available Tasks" button: added title="Run Next Available Tasks (Ctrl+R)"
+    - "Cancel Run" button: added title="Cancel Run (Esc)"
+  - src/renderer/views/PlanListView.tsx
+    - Search input: placeholder updated to include "(Ctrl+F)" hint
+    - Search input: added title="Search plans (Ctrl+F)"
+  - src/renderer/views/LiveRunView.tsx
+    - "Cancel Run" button: added title="Cancel Run (Esc)"
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
