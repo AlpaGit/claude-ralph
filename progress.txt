@@ -525,3 +525,24 @@ p1-19: Fix bug: getPlan surfaces JSON parse errors   [DONE]
     - Callers (ipc.ts, planStore.ts, task-runner.ts) already have try/catch
       that surface thrown errors properly
   - Build and typecheck pass
+
+p1-20: Fix bug: titleBarStyle for Windows   [DONE]
+  - src/main/index.ts
+    - createWindow(): added const isMac = process.platform === "darwin"
+    - titleBarStyle: isMac ? "hiddenInset" : "hidden" (was hardcoded "hiddenInset")
+    - Windows: spreads titleBarOverlay config { color: "#1a1a1a", symbolColor: "#e0e0e0", height: 36 }
+    - macOS: no titleBarOverlay (empty spread)
+    - "hiddenInset" is macOS-only; caused rendering issues on Windows
+  - src/renderer/components/AppShell/AppShell.tsx
+    - Added drag-region strip div at top of content area (36px height)
+    - Wrapped Outlet in contentInner div to preserve padding
+    - Updated JSDoc with drag-region documentation
+  - src/renderer/components/AppShell/AppShell.module.css
+    - .dragStrip: -webkit-app-region: drag, height 36px, flex-shrink 0
+    - .content: changed to flex column layout to accommodate drag strip
+    - .contentInner: new class with original padding (var(--space-xl))
+  - src/renderer/components/layout/Sidebar.module.css
+    - .brand: added -webkit-app-region: drag (sidebar header is draggable)
+    - .navLink, .planToggle, .planItem, .newPlanBtn, .collapseBtn: added
+      -webkit-app-region: no-drag so interactive elements remain clickable
+  - Build and typecheck pass
