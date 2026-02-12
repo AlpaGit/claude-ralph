@@ -865,3 +865,54 @@ p3-01: Add retry/skip/abort controls for failed tasks   [DONE]
     - handleAbortQueue: calls abortQueue IPC, reloads plan
     - TaskCard instances: pass onRetryTask, onSkipTask, onAbortQueue, queueRunning props
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-02: Add cancel improvements with timeout and cleanup   [DONE]
+  - src/main/runtime/task-runner.ts
+    - CANCEL_TIMEOUT_MS constant: 10_000 (10 seconds default)
+    - STALE_RUN_THRESHOLD_MS constant: 3_600_000 (1 hour)
+    - cancelRun(): refactored to use Promise.race between SDK interrupt and timeout
+    - If interrupt resolves first, normal cancel flow proceeds
+    - If timeout fires first, calls forceCancelRun() for direct DB update
+    - If no interrupt handle exists, force-cancels immediately
+    - forceCancelRun(runId) private method: updates run status to 'cancelled',
+      sets ended_at to now, error_text to 'Cancelled (forced after timeout)',
+      resets task status to 'pending', plan status to 'ready',
+      emits cancelled event, cleans up activeRuns and runCompletion maps
+    - cleanupStaleRuns() private method: runs once in constructor,
+      finds in_progress runs older than STALE_RUN_THRESHOLD_MS via
+      db.getStaleInProgressRuns(), marks them cancelled with explanatory error,
+      resets associated task/plan statuses, logs cleanup count
+  - src/main/runtime/app-database.ts
+    - getStaleInProgressRuns(olderThan): returns TaskRun[] for runs with
+      status 'in_progress' and started_at < olderThan threshold (ISO string),
+      ordered by started_at ASC
+  - src/renderer/stores/runStore.ts
+    - CANCEL_TIMEOUT_MS constant: mirrors backend timeout for UI progress
+    - cancelRequestedAt state: Record<string, number> tracking cancel start timestamps
+    - cancelRun(): immediately transitions activeRuns[runId] to 'cancelling',
+      records cancelRequestedAt timestamp, awaits backend cancelRun IPC,
+      transitions to 'cancelled' if event stream hasn't already done so,
+      cleans up cancelRequestedAt on completion
+    - getCancelTimeoutMs(): returns the timeout constant for UI display
+    - _handleRunEvent(): clears cancelRequestedAt on terminal events
+      (completed, failed, cancelled)
+  - src/renderer/components/UStatusPill/UStatusPill.tsx
+    - STATUS_COLOR_MAP: added cancelling -> #d97706 (amber)
+    - STATUS_BG_MAP: added cancelling -> #fde68a (light amber)
+  - src/renderer/views/LiveRunView.tsx
+    - Added useState import for cancelElapsedMs timer
+    - Reads cancelRequestedAt and getCancelTimeoutMs from runStore
+    - isCancelling derived state: true when runStatus is 'cancelling'
+    - Cancel progress timer: useEffect with 200ms interval updates cancelElapsedMs
+      from cancelStartMs, capped at cancelTimeoutMs
+    - cancelProgressPct: percentage (0-100) for progress bar width
+    - Header: replaces "Cancel Run" button with cancelling UI group when active:
+      "Cancelling..." label, progress bar track with animated fill bar,
+      countdown text showing remaining seconds
+  - src/renderer/views/LiveRunView.module.css
+    - .cancellingGroup: flex row with gap for label + progress + countdown
+    - .cancellingLabel: amber bold text
+    - .cancelProgressTrack: 100px wide, 6px height, bordered track
+    - .cancelProgressBar: amber fill with 200ms linear width transition
+    - .cancelProgressText: mono font countdown, right-aligned
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
