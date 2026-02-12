@@ -322,3 +322,51 @@ p1-12: Decompose App.tsx into PlanDetailView   [DONE]
     - Three-column grid rows, max-height scroll, dashed border separators
     - Responsive: single-column below 1080px
   - Build and typecheck pass
+
+p1-13: Decompose PromptTemplateBuilder into DiscoveryView   [DONE]
+  - src/renderer/stores/discoveryStore.ts
+    - Enhanced from minimal store to full discovery state manager
+    - State: seedSentence, additionalContext, interview, answerMap, submittedAnswers,
+      events, loading, error, thinkingStartedAtMs, lastEventAtMs,
+      lastDiscoveryDurationSec, lastReadyAtIso, copyNotice
+    - Actions: setSeedSentence, setAdditionalContext, setAnswer, setCopyNotice,
+      startDiscovery (validates seed, subscribes to events, tracks timing),
+      continueDiscovery (builds answer payload from answerMap, merges new questions),
+      reset (cleans up event subscription)
+    - Events stored newest-first, capped at 120 entries
+    - Timing: tracks thinking start, last event timestamp, cycle duration
+    - Exported AnswerMap type alias
+  - src/renderer/views/DiscoveryView.tsx
+    - Full discovery interview flow (route: /discovery)
+    - Reads all state from discoveryStore (no local useState for interview data)
+    - Local tickMs timer only for live elapsed display
+    - Seed sentence input with UTextArea (auto-resize)
+    - Collapsible optional context section
+    - AI feedback panel: live events, thinking timer, specialist progress,
+      adaptive status text, event log in pre block
+    - Discovery output ready card with UStatusPill, "Use as Plan Input" and
+      "Copy PRD Input" buttons
+    - Discovery status card: round, readiness %, answered count, direction
+    - Inferred context card: stack, documentation, scope, pain points,
+      constraints, signals
+    - Question cards with per-question UTextArea answer inputs
+    - Missing critical info warning card
+    - Bottom actions: continue discovery, use as plan input, copy PRD
+    - PRD preview in collapsible details element
+    - "Use as Plan Input" navigates to / with prdText in location state
+    - Uses UButton, UTextArea, UStatusPill UI primitives
+  - src/renderer/views/DiscoveryView.module.css
+    - Vertical sections grid layout with spacing
+    - AI feedback card: header with thinking indicator, pulse/dot animations,
+      meta row, status text with warning highlight, log box
+    - Status card, context card, question cards, missing info card
+    - Question list: dashed border items with text + reason + textarea
+    - PRD preview toggle and scrollable pre block
+    - All values reference tokens.css custom properties
+  - src/renderer/components/PromptTemplateBuilder.tsx
+    - Reduced to thin deprecated wrapper (~40 lines)
+    - Preserves legacy interface (projectPath + onUsePrompt props)
+    - Forwards interview.prdInputDraft to onUsePrompt via useEffect
+    - Renders placeholder message pointing to /discovery route
+    - Marked with @deprecated JSDoc tag
+  - Build and typecheck pass
