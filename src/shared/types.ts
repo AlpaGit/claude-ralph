@@ -1,0 +1,262 @@
+export type TaskStatus = "pending" | "in_progress" | "completed" | "failed";
+export type PlanStatus = "draft" | "ready" | "running" | "completed" | "failed";
+export type RunStatus = "queued" | "in_progress" | "completed" | "failed" | "cancelled";
+
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  activeForm: string;
+}
+
+export interface TechnicalChecklistItem {
+  id: string;
+  title: string;
+  description: string;
+  dependencies: string[];
+  acceptanceCriteria: string[];
+  technicalNotes: string;
+}
+
+export interface TechnicalPack {
+  summary: string;
+  architecture_notes: string[];
+  files_expected: string[];
+  dependencies: string[];
+  risks: string[];
+  assumptions: string[];
+  acceptance_criteria: string[];
+  test_strategy: string[];
+  effort_estimate: string;
+  checklist: TechnicalChecklistItem[];
+}
+
+export interface RalphTask {
+  id: string;
+  planId: string;
+  ordinal: number;
+  title: string;
+  description: string;
+  dependencies: string[];
+  acceptanceCriteria: string[];
+  technicalNotes: string;
+  status: TaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export interface TaskRun {
+  id: string;
+  planId: string;
+  taskId: string;
+  sessionId: string | null;
+  status: RunStatus;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  totalCostUsd: number | null;
+  resultText: string | null;
+  stopReason: string | null;
+  errorText: string | null;
+}
+
+export interface RalphPlan {
+  id: string;
+  projectPath: string;
+  prdText: string;
+  summary: string;
+  technicalPack: TechnicalPack;
+  status: PlanStatus;
+  createdAt: string;
+  updatedAt: string;
+  tasks: RalphTask[];
+  runs: TaskRun[];
+}
+
+export type RunEventType =
+  | "started"
+  | "log"
+  | "todo_update"
+  | "task_status"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "info";
+
+export interface RunEvent {
+  id: string;
+  ts: string;
+  runId: string;
+  planId: string;
+  taskId: string;
+  type: RunEventType;
+  level: "info" | "error";
+  payload: unknown;
+}
+
+export interface CreatePlanInput {
+  prdText: string;
+  projectPath: string;
+}
+
+export interface CreatePlanResponse {
+  planId: string;
+}
+
+export interface RunTaskInput {
+  planId: string;
+  taskId: string;
+}
+
+export interface RunTaskResponse {
+  runId: string;
+}
+
+export interface RunAllInput {
+  planId: string;
+}
+
+export interface RunAllResponse {
+  queued: number;
+}
+
+export interface CancelRunInput {
+  runId: string;
+}
+
+export interface CancelRunResponse {
+  ok: boolean;
+}
+
+export type WizardStepId =
+  | "context"
+  | "goals"
+  | "constraints"
+  | "priorities"
+  | "success"
+  | "review";
+
+export interface WizardStepData {
+  stepId: WizardStepId;
+  title: string;
+  goal: string;
+  currentData: string;
+  note: string;
+}
+
+export interface GetWizardGuidanceInput {
+  projectPath: string;
+  draftPrompt: string;
+  step: WizardStepData;
+  allSteps: WizardStepData[];
+}
+
+export interface WizardGuidanceSuggestion {
+  field: string;
+  value: string;
+  reason: string;
+}
+
+export interface WizardGuidanceResult {
+  nextQuestion: string;
+  recommendation: string;
+  rationale: string;
+  completenessScore: number;
+  missingPoints: string[];
+  promptFragment: string;
+  suggestedEdits: WizardGuidanceSuggestion[];
+}
+
+export type ProjectMode = "existing" | "new";
+
+export interface InferStackInput {
+  projectMode: ProjectMode;
+  projectPath: string;
+  projectGoal: string;
+  constraints: string;
+  currentStack: string;
+}
+
+export interface StackAlternative {
+  name: string;
+  why: string;
+  tradeoffs: string[];
+}
+
+export interface InferStackResult {
+  recommendedStack: string;
+  confidence: number;
+  detectedSignals: string[];
+  alternatives: StackAlternative[];
+  followUpQuestions: string[];
+  rationale: string;
+}
+
+export interface DiscoveryQuestion {
+  id: string;
+  question: string;
+  reason: string;
+}
+
+export interface DiscoveryInferredContext {
+  stack: string;
+  documentation: string;
+  scope: string;
+  painPoints: string[];
+  constraints: string[];
+  signals: string[];
+}
+
+export interface DiscoveryAnswer {
+  questionId: string;
+  answer: string;
+}
+
+export interface StartDiscoveryInput {
+  projectPath: string;
+  seedSentence: string;
+  additionalContext: string;
+}
+
+export interface ContinueDiscoveryInput {
+  sessionId: string;
+  answers: DiscoveryAnswer[];
+}
+
+export interface DiscoveryInterviewState {
+  sessionId: string;
+  round: number;
+  directionSummary: string;
+  inferredContext: DiscoveryInferredContext;
+  questions: DiscoveryQuestion[];
+  prdInputDraft: string;
+  readinessScore: number;
+  missingCriticalInfo: string[];
+}
+
+export type DiscoveryEventType = "status" | "log" | "agent" | "completed" | "failed";
+
+export interface DiscoveryEvent {
+  id: string;
+  ts: string;
+  sessionId: string;
+  type: DiscoveryEventType;
+  level: "info" | "error";
+  message: string;
+  agent?: string;
+  details?: string;
+}
+
+export interface RalphApi {
+  createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
+  getPlan(planId: string): Promise<RalphPlan | null>;
+  runTask(input: RunTaskInput): Promise<RunTaskResponse>;
+  runAll(input: RunAllInput): Promise<RunAllResponse>;
+  cancelRun(input: CancelRunInput): Promise<CancelRunResponse>;
+  startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState>;
+  continueDiscovery(input: ContinueDiscoveryInput): Promise<DiscoveryInterviewState>;
+  getWizardGuidance(input: GetWizardGuidanceInput): Promise<WizardGuidanceResult>;
+  inferStack(input: InferStackInput): Promise<InferStackResult>;
+  onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void;
+  onRunEvent(handler: (event: RunEvent) => void): () => void;
+}
