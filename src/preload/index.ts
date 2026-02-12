@@ -14,6 +14,7 @@ import type {
   InferStackInput,
   InferStackResult,
   ListPlansInput,
+  ModelConfigEntry,
   PlanListItem,
   RalphApi,
   RalphPlan,
@@ -24,6 +25,7 @@ import type {
   RunTaskResponse,
   StartDiscoveryInput,
   UnarchivePlanInput,
+  UpdateModelConfigInput,
   WizardGuidanceResult
 } from "@shared/types";
 
@@ -78,6 +80,14 @@ const api: RalphApi = {
 
   inferStack(input: InferStackInput): Promise<InferStackResult> {
     return ipcRenderer.invoke(IPC_CHANNELS.inferStack, input);
+  },
+
+  getModelConfig(): Promise<ModelConfigEntry[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getModelConfig);
+  },
+
+  updateModelConfig(input: UpdateModelConfigInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.updateModelConfig, input);
   },
 
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void {

@@ -13,7 +13,8 @@ import {
   runAllInputSchema,
   runTaskInputSchema,
   startDiscoveryInputSchema,
-  unarchivePlanInputSchema
+  unarchivePlanInputSchema,
+  updateModelConfigInputSchema
 } from "@shared/ipc";
 import { TaskRunner } from "./runtime/task-runner";
 
@@ -138,6 +139,23 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = inferStackInputSchema.parse(rawInput);
       return await taskRunner.inferStack(input);
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getModelConfig, async () => {
+    try {
+      return taskRunner.getModelConfig();
+    } catch (error) {
+      throw new Error(formatIpcError(error));
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.updateModelConfig, async (_event, rawInput) => {
+    try {
+      const input = updateModelConfigInputSchema.parse(rawInput);
+      taskRunner.updateModelForRole(input.agentRole, input.modelId);
     } catch (error) {
       throw new Error(formatIpcError(error));
     }

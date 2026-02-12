@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrowserWindow } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
+  AgentRole,
   CancelRunInput,
   CancelRunResponse,
   ContinueDiscoveryInput,
@@ -13,6 +14,7 @@ import type {
   GetWizardGuidanceInput,
   InferStackInput,
   ListPlansFilter,
+  ModelConfigEntry,
   PlanListItem,
   RalphPlan,
   RalphTask,
@@ -90,6 +92,14 @@ export class TaskRunner {
 
   unarchivePlan(planId: string): void {
     this.db.unarchivePlan(planId);
+  }
+
+  getModelConfig(): ModelConfigEntry[] {
+    return this.db.getModelConfig();
+  }
+
+  updateModelForRole(role: AgentRole, modelId: string): void {
+    this.db.updateModelForRole(role, modelId);
   }
 
   async startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState> {

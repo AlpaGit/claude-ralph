@@ -282,6 +282,23 @@ export interface DiscoveryEvent {
   details?: string;
 }
 
+/** Agent roles stored in the model_config table. */
+export type AgentRole = "discovery_specialist" | "plan_synthesis" | "task_execution";
+
+/** Model configuration entry returned by the backend. */
+export interface ModelConfigEntry {
+  id: string;
+  agentRole: AgentRole;
+  modelId: string;
+  updatedAt: string;
+}
+
+/** Input for updating a model configuration entry. */
+export interface UpdateModelConfigInput {
+  agentRole: AgentRole;
+  modelId: string;
+}
+
 export interface RalphApi {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
@@ -296,6 +313,8 @@ export interface RalphApi {
   continueDiscovery(input: ContinueDiscoveryInput): Promise<DiscoveryInterviewState>;
   getWizardGuidance(input: GetWizardGuidanceInput): Promise<WizardGuidanceResult>;
   inferStack(input: InferStackInput): Promise<InferStackResult>;
+  getModelConfig(): Promise<ModelConfigEntry[]>;
+  updateModelConfig(input: UpdateModelConfigInput): Promise<void>;
   onDiscoveryEvent(handler: (event: DiscoveryEvent) => void): () => void;
   onRunEvent(handler: (event: RunEvent) => void): () => void;
 }

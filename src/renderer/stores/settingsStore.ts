@@ -1,26 +1,31 @@
 import { create } from "zustand";
+import type { AgentRole, ModelConfigEntry } from "@shared/types";
 
 /**
  * Known roles that the orchestrator uses to dispatch to different models.
- * Each role can be mapped to a specific model identifier.
+ * These map directly to the agent_role column in the model_config DB table.
  */
-export type ModelRole =
-  | "planning"
-  | "discovery"
-  | "execution"
-  | "wizard";
+export type { AgentRole };
 
-export interface ModelConfig {
-  role: ModelRole;
-  modelId: string;
+/**
+ * Available model options that can be assigned to any agent role.
+ */
+export interface AvailableModel {
+  id: string;
+  label: string;
 }
+
+export const AVAILABLE_MODELS: readonly AvailableModel[] = [
+  { id: "claude-opus-4-20250514", label: "Claude Opus 4" },
+  { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+] as const;
 
 interface SettingsState {
   /**
-   * Map of role -> model configuration.
-   * Keyed by ModelRole for O(1) lookups.
+   * Model configuration entries loaded from the backend.
+   * Keyed by AgentRole for O(1) lookups.
    */
-  modelConfig: Record<ModelRole, ModelConfig>;
+  modelConfig: Record<AgentRole, ModelConfigEntry | undefined>;
 
   /** Whether settings are currently being loaded. */
   loading: boolean;
@@ -28,43 +33,42 @@ interface SettingsState {
   /** Last error from a settings operation. */
   error: string | null;
 
-  // ── Actions ──────────────────────────────────────────────
+  // -- Actions --
 
   /**
-   * Load settings from the backend.
-   * NOTE: The backend does not yet expose a "settings:load" IPC channel.
-   *       This currently initialises from defaults.
+   * Load model configuration from the backend via config:getModels IPC.
    */
   loadSettings: () => Promise<void>;
 
   /**
-   * Update the model id used for a specific role.
-   * NOTE: The backend does not yet expose a "settings:update" IPC channel.
-   *       This currently updates only local state.
+   * Update the model id for a specific role via config:updateModel IPC.
+   * Persists to the database immediately (save-on-change).
    */
-  updateModelForRole: (role: ModelRole, modelId: string) => Promise<void>;
+  updateModelForRole: (role: AgentRole, modelId: string) => Promise<void>;
 }
 
-const DEFAULT_MODEL = "claude-opus-4-6";
-
-const defaultModelConfig: Record<ModelRole, ModelConfig> = {
-  planning: { role: "planning", modelId: DEFAULT_MODEL },
-  discovery: { role: "discovery", modelId: DEFAULT_MODEL },
-  execution: { role: "execution", modelId: DEFAULT_MODEL },
-  wizard: { role: "wizard", modelId: DEFAULT_MODEL },
-};
-
 export const useSettingsStore = create<SettingsState>((set) => ({
-  modelConfig: { ...defaultModelConfig },
+  modelConfig: {
+    discovery_specialist: undefined,
+    plan_synthesis: undefined,
+    task_execution: undefined,
+  },
   loading: false,
   error: null,
 
   loadSettings: async (): Promise<void> => {
     set({ loading: true, error: null });
     try {
-      // TODO: wire up when backend exposes "settings:load" IPC channel.
-      // For now, reset to defaults.
-      set({ modelConfig: { ...defaultModelConfig } });
+      const entries = await window.ralphApi.getModelConfig();
+      const config: Record<string, ModelConfigEntry | undefined> = {
+        discovery_specialist: undefined,
+        plan_synthesis: undefined,
+        task_execution: undefined,
+      };
+      for (const entry of entries) {
+        config[entry.agentRole] = entry;
+      }
+      set({ modelConfig: config as Record<AgentRole, ModelConfigEntry | undefined> });
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Failed to load settings.";
@@ -74,16 +78,25 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
   },
 
-  updateModelForRole: async (role: ModelRole, modelId: string): Promise<void> => {
+  updateModelForRole: async (role: AgentRole, modelId: string): Promise<void> => {
     set({ error: null });
     try {
-      // TODO: wire up when backend exposes "settings:update" IPC channel.
-      set((state) => ({
-        modelConfig: {
-          ...state.modelConfig,
-          [role]: { role, modelId },
-        },
-      }));
+      await window.ralphApi.updateModelConfig({ agentRole: role, modelId });
+      // Optimistically update local state after successful save.
+      set((state) => {
+        const existing = state.modelConfig[role];
+        return {
+          modelConfig: {
+            ...state.modelConfig,
+            [role]: {
+              id: existing?.id ?? "",
+              agentRole: role,
+              modelId,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        };
+      });
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Failed to update model setting.";

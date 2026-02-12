@@ -1,34 +1,41 @@
 import { useEffect } from "react";
 import type { JSX } from "react";
-import { useSettingsStore } from "../stores/settingsStore";
-import type { ModelRole } from "../stores/settingsStore";
+import { useSettingsStore, AVAILABLE_MODELS } from "../stores/settingsStore";
+import type { AgentRole } from "../stores/settingsStore";
 import { UCard, USkeleton } from "../components/ui";
 import styles from "./SettingsView.module.css";
 
 /**
- * Ordered list of model roles for display in the configuration table.
+ * Ordered list of agent roles for display in the configuration table.
  */
-const MODEL_ROLES: readonly ModelRole[] = [
-  "planning",
-  "discovery",
-  "execution",
-  "wizard",
+const AGENT_ROLES: readonly AgentRole[] = [
+  "discovery_specialist",
+  "plan_synthesis",
+  "task_execution",
 ] as const;
 
 /**
- * Human-readable descriptions for each role.
+ * Human-readable labels for each agent role.
  */
-const ROLE_DESCRIPTIONS: Record<ModelRole, string> = {
-  planning: "Generates structured plans from PRD input",
-  discovery: "Conducts project interviews and context gathering",
-  execution: "Executes individual tasks within a plan",
-  wizard: "Provides step-by-step guidance and recommendations",
+const ROLE_LABELS: Record<AgentRole, string> = {
+  discovery_specialist: "Discovery Specialist",
+  plan_synthesis: "Plan Synthesis",
+  task_execution: "Task Execution",
+};
+
+/**
+ * Human-readable descriptions for each agent role.
+ */
+const ROLE_DESCRIPTIONS: Record<AgentRole, string> = {
+  discovery_specialist: "Conducts project interviews and context gathering",
+  plan_synthesis: "Generates structured plans from PRD input",
+  task_execution: "Executes individual tasks within a plan",
 };
 
 /**
  * Hardcoded version info.
  *
- * In Phase 2 these will be read from electron app.getVersion() via IPC.
+ * In a future phase these will be read from electron app.getVersion() via IPC.
  * For now, values are hardcoded from package.json.
  */
 const APP_VERSION = "0.1.0";
@@ -36,27 +43,35 @@ const ELECTRON_VERSION = "33.x";
 const NODE_VERSION = "20.x";
 const CHROME_VERSION = "130.x";
 
-/* ── Component ─────────────────────────────────────────── */
+/* -- Component -- */
 
 /**
  * SettingsView -- model configuration, application preferences, and about info.
  *
  * Route: /settings
  *
- * Reads model configuration from settingsStore. For Phase 1, all model config
- * values are read-only defaults. Full editing support comes in Phase 2.
+ * Shows editable model configuration via dropdown selects. Changes are saved
+ * immediately on selection (no separate save button).
  */
 export function SettingsView(): JSX.Element {
-  /* ── Zustand store selectors ─────────────────────────── */
+  /* -- Zustand store selectors -- */
   const modelConfig = useSettingsStore((s) => s.modelConfig);
   const loading = useSettingsStore((s) => s.loading);
   const error = useSettingsStore((s) => s.error);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const updateModelForRole = useSettingsStore((s) => s.updateModelForRole);
 
-  /* ── Load settings on mount ──────────────────────────── */
+  /* -- Load settings on mount -- */
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  /**
+   * Handle model select change. Saves immediately via IPC.
+   */
+  function handleModelChange(role: AgentRole, modelId: string): void {
+    void updateModelForRole(role, modelId);
+  }
 
   return (
     <section className={styles.view}>
@@ -65,14 +80,14 @@ export function SettingsView(): JSX.Element {
       </div>
 
       <div className={styles.sections}>
-        {/* ── Model Configuration ─────────────────────── */}
+        {/* -- Model Configuration -- */}
         <UCard
           title="Model Configuration"
-          subtitle="Agent role to model mapping (read-only in Phase 1)"
+          subtitle="Select which model to use for each agent role"
         >
           {loading ? (
             <div className={styles.loadingRow}>
-              <USkeleton variant="text" lines={4} />
+              <USkeleton variant="text" lines={3} />
             </div>
           ) : error ? (
             <div className={styles.errorPanel}>
@@ -88,15 +103,26 @@ export function SettingsView(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {MODEL_ROLES.map((role) => {
-                  const config = modelConfig[role];
+                {AGENT_ROLES.map((role) => {
+                  const entry = modelConfig[role];
+                  const currentModelId = entry?.modelId ?? "";
                   return (
                     <tr key={role}>
-                      <td className={styles.roleCell}>{role}</td>
+                      <td className={styles.roleCell}>{ROLE_LABELS[role]}</td>
                       <td>{ROLE_DESCRIPTIONS[role]}</td>
                       <td className={styles.modelCell}>
-                        {config.modelId}
-                        <span className={styles.readOnlyHint}>(default)</span>
+                        <select
+                          className={styles.modelSelect}
+                          value={currentModelId}
+                          onChange={(e) => handleModelChange(role, e.target.value)}
+                          aria-label={`Model for ${ROLE_LABELS[role]}`}
+                        >
+                          {AVAILABLE_MODELS.map((model) => (
+                            <option key={model.id} value={model.id}>
+                              {model.label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   );
@@ -106,7 +132,7 @@ export function SettingsView(): JSX.Element {
           )}
         </UCard>
 
-        {/* ── Application Preferences ─────────────────── */}
+        {/* -- Application Preferences -- */}
         <UCard
           title="Application Preferences"
           subtitle="Customization options (coming soon)"
@@ -117,7 +143,7 @@ export function SettingsView(): JSX.Element {
           </p>
         </UCard>
 
-        {/* ── About ───────────────────────────────────── */}
+        {/* -- About -- */}
         <UCard title="About">
           <div className={styles.aboutGrid}>
             <span className={styles.aboutLabel}>App Version</span>
