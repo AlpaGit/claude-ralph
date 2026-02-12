@@ -39,8 +39,6 @@ claude-ralph/
       router.tsx                  # Hash router with route definitions and error boundaries
       tokens.css                  # Design tokens (CSS custom properties)
       styles.css                  # Global resets and base styles
-      App.tsx                     # Legacy app component (preserved for reference)
-      App.module.css              # CSS Module for legacy App component
       components/
         AppShell/                 # Layout shell: sidebar + content + drag region + toast + shortcuts
         layout/
