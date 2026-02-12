@@ -22,6 +22,7 @@ import {
   skipTaskInputSchema,
   startDiscoveryInputSchema,
   unarchivePlanInputSchema,
+  updateAppSettingsInputSchema,
   updateModelConfigInputSchema
 } from "@shared/ipc";
 import type { IpcError, IpcZodIssue } from "@shared/types";
@@ -258,6 +259,23 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = updateModelConfigInputSchema.parse(rawInput);
       taskRunner.updateModelForRole(input.agentRole, input.modelId);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getAppSettings, async () => {
+    try {
+      return taskRunner.getAppSettings();
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.updateAppSettings, async (_event, rawInput) => {
+    try {
+      const input = updateAppSettingsInputSchema.parse(rawInput);
+      taskRunner.updateAppSettings(input);
     } catch (error) {
       throw createIpcError(error);
     }

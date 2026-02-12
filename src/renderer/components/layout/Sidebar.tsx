@@ -144,7 +144,7 @@ export function Sidebar({ className }: SidebarProps): JSX.Element {
   }, []);
 
   const handleNewPlan = useCallback(() => {
-    navigate("/");
+    navigate("/discovery");
   }, [navigate]);
 
   return (

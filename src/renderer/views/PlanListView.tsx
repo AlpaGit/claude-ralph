@@ -292,6 +292,13 @@ export function PlanListView(): JSX.Element {
     <section className={styles.view}>
       <div className={styles.header}>
         <h1 className={styles.title}>Plans</h1>
+        <button
+          type="button"
+          className={styles.createPlanBtn}
+          onClick={() => navigate("/discovery")}
+        >
+          Start Discovery
+        </button>
       </div>
 
       {/* Plan creation progress panel */}
@@ -341,6 +348,15 @@ export function PlanListView(): JSX.Element {
               ? "Archived plans will appear here."
               : "Create a plan by running Discovery or importing PRD text."}
           </p>
+          {!showArchived ? (
+            <button
+              type="button"
+              className={styles.emptyActionBtn}
+              onClick={() => navigate("/discovery")}
+            >
+              Start Discovery
+            </button>
+          ) : null}
         </div>
       ) : null}
 

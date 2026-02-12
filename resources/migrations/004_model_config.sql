@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS model_config (
 
 INSERT OR IGNORE INTO model_config (id, agent_role, model_id, updated_at)
 VALUES
-  ('mc-discovery-specialist', 'discovery_specialist', 'claude-sonnet-4-20250514', datetime('now')),
-  ('mc-plan-synthesis',      'plan_synthesis',        'claude-sonnet-4-20250514', datetime('now')),
-  ('mc-task-execution',      'task_execution',        'claude-opus-4-20250514',   datetime('now'));
+  ('mc-discovery-specialist', 'discovery_specialist', 'claude-sonnet-4-5', datetime('now')),
+  ('mc-plan-synthesis',      'plan_synthesis',        'claude-sonnet-4-5', datetime('now')),
+  ('mc-task-execution',      'task_execution',        'claude-opus-4-6',   datetime('now')),
+  ('mc-architecture-specialist', 'architecture_specialist', 'claude-sonnet-4-5', datetime('now')),
+  ('mc-tester',              'tester',                'claude-sonnet-4-5', datetime('now')),
+  ('mc-committer',           'committer',             'claude-sonnet-4-5', datetime('now'));

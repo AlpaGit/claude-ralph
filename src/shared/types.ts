@@ -323,7 +323,13 @@ export interface DiscoveryEvent {
 }
 
 /** Agent roles stored in the model_config table. */
-export type AgentRole = "discovery_specialist" | "plan_synthesis" | "task_execution";
+export type AgentRole =
+  | "discovery_specialist"
+  | "plan_synthesis"
+  | "task_execution"
+  | "tester"
+  | "architecture_specialist"
+  | "committer";
 
 /** Model configuration entry returned by the backend. */
 export interface ModelConfigEntry {
@@ -337,6 +343,17 @@ export interface ModelConfigEntry {
 export interface UpdateModelConfigInput {
   agentRole: AgentRole;
   modelId: string;
+}
+
+/** Persisted application-level settings. */
+export interface AppSettings {
+  /** Optional Discord webhook URL for agent runtime notifications. Empty disables notifications. */
+  discordWebhookUrl: string;
+}
+
+/** Input for updating persisted application settings. */
+export interface UpdateAppSettingsInput {
+  discordWebhookUrl: string;
 }
 
 /** Lightweight summary of a discovery session for the resume dialog. */
@@ -422,6 +439,8 @@ export interface RalphApi {
   inferStack(input: InferStackInput): Promise<InferStackResult>;
   getModelConfig(): Promise<ModelConfigEntry[]>;
   updateModelConfig(input: UpdateModelConfigInput): Promise<void>;
+  getAppSettings(): Promise<AppSettings>;
+  updateAppSettings(input: UpdateAppSettingsInput): Promise<void>;
   getDiscoverySessions(): Promise<DiscoverySessionSummary[]>;
   resumeDiscoverySession(input: ResumeDiscoveryInput): Promise<DiscoveryInterviewState>;
   abandonDiscoverySession(input: AbandonDiscoveryInput): Promise<void>;

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import type { DiscoveryEvent, DiscoverySessionSummary } from "@shared/types";
 import { useDiscoveryStore } from "../stores/discoveryStore";
 import { UButton } from "../components/ui/UButton";
+import { UInput } from "../components/UInput/UInput";
 import { UTextArea } from "../components/UTextArea/UTextArea";
 import { UStatusPill } from "../components/UStatusPill/UStatusPill";
 import { USkeleton } from "../components/USkeleton/USkeleton";
@@ -81,6 +82,7 @@ export function DiscoveryView(): JSX.Element {
 
   // ── Store slices ─────────────────────────────────────
   const seedSentence = useDiscoveryStore((s) => s.seedSentence);
+  const projectPath = useDiscoveryStore((s) => s.projectPath);
   const additionalContext = useDiscoveryStore((s) => s.additionalContext);
   const interview = useDiscoveryStore((s) => s.interview);
   const answerMap = useDiscoveryStore((s) => s.answerMap);
@@ -99,6 +101,7 @@ export function DiscoveryView(): JSX.Element {
 
   // ── Store actions ────────────────────────────────────
   const setSeedSentence = useDiscoveryStore((s) => s.setSeedSentence);
+  const setProjectPath = useDiscoveryStore((s) => s.setProjectPath);
   const setAdditionalContext = useDiscoveryStore((s) => s.setAdditionalContext);
   const setAnswer = useDiscoveryStore((s) => s.setAnswer);
   const setCopyNotice = useDiscoveryStore((s) => s.setCopyNotice);
@@ -220,8 +223,7 @@ export function DiscoveryView(): JSX.Element {
   };
 
   const handleStartDiscovery = (): void => {
-    // projectPath is empty for now; discovery can function without it
-    void startDiscovery("");
+    void startDiscovery();
   };
 
   const handleContinueDiscovery = (): void => {
@@ -319,6 +321,14 @@ export function DiscoveryView(): JSX.Element {
 
         {/* ── Seed sentence + optional context ────────── */}
         <div className={styles.inputSection}>
+          <UInput
+            label="Project Path (optional)"
+            value={projectPath}
+            onChange={(e) => setProjectPath(e.target.value)}
+            placeholder="C:\\path\\to\\repo"
+            helperText="Set this to let specialists inspect the current codebase directly."
+          />
+
           <UTextArea
             label="Goal Sentence"
             value={seedSentence}

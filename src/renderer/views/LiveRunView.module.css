@@ -248,6 +248,126 @@
   font-size: 0.85rem;
 }
 
+/* ── Architecture review panel ─────────────────────────── */
+
+.archPanel {
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-lg);
+}
+
+.archPanelTitle {
+  margin: 0 0 var(--space-md) 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.archList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.archItem {
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+}
+
+.archHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.archMeta {
+  white-space: nowrap;
+}
+
+.archStatusRow {
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.archStatusLabel {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.archStatus {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.1rem 0.35rem;
+}
+
+.archStatus_pass,
+.archStatus_pass_with_notes {
+  color: var(--color-completed);
+  background: var(--color-status-completed-bg);
+}
+
+.archStatus_needs_refactor {
+  color: var(--color-in-progress);
+  background: var(--color-status-in-progress-bg);
+}
+
+.archStatus_blocked {
+  color: var(--color-failed);
+  background: var(--color-status-failed-bg);
+}
+
+.archConfidence {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.archSummary {
+  margin: 0.45rem 0 0.35rem 0;
+  font-size: 0.86rem;
+}
+
+.archFindings {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.archFinding {
+  line-height: 1.4;
+}
+
+.archAction {
+  margin-top: 0.15rem;
+  color: var(--color-muted);
+  font-size: 0.79rem;
+}
+
+.archNoFindings,
+.archEmpty {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
 /* ── Log viewer section ─────────────────────────────────── */
 
 .logSection {

@@ -56,7 +56,7 @@ describe("mock-ralph-api (jsdom)", () => {
 
     it("should install mock on window.ralphApi", () => {
       expect(window.ralphApi).toBeDefined();
-      expect(typeof (window.ralphApi as Record<string, unknown>).createPlan).toBe("function");
+      expect(typeof window.ralphApi?.createPlan).toBe("function");
     });
   });
 

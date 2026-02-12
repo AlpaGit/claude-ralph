@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import type { BrowserWindow } from "electron";
 import { IPC_CHANNELS } from "@shared/ipc";
 import type {
   AbortQueueInput,
   AgentRole,
+  AppSettings,
   CancelDiscoveryInput,
   CancelDiscoveryResponse,
   CancelRunInput,
@@ -32,7 +37,8 @@ import type {
   RunTaskResponse,
   SkipTaskInput,
   StartDiscoveryInput,
-  TodoItem
+  TodoItem,
+  UpdateAppSettingsInput
 } from "@shared/types";
 import { AppDatabase } from "./app-database";
 import { RalphAgentService, type ModelConfigMap } from "./ralph-agent-service";
@@ -40,6 +46,26 @@ import { RalphAgentService, type ModelConfigMap } from "./ralph-agent-service";
 interface ActiveRun {
   interrupt?: () => Promise<void>;
   cancelRequested: boolean;
+}
+
+interface RunExecutionContext {
+  workingDirectory?: string;
+  branchName?: string;
+  phaseNumber?: number;
+}
+
+interface QueueGitContext {
+  repoRoot: string;
+  mergeTargetBranch: string;
+  originalBranch: string | null;
+  worktreeRoot: string;
+}
+
+interface PhaseWorktree {
+  taskId: string;
+  branchName: string;
+  path: string;
+  baseCommit: string;
 }
 
 interface DiscoverySession {
@@ -78,6 +104,8 @@ const CANCEL_TIMEOUT_MS = 10_000;
 
 /** Stale run threshold: runs in_progress for longer than this (ms) with no active tracking are cleaned up. */
 const STALE_RUN_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
+const CLAUDE_COAUTHOR_TRAILER = /co-authored-by:\s*.*claude/i;
 
 export class TaskRunner {
   private readonly activeRuns = new Map<string, ActiveRun>();
@@ -87,7 +115,7 @@ export class TaskRunner {
   private readonly discoverySessions = new Map<string, DiscoverySession>();
   /** Set of discovery session IDs that have been cancelled. Checked between specialist completions and before synthesis. */
   private readonly cancelledDiscoveries = new Set<string>();
-  private readonly agentService: RalphAgentService;
+  private agentService: RalphAgentService;
 
   constructor(
     private readonly db: AppDatabase,
@@ -116,8 +144,7 @@ export class TaskRunner {
    */
   refreshModelConfig(): void {
     const newService = new RalphAgentService(this.buildModelConfigMap());
-    // Replace agentService reference -- requires dropping readonly for this controlled mutation
-    (this as { agentService: RalphAgentService }).agentService = newService;
+    this.agentService = newService;
   }
 
   getPlan(planId: string): RalphPlan | null {
@@ -154,6 +181,14 @@ export class TaskRunner {
   updateModelForRole(role: AgentRole, modelId: string): void {
     this.db.updateModelForRole(role, modelId);
     this.refreshModelConfig();
+  }
+
+  getAppSettings(): AppSettings {
+    return this.db.getAppSettings();
+  }
+
+  updateAppSettings(input: UpdateAppSettingsInput): void {
+    this.db.updateAppSettings(input);
   }
 
   async startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState> {
@@ -421,10 +456,31 @@ export class TaskRunner {
   }
 
   async createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
-    const planResult = await this.agentService.createPlan({
-      projectPath: input.projectPath,
-      prdText: input.prdText
-    });
+    void this.postDiscordNotification(
+      [
+        "[RALPH][plan][plan_synthesis]",
+        "status=started",
+        `projectPath=${input.projectPath || "(none)"}`,
+      ].join("\n")
+    );
+
+    let planResult: Awaited<ReturnType<RalphAgentService["createPlan"]>>;
+    try {
+      planResult = await this.agentService.createPlan({
+        projectPath: input.projectPath,
+        prdText: input.prdText
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void this.postDiscordNotification(
+        [
+          "[RALPH][plan][plan_synthesis]",
+          "status=failed",
+          `error=${message.slice(0, 350)}`
+        ].join("\n")
+      );
+      throw error;
+    }
 
     const planId = randomUUID();
 
@@ -470,10 +526,35 @@ export class TaskRunner {
       tasks
     });
 
+    void this.postDiscordNotification(
+      [
+        "[RALPH][plan][plan_synthesis]",
+        "status=completed",
+        `plan=${planId}`,
+        `tasks=${tasks.length}`,
+        `summary=${planResult.summary.slice(0, 350)}`
+      ].join("\n")
+    );
+
     return { planId };
   }
 
   async runTask(input: RunTaskInput): Promise<RunTaskResponse> {
+    return await this.startTaskExecution({
+      planId: input.planId,
+      taskId: input.taskId,
+      startedMessage: "Task execution started."
+    });
+  }
+
+  private async startTaskExecution(input: {
+    planId: string;
+    taskId: string;
+    startedMessage: string;
+    retryCount?: number;
+    retryContext?: { retryCount: number; previousError: string };
+    executionContext?: RunExecutionContext;
+  }): Promise<RunTaskResponse> {
     const plan = this.db.getPlan(input.planId);
     if (!plan) {
       throw new Error(`Plan not found: ${input.planId}`);
@@ -490,7 +571,8 @@ export class TaskRunner {
       id: runId,
       planId: input.planId,
       taskId: input.taskId,
-      status: "in_progress"
+      status: "in_progress",
+      retryCount: input.retryCount
     });
 
     this.db.updateTaskStatus(input.taskId, "in_progress");
@@ -503,8 +585,11 @@ export class TaskRunner {
       type: "started",
       level: "info",
       payload: {
-        message: "Task execution started.",
-        taskTitle: task.title
+        message: input.startedMessage,
+        taskTitle: task.title,
+        retryCount: input.retryCount ?? 0,
+        phaseNumber: input.executionContext?.phaseNumber ?? null,
+        branchName: input.executionContext?.branchName ?? null
       }
     });
 
@@ -529,7 +614,9 @@ export class TaskRunner {
     void this.executeRun({
       runId,
       plan,
-      task
+      task,
+      retryContext: input.retryContext,
+      executionContext: input.executionContext
     });
 
     return { runId };
@@ -692,62 +779,16 @@ export class TaskRunner {
     }
 
     const previousError = failedRun?.errorText ?? "Unknown error from previous attempt.";
-
-    const runId = randomUUID();
-
-    this.db.createRun({
-      id: runId,
+    return await this.startTaskExecution({
       planId: input.planId,
       taskId: input.taskId,
-      status: "in_progress",
-      retryCount: newRetryCount
-    });
-
-    this.db.updateTaskStatus(input.taskId, "in_progress");
-    this.db.updatePlanStatus(input.planId, "running");
-
-    this.emitEvent({
-      runId,
-      planId: input.planId,
-      taskId: input.taskId,
-      type: "started",
-      level: "info",
-      payload: {
-        message: `Task retry #${newRetryCount} started.`,
-        taskTitle: task.title,
-        retryCount: newRetryCount
-      }
-    });
-
-    this.emitEvent({
-      runId,
-      planId: input.planId,
-      taskId: input.taskId,
-      type: "task_status",
-      level: "info",
-      payload: {
-        status: "in_progress"
-      }
-    });
-
-    let resolveRun: () => void = () => undefined;
-    const completionPromise = new Promise<void>((resolve) => {
-      resolveRun = resolve;
-    });
-    this.runCompletion.set(runId, { promise: completionPromise, resolve: resolveRun });
-    this.activeRuns.set(runId, { cancelRequested: false });
-
-    void this.executeRun({
-      runId,
-      plan,
-      task,
+      startedMessage: `Task retry #${newRetryCount} started.`,
+      retryCount: newRetryCount,
       retryContext: {
         retryCount: newRetryCount,
         previousError
       }
     });
-
-    return { runId };
   }
 
   /**
@@ -832,34 +873,541 @@ export class TaskRunner {
     });
   }
 
+  private getRunnablePhaseTasks(planId: string): RalphTask[] {
+    const tasks = this.db.getTasks(planId);
+    const statusById = new Map(tasks.map((task) => [task.id, task.status]));
+
+    return tasks.filter((task) => {
+      if (task.status !== "pending") {
+        return false;
+      }
+
+      return task.dependencies.every((dependencyId) => {
+        const dependencyStatus = statusById.get(dependencyId);
+        return dependencyStatus === "completed" || dependencyStatus === "skipped";
+      });
+    });
+  }
+
+  private emitQueueInfo(planId: string, message: string, level: "info" | "error" = "info"): void {
+    this.emitEvent({
+      runId: "",
+      planId,
+      taskId: "",
+      type: "info",
+      level,
+      payload: {
+        message
+      }
+    });
+  }
+
   private async executeQueue(planId: string): Promise<void> {
+    let gitContext: QueueGitContext | null = null;
+
     try {
+      const plan = this.db.getPlan(planId);
+      if (!plan) {
+        throw new Error(`Plan not found: ${planId}`);
+      }
+
+      gitContext = await this.prepareQueueGitContext(plan);
+      if (gitContext.mergeTargetBranch !== "main") {
+        this.emitQueueInfo(
+          planId,
+          `Branch "main" not found. Using "${gitContext.mergeTargetBranch}" as merge target for this queue.`
+        );
+      }
+
+      this.emitQueueInfo(
+        planId,
+        `Queue started. Runnable phases execute in parallel worktrees and merge into ${gitContext.mergeTargetBranch} after each phase.`
+      );
+
+      let phaseNumber = 0;
+
       while (true) {
-        // Check if the queue has been aborted
         if (this.abortedPlanQueues.has(planId)) {
           break;
         }
 
-        const task = this.db.findNextRunnableTask(planId);
-        if (!task) {
+        const phaseTasks = this.getRunnablePhaseTasks(planId);
+        if (phaseTasks.length === 0) {
           break;
         }
 
-        const run = await this.runTask({ planId, taskId: task.id });
-        await this.waitForRun(run.runId);
+        phaseNumber += 1;
+        this.emitQueueInfo(
+          planId,
+          `Starting phase ${phaseNumber} with ${phaseTasks.length} parallel task(s).`
+        );
 
-        // Check abort again after run completes
+        const phaseWorktrees = await this.createPhaseWorktrees(plan, phaseNumber, phaseTasks, gitContext);
+        const phaseRuns: Array<{ runId: string; taskId: string }> = [];
+
+        try {
+          for (const task of phaseTasks) {
+            const worktree = phaseWorktrees.find((candidate) => candidate.taskId === task.id);
+            if (!worktree) {
+              throw new Error(`Missing worktree context for task ${task.id}.`);
+            }
+
+            const run = await this.startTaskExecution({
+              planId,
+              taskId: task.id,
+              startedMessage: `Task execution started in phase ${phaseNumber}.`,
+              executionContext: {
+                workingDirectory: worktree.path,
+                branchName: worktree.branchName,
+                phaseNumber
+              }
+            });
+
+            phaseRuns.push({
+              runId: run.runId,
+              taskId: task.id
+            });
+          }
+
+          await Promise.all(phaseRuns.map((run) => this.waitForRun(run.runId)));
+        } catch (error) {
+          if (phaseRuns.length > 0) {
+            await Promise.all(
+              phaseRuns.map(async (run) => {
+                await this.cancelRun({ runId: run.runId }).catch(() => ({ ok: false }));
+                await this.waitForRun(run.runId);
+              })
+            );
+          }
+
+          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
+          throw error;
+        }
+
         if (this.abortedPlanQueues.has(planId)) {
+          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
           break;
         }
 
-        const runState = this.db.getRun(run.runId);
-        if (!runState || runState.status !== "completed") {
+        const unfinishedRuns = phaseRuns.filter((run) => {
+          const runState = this.db.getRun(run.runId);
+          return !runState || runState.status !== "completed";
+        });
+
+        if (unfinishedRuns.length > 0) {
+          this.emitQueueInfo(
+            planId,
+            `Phase ${phaseNumber} stopped because ${unfinishedRuns.length} task(s) did not complete successfully.`,
+            "error"
+          );
+          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
           break;
+        }
+
+        await this.validatePhaseBranchCommits(planId, phaseNumber, phaseWorktrees, gitContext);
+
+        try {
+          await this.mergePhaseBranches(
+            planId,
+            phaseNumber,
+            phaseWorktrees.map((worktree) => worktree.branchName),
+            gitContext
+          );
+
+          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, true);
+          this.emitQueueInfo(
+            planId,
+            `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`
+          );
+        } catch (error) {
+          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
+          throw error;
         }
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown queue failure.";
+      this.db.updatePlanStatus(planId, "failed");
+      this.emitQueueInfo(planId, `Queue execution failed: ${message}`, "error");
     } finally {
+      if (gitContext) {
+        await this.tryRestoreBranch(gitContext, planId);
+        await rm(gitContext.worktreeRoot, { recursive: true, force: true }).catch(() => undefined);
+      }
+
       this.abortedPlanQueues.delete(planId);
+    }
+  }
+
+  private async prepareQueueGitContext(plan: RalphPlan): Promise<QueueGitContext> {
+    const repoRootResult = await this.runGitCommand(["rev-parse", "--show-toplevel"], plan.projectPath);
+    const repoRoot = repoRootResult.stdout.trim();
+    if (!repoRoot) {
+      throw new Error("Unable to resolve repository root for queue execution.");
+    }
+
+    const statusResult = await this.runGitCommand(["status", "--porcelain"], repoRoot);
+    if (statusResult.stdout.trim().length > 0) {
+      throw new Error(
+        "Repository has uncommitted changes. Queue merges require a clean working tree in the main checkout."
+      );
+    }
+
+    const branchResult = await this.runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
+    const originalBranchRaw = branchResult.stdout.trim();
+    const originalBranch = originalBranchRaw === "HEAD" ? null : originalBranchRaw;
+
+    const hasMainBranch = (
+      await this.safeRunGitCommand(["show-ref", "--verify", "--quiet", "refs/heads/main"], repoRoot)
+    ).ok;
+    const mergeTargetBranch = hasMainBranch ? "main" : originalBranch;
+
+    if (!mergeTargetBranch) {
+      throw new Error('Repository does not have a "main" branch and HEAD is detached.');
+    }
+
+    const repoToken = this.sanitizeToken(basename(repoRoot), 24);
+    const planToken = this.sanitizeToken(plan.id, 20);
+    const worktreeRoot = join(tmpdir(), "claude-ralph-worktrees", `${repoToken}-${planToken}`);
+
+    await rm(worktreeRoot, { recursive: true, force: true }).catch(() => undefined);
+    await mkdir(worktreeRoot, { recursive: true });
+
+    return {
+      repoRoot,
+      mergeTargetBranch,
+      originalBranch,
+      worktreeRoot
+    };
+  }
+
+  private async createPhaseWorktrees(
+    plan: RalphPlan,
+    phaseNumber: number,
+    phaseTasks: RalphTask[],
+    gitContext: QueueGitContext
+  ): Promise<PhaseWorktree[]> {
+    const created: PhaseWorktree[] = [];
+    const planToken = this.sanitizeToken(plan.id, 12);
+
+    await this.safeRunGitCommand(["worktree", "prune"], gitContext.repoRoot);
+
+    try {
+      for (const [index, task] of phaseTasks.entries()) {
+        const taskToken = this.sanitizeToken(task.id, 28);
+        const branchName = `ralph/${planToken}/p${phaseNumber}-${index + 1}-${taskToken}`;
+        const worktreePath = join(
+          gitContext.worktreeRoot,
+          `phase-${phaseNumber}-${index + 1}-${taskToken}`
+        );
+
+        await this.safeRunGitCommand(
+          ["worktree", "remove", "--force", worktreePath],
+          gitContext.repoRoot
+        );
+        await rm(worktreePath, { recursive: true, force: true }).catch(() => undefined);
+        await this.safeRunGitCommand(["worktree", "prune"], gitContext.repoRoot);
+
+        const existingBranch = (
+          await this.safeRunGitCommand(
+            ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
+            gitContext.repoRoot
+          )
+        ).ok;
+        if (existingBranch) {
+          await this.runGitCommand(["branch", "-D", branchName], gitContext.repoRoot);
+        }
+
+        await this.runGitCommand(
+          ["worktree", "add", "-b", branchName, worktreePath, gitContext.mergeTargetBranch],
+          gitContext.repoRoot
+        );
+        const baseCommit = (
+          await this.runGitCommand(["rev-parse", "HEAD"], worktreePath)
+        ).stdout.trim();
+
+        created.push({
+          taskId: task.id,
+          branchName,
+          path: worktreePath,
+          baseCommit
+        });
+      }
+
+      return created;
+    } catch (error) {
+      await this.cleanupPhaseWorktrees(gitContext, created, true);
+      throw error;
+    }
+  }
+
+  private async mergePhaseBranches(
+    planId: string,
+    phaseNumber: number,
+    branches: string[],
+    gitContext: QueueGitContext
+  ): Promise<void> {
+    const cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
+    if (cleanResult.stdout.trim().length > 0) {
+      throw new Error(
+        `Cannot merge phase ${phaseNumber}: main checkout contains uncommitted changes.`
+      );
+    }
+
+    const currentBranchResult = await this.runGitCommand(
+      ["rev-parse", "--abbrev-ref", "HEAD"],
+      gitContext.repoRoot
+    );
+    const currentBranch = currentBranchResult.stdout.trim();
+    if (currentBranch !== gitContext.mergeTargetBranch) {
+      await this.runGitCommand(["checkout", gitContext.mergeTargetBranch], gitContext.repoRoot);
+    }
+
+    this.emitQueueInfo(
+      planId,
+      `Committer is merging phase ${phaseNumber} into ${gitContext.mergeTargetBranch} (${branches.length} branch(es)).`
+    );
+    void this.postDiscordNotification(
+      [
+        "[RALPH][queue][committer]",
+        `plan=${planId}`,
+        `phase=${phaseNumber}`,
+        `status=started`,
+        `target=${gitContext.mergeTargetBranch}`,
+        `branches=${branches.join(",")}`
+      ].join("\n")
+    );
+
+    const beforeHead = (
+      await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
+    ).stdout.trim();
+
+    await this.agentService.mergePhaseWithCommitter({
+      repoRoot: gitContext.repoRoot,
+      targetBranch: gitContext.mergeTargetBranch,
+      branches,
+      phaseNumber,
+      callbacks: {
+        onLog: (line) => this.emitQueueInfo(planId, `[committer] ${line}`),
+        onQuery: () => undefined
+      }
+    });
+
+    const afterHead = (
+      await this.runGitCommand(["rev-parse", gitContext.mergeTargetBranch], gitContext.repoRoot)
+    ).stdout.trim();
+    if (beforeHead === afterHead) {
+      throw new Error(
+        `Committer merge for phase ${phaseNumber} did not create any new commit on ${gitContext.mergeTargetBranch}.`
+      );
+    }
+
+    for (const branch of branches) {
+      const merged = await this.safeRunGitCommand(
+        ["merge-base", "--is-ancestor", branch, gitContext.mergeTargetBranch],
+        gitContext.repoRoot
+      );
+      if (!merged.ok) {
+        throw new Error(
+          `Committer merge validation failed: branch "${branch}" is not an ancestor of "${gitContext.mergeTargetBranch}".`
+        );
+      }
+    }
+
+    await this.validateCommitRangePolicy(
+      gitContext.repoRoot,
+      `${beforeHead}..${afterHead}`,
+      `phase ${phaseNumber} merge`
+    );
+    void this.postDiscordNotification(
+      [
+        "[RALPH][queue][committer]",
+        `plan=${planId}`,
+        `phase=${phaseNumber}`,
+        "status=completed",
+        `target=${gitContext.mergeTargetBranch}`,
+        `before=${beforeHead}`,
+        `after=${afterHead}`
+      ].join("\n")
+    );
+  }
+
+  private async validatePhaseBranchCommits(
+    planId: string,
+    phaseNumber: number,
+    phaseWorktrees: PhaseWorktree[],
+    gitContext: QueueGitContext
+  ): Promise<void> {
+    for (const phaseWorktree of phaseWorktrees) {
+      const range = `${phaseWorktree.baseCommit}..${phaseWorktree.branchName}`;
+      const countOutput = (
+        await this.runGitCommand(["rev-list", "--count", range], gitContext.repoRoot)
+      ).stdout.trim();
+      const commitCount = Number.parseInt(countOutput, 10);
+
+      if (!Number.isFinite(commitCount) || commitCount <= 0) {
+        throw new Error(
+          `Task ${phaseWorktree.taskId} on branch ${phaseWorktree.branchName} produced no commits. Committer must create a conventional commit.`
+        );
+      }
+
+      await this.validateCommitRangePolicy(
+        gitContext.repoRoot,
+        range,
+        `task ${phaseWorktree.taskId} (phase ${phaseNumber})`
+      );
+    }
+
+    this.emitQueueInfo(
+      planId,
+      `Phase ${phaseNumber} commit policy validated (Conventional Commits + no Claude co-author trailers).`
+    );
+  }
+
+  private async validateCommitRangePolicy(
+    repoRoot: string,
+    range: string,
+    contextLabel: string
+  ): Promise<void> {
+    const logOutput = (
+      await this.runGitCommand(
+        ["log", "--format=%H%x1f%s%x1f%B%x1e", range],
+        repoRoot
+      )
+    ).stdout;
+
+    const records = logOutput
+      .split("\x1e")
+      .map((record) => record.trim())
+      .filter((record) => record.length > 0);
+
+    if (records.length === 0) {
+      throw new Error(`No commits found in range ${range} for ${contextLabel}.`);
+    }
+
+    for (const record of records) {
+      const [hash, subject = "", ...bodyParts] = record.split("\x1f");
+      const body = bodyParts.join("\x1f");
+
+      if (!CONVENTIONAL_COMMIT_HEADER.test(subject.trim())) {
+        throw new Error(
+          `Commit ${hash} in ${contextLabel} does not follow Conventional Commits: "${subject}".`
+        );
+      }
+
+      if (CLAUDE_COAUTHOR_TRAILER.test(body)) {
+        throw new Error(
+          `Commit ${hash} in ${contextLabel} includes a forbidden Claude co-author trailer.`
+        );
+      }
+    }
+  }
+
+  private async cleanupPhaseWorktrees(
+    gitContext: QueueGitContext,
+    phaseWorktrees: PhaseWorktree[],
+    deleteBranches: boolean
+  ): Promise<void> {
+    await Promise.all(
+      phaseWorktrees.map(async (phaseWorktree) => {
+        await this.safeRunGitCommand(
+          ["worktree", "remove", "--force", phaseWorktree.path],
+          gitContext.repoRoot
+        );
+        await rm(phaseWorktree.path, { recursive: true, force: true }).catch(() => undefined);
+
+        if (deleteBranches) {
+          await this.safeRunGitCommand(
+            ["branch", "-D", phaseWorktree.branchName],
+            gitContext.repoRoot
+          );
+        }
+      })
+    );
+  }
+
+  private async tryRestoreBranch(gitContext: QueueGitContext, planId: string): Promise<void> {
+    if (!gitContext.originalBranch || gitContext.originalBranch === gitContext.mergeTargetBranch) {
+      return;
+    }
+
+    const restoreResult = await this.safeRunGitCommand(
+      ["checkout", gitContext.originalBranch],
+      gitContext.repoRoot
+    );
+
+    if (!restoreResult.ok) {
+      this.emitQueueInfo(
+        planId,
+        `Queue finished, but switching back to "${gitContext.originalBranch}" failed: ${restoreResult.stderr}`,
+        "error"
+      );
+    }
+  }
+
+  private sanitizeToken(input: string, maxLength = 32): string {
+    const sanitized = input
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    if (sanitized.length === 0) {
+      return "item";
+    }
+
+    return sanitized.slice(0, maxLength);
+  }
+
+  private async runGitCommand(
+    args: string[],
+    cwd: string
+  ): Promise<{ stdout: string; stderr: string }> {
+    return await new Promise((resolve, reject) => {
+      execFile(
+        "git",
+        args,
+        {
+          cwd,
+          windowsHide: true,
+          maxBuffer: 32 * 1024 * 1024
+        },
+        (error, stdout, stderr) => {
+          const normalizedStdout = String(stdout ?? "");
+          const normalizedStderr = String(stderr ?? "");
+
+          if (error) {
+            const details = normalizedStderr.trim().length > 0 ? normalizedStderr.trim() : error.message;
+            reject(new Error(`git ${args.join(" ")} failed in ${cwd}: ${details}`));
+            return;
+          }
+
+          resolve({
+            stdout: normalizedStdout,
+            stderr: normalizedStderr
+          });
+        }
+      );
+    });
+  }
+
+  private async safeRunGitCommand(
+    args: string[],
+    cwd: string
+  ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+    try {
+      const result = await this.runGitCommand(args, cwd);
+      return {
+        ok: true,
+        stdout: result.stdout,
+        stderr: result.stderr
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        stdout: "",
+        stderr: error instanceof Error ? error.message : String(error)
+      };
     }
   }
 
@@ -868,6 +1416,7 @@ export class TaskRunner {
     plan: RalphPlan;
     task: RalphTask;
     retryContext?: { retryCount: number; previousError: string };
+    executionContext?: RunExecutionContext;
   }): Promise<void> {
     const startedAt = Date.now();
     let sessionId: string | null = null;
@@ -877,6 +1426,9 @@ export class TaskRunner {
         plan: input.plan,
         task: input.task,
         retryContext: input.retryContext,
+        workingDirectory: input.executionContext?.workingDirectory,
+        branchName: input.executionContext?.branchName,
+        phaseNumber: input.executionContext?.phaseNumber,
         callbacks: {
           onLog: (line) => {
             this.emitEvent({
@@ -912,6 +1464,24 @@ export class TaskRunner {
             });
           },
           onSubagent: (payload) => {
+            const record =
+              payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+            const kind = typeof record?.kind === "string" ? record.kind : null;
+            const message =
+              kind === "agent_stage"
+                ? "Agent stage update received."
+                : kind === "architecture_review"
+                ? "Architecture review result received."
+                : kind === "committer_summary"
+                  ? "Committer summary received."
+                  : "Subagent invocation detected.";
+
+            this.notifyDiscordForSubagentPayload({
+              plan: input.plan,
+              task: input.task,
+              payload
+            });
+
             this.emitEvent({
               runId: input.runId,
               planId: input.plan.id,
@@ -919,7 +1489,7 @@ export class TaskRunner {
               type: "info",
               level: "info",
               payload: {
-                message: "Subagent invocation detected.",
+                message,
                 data: payload
               }
             });
@@ -1045,6 +1615,161 @@ export class TaskRunner {
     }
   }
 
+  private getDiscordWebhookUrl(): string | null {
+    const url = this.db.getAppSettings().discordWebhookUrl.trim();
+    return url.length > 0 ? url : null;
+  }
+
+  private truncateForDiscord(text: string, maxLength = 1900): string {
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, maxLength - 3)}...`;
+  }
+
+  private async postDiscordNotification(content: string): Promise<void> {
+    const webhookUrl = this.getDiscordWebhookUrl();
+    if (!webhookUrl) {
+      return;
+    }
+    if (typeof fetch !== "function") {
+      console.warn("[TaskRunner] Global fetch is unavailable; Discord notifications are disabled.");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          content: this.truncateForDiscord(content),
+          allowed_mentions: {
+            parse: []
+          }
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`Discord webhook returned ${response.status}: ${body.slice(0, 180)}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[TaskRunner] Failed to send Discord webhook notification: ${message}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private notifyDiscordForDiscoveryEvent(event: Omit<DiscoveryEvent, "id" | "ts">): void {
+    const isSynthesisStatus =
+      event.type === "status" && /synth|synthesis/i.test(event.message);
+    if (event.type !== "agent" && event.type !== "completed" && event.type !== "failed" && !isSynthesisStatus) {
+      return;
+    }
+
+    const content = [
+      `[RALPH][discovery][${event.type}]`,
+      `session=${event.sessionId}`,
+      event.agent ? `agent=${event.agent}` : null,
+      `message=${event.message}`,
+      event.details ? `details=${event.details}` : null
+    ]
+      .filter((line): line is string => !!line)
+      .join("\n");
+
+    void this.postDiscordNotification(content);
+  }
+
+  private notifyDiscordForSubagentPayload(input: {
+    plan: RalphPlan;
+    task: RalphTask;
+    payload: unknown;
+  }): void {
+    const record =
+      input.payload && typeof input.payload === "object"
+        ? (input.payload as Record<string, unknown>)
+        : null;
+    if (!record) {
+      return;
+    }
+
+    const kind = typeof record.kind === "string" ? record.kind : null;
+    if (!kind) {
+      return;
+    }
+
+    if (kind === "agent_stage") {
+      const role = typeof record.agentRole === "string" ? record.agentRole : "unknown";
+      const stage = typeof record.stage === "string" ? record.stage : "unknown";
+      const status = typeof record.status === "string" ? record.status : "unknown";
+      const summary = typeof record.summary === "string" ? record.summary : "";
+      const stopReason = typeof record.stopReason === "string" ? record.stopReason : "";
+      const content = [
+        `[RALPH][task][agent-stage]`,
+        `plan=${input.plan.id}`,
+        `task=${input.task.id}`,
+        `role=${role}`,
+        `stage=${stage}`,
+        `status=${status}`,
+        summary ? `summary=${summary}` : null,
+        stopReason ? `stopReason=${stopReason}` : null
+      ]
+        .filter((line): line is string => !!line)
+        .join("\n");
+      void this.postDiscordNotification(content);
+      return;
+    }
+
+    if (kind === "architecture_review") {
+      const review =
+        record.review && typeof record.review === "object"
+          ? (record.review as Record<string, unknown>)
+          : null;
+      const findings = Array.isArray(review?.findings) ? review.findings : [];
+      const topFindings = findings
+        .slice(0, 3)
+        .map((finding) => {
+          if (!finding || typeof finding !== "object") return null;
+          const item = finding as Record<string, unknown>;
+          return `${String(item.severity ?? "unknown")} ${String(item.rule ?? "other")} @ ${String(item.location ?? "unknown")}: ${String(item.message ?? "")}`;
+        })
+        .filter((line): line is string => !!line);
+
+      const content = [
+        `[RALPH][task][architecture-review]`,
+        `plan=${input.plan.id}`,
+        `task=${input.task.id}`,
+        `iteration=${String(record.iteration ?? "?")}/${String(record.maxIterations ?? "?")}`,
+        `status=${String(review?.status ?? "unknown")}`,
+        `confidence=${String(review?.confidence ?? "n/a")}`,
+        `summary=${String(review?.summary ?? "")}`,
+        topFindings.length > 0 ? `findings=${topFindings.join(" | ")}` : null
+      ]
+        .filter((line): line is string => !!line)
+        .join("\n");
+      void this.postDiscordNotification(content);
+      return;
+    }
+
+    if (kind === "committer_summary") {
+      const content = [
+        `[RALPH][task][committer]`,
+        `plan=${input.plan.id}`,
+        `task=${input.task.id}`,
+        `headBefore=${String(record.headBefore ?? "unknown")}`,
+        `headAfter=${String(record.headAfter ?? "unknown")}`
+      ].join("\n");
+      void this.postDiscordNotification(content);
+    }
+  }
+
   private emitEvent(event: Omit<RunEvent, "id" | "ts">): void {
     const payload: RunEvent = {
       id: randomUUID(),
@@ -1068,6 +1793,8 @@ export class TaskRunner {
       ts: nowIso(),
       ...event
     };
+
+    this.notifyDiscordForDiscoveryEvent(event);
 
     const window = this.getWindow();
     if (!window || window.isDestroyed()) {

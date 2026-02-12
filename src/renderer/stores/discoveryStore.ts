@@ -17,6 +17,8 @@ export type AnswerMap = Record<string, string>;
 
 interface DiscoveryState {
   // ── Input fields ─────────────────────────────────────
+  /** Optional project path for repository-aware discovery. */
+  projectPath: string;
   /** Seed sentence describing the project goal. */
   seedSentence: string;
   /** Optional additional context (business context, constraints, etc.). */
@@ -62,6 +64,8 @@ interface DiscoveryState {
 
   /** Update the seed sentence input. */
   setSeedSentence: (value: string) => void;
+  /** Update the project path input. */
+  setProjectPath: (value: string) => void;
   /** Update the additional context input. */
   setAdditionalContext: (value: string) => void;
   /** Update a single answer in the answer map. */
@@ -70,7 +74,7 @@ interface DiscoveryState {
   setCopyNotice: (notice: string | null) => void;
 
   /** Start a new discovery interview session. */
-  startDiscovery: (projectPath: string) => Promise<void>;
+  startDiscovery: () => Promise<void>;
   /** Continue the interview by submitting current answers. */
   continueDiscovery: () => Promise<void>;
   /** Check for active (resumable) discovery sessions. */
@@ -98,6 +102,7 @@ function getApi(): typeof window.ralphApi {
 /* ── Initial state (data-only, no actions) ─────────────── */
 
 const initialState = {
+  projectPath: "",
   seedSentence: "",
   additionalContext: "",
   interview: null,
@@ -122,6 +127,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
 
   // ── Simple setters ──────────────────────────────────
 
+  setProjectPath: (value: string) => set({ projectPath: value }),
   setSeedSentence: (value: string) => set({ seedSentence: value }),
   setAdditionalContext: (value: string) => set({ additionalContext: value }),
   setAnswer: (questionId: string, answer: string) =>
@@ -130,8 +136,8 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
 
   // ── Start discovery ─────────────────────────────────
 
-  startDiscovery: async (projectPath: string): Promise<void> => {
-    const { seedSentence, additionalContext } = get();
+  startDiscovery: async (): Promise<void> => {
+    const { projectPath, seedSentence, additionalContext } = get();
     const brief = seedSentence.trim();
 
     if (brief.length < 5) {
@@ -165,7 +171,7 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       });
 
       const payload: StartDiscoveryInput = {
-        projectPath,
+        projectPath: projectPath.trim(),
         seedSentence: brief,
         additionalContext: additionalContext.trim(),
       };
@@ -305,6 +311,8 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
 
       set({
         interview: state,
+        projectPath:
+          get().activeSessions.find((session) => session.id === sessionId)?.projectPath ?? get().projectPath,
         seedSentence: state.directionSummary,
         answerMap: newAnswerMap,
         activeSessions: [],

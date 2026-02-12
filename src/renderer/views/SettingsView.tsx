@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useSettingsStore, AVAILABLE_MODELS } from "../stores/settingsStore";
 import type { AgentRole } from "../stores/settingsStore";
@@ -12,6 +12,9 @@ const AGENT_ROLES: readonly AgentRole[] = [
   "discovery_specialist",
   "plan_synthesis",
   "task_execution",
+  "architecture_specialist",
+  "tester",
+  "committer",
 ] as const;
 
 /**
@@ -21,6 +24,9 @@ const ROLE_LABELS: Record<AgentRole, string> = {
   discovery_specialist: "Discovery Specialist",
   plan_synthesis: "Plan Synthesis",
   task_execution: "Task Execution",
+  architecture_specialist: "Architecture Specialist",
+  tester: "Tester",
+  committer: "Committer",
 };
 
 /**
@@ -30,6 +36,11 @@ const ROLE_DESCRIPTIONS: Record<AgentRole, string> = {
   discovery_specialist: "Conducts project interviews and context gathering",
   plan_synthesis: "Generates structured plans from PRD input",
   task_execution: "Executes individual tasks within a plan",
+  architecture_specialist:
+    "Reviews architecture, service boundaries, SOLID/SRP, and duplicate code; proposes refactors",
+  tester: "Validates implementation with integration tests first, then unit fallback",
+  committer:
+    "Verifies worktree changes, commits with Conventional Commits, and performs controlled merges",
 };
 
 /**
@@ -58,19 +69,32 @@ export function SettingsView(): JSX.Element {
   const modelConfig = useSettingsStore((s) => s.modelConfig);
   const loading = useSettingsStore((s) => s.loading);
   const error = useSettingsStore((s) => s.error);
+  const appSettings = useSettingsStore((s) => s.appSettings);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const updateModelForRole = useSettingsStore((s) => s.updateModelForRole);
+  const updateAppSettings = useSettingsStore((s) => s.updateAppSettings);
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
 
   /* -- Load settings on mount -- */
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    setDiscordWebhookUrl(appSettings.discordWebhookUrl);
+  }, [appSettings.discordWebhookUrl]);
+
   /**
    * Handle model select change. Saves immediately via IPC.
    */
   function handleModelChange(role: AgentRole, modelId: string): void {
     void updateModelForRole(role, modelId);
+  }
+
+  function handleSaveAppSettings(): void {
+    void updateAppSettings({
+      discordWebhookUrl: discordWebhookUrl.trim(),
+    });
   }
 
   return (
@@ -135,12 +159,32 @@ export function SettingsView(): JSX.Element {
         {/* -- Application Preferences -- */}
         <UCard
           title="Application Preferences"
-          subtitle="Customization options (coming soon)"
+          subtitle="Runtime integrations and notification settings"
         >
-          <p className={styles.placeholderText}>
-            Application preferences such as theme selection, notification settings,
-            and default project paths will be available in a future release.
-          </p>
+          <div className={styles.preferenceGroup}>
+            <label htmlFor="discord-webhook-url" className={styles.preferenceLabel}>
+              Discord Webhook URL
+            </label>
+            <input
+              id="discord-webhook-url"
+              className={styles.preferenceInput}
+              type="url"
+              placeholder="https://discord.com/api/webhooks/..."
+              value={discordWebhookUrl}
+              onChange={(event) => setDiscordWebhookUrl(event.target.value)}
+            />
+            <p className={styles.preferenceHint}>
+              When set, each specialist/stage agent posts what it is doing and what it found.
+              Leave empty to disable Discord notifications.
+            </p>
+            <button
+              type="button"
+              className={styles.savePreferencesBtn}
+              onClick={handleSaveAppSettings}
+            >
+              Save Preferences
+            </button>
+          </div>
         </UCard>
 
         {/* -- About -- */}

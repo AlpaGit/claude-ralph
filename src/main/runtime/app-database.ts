@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Database from "better-sqlite3";
 import type {
+  AppSettings,
   DiscoveryAnswer,
   DiscoveryInterviewState,
   DiscoverySession,
@@ -15,7 +16,8 @@ import type {
   TaskRun,
   TaskStatus,
   TechnicalPack,
-  TodoItem
+  TodoItem,
+  UpdateAppSettingsInput
 } from "@shared/types";
 import { MigrationRunner } from "./migrations/migration-runner";
 
@@ -36,7 +38,13 @@ export class PlanParseError extends Error {
 }
 
 /** Agent roles stored in the model_config table. */
-export type AgentRole = "discovery_specialist" | "plan_synthesis" | "task_execution";
+export type AgentRole =
+  | "discovery_specialist"
+  | "plan_synthesis"
+  | "task_execution"
+  | "tester"
+  | "architecture_specialist"
+  | "committer";
 
 export interface ModelConfigRow {
   id: string;
@@ -50,6 +58,12 @@ export interface ModelConfigEntry {
   agentRole: AgentRole;
   modelId: string;
   updatedAt: string;
+}
+
+interface AppSettingRow {
+  key: string;
+  value: string;
+  updated_at: string;
 }
 
 interface PlanRow {
@@ -756,6 +770,37 @@ export class AppDatabase {
     }
   }
 
+  /**
+   * Return persisted application settings.
+   */
+  getAppSettings(): AppSettings {
+    const row = this.db
+      .prepare("SELECT key, value, updated_at FROM app_settings WHERE key = 'discord_webhook_url' LIMIT 1;")
+      .get() as AppSettingRow | undefined;
+
+    return {
+      discordWebhookUrl: row?.value ?? ""
+    };
+  }
+
+  /**
+   * Update persisted application settings.
+   */
+  updateAppSettings(input: UpdateAppSettingsInput): void {
+    this.db
+      .prepare(`
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES ('discord_webhook_url', @value, @updated_at)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = excluded.updated_at;
+      `)
+      .run({
+        value: input.discordWebhookUrl,
+        updated_at: nowIso()
+      });
+  }
+
   // ---------------------------------------------------------------------------
   // Discovery Sessions
   // ---------------------------------------------------------------------------
@@ -944,4 +989,3 @@ export class AppDatabase {
     this.db.close();
   }
 }
-

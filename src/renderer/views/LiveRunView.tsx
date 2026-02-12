@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import type { TaskRun, TodoItem } from "@shared/types";
+import type { RunEvent, TaskRun, TodoItem } from "@shared/types";
 import { usePlanStore } from "../stores/planStore";
 import { useRunStore, initRunEventSubscription } from "../stores/runStore";
 import { UStatusPill, USkeleton, ULogViewer } from "../components/ui";
@@ -83,6 +83,69 @@ function todoStatusClass(status: string): string {
   }
 }
 
+interface ArchitectureFinding {
+  severity: string;
+  location: string;
+  rule: string;
+  message: string;
+  recommendedAction: string;
+}
+
+interface ArchitectureReviewSnapshot {
+  eventId: string;
+  ts: string;
+  iteration: number;
+  maxIterations: number;
+  status: string;
+  summary: string;
+  confidence: number | null;
+  findings: ArchitectureFinding[];
+}
+
+function parseArchitectureReviewEvent(event: RunEvent): ArchitectureReviewSnapshot | null {
+  if (event.type !== "info") {
+    return null;
+  }
+
+  const payload = event.payload as { data?: unknown } | undefined;
+  const data = payload?.data;
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const record = data as Record<string, unknown>;
+  if (record.kind !== "architecture_review") {
+    return null;
+  }
+
+  const review = record.review as Record<string, unknown> | undefined;
+  if (!review) {
+    return null;
+  }
+
+  const findingsRaw = Array.isArray(review.findings) ? review.findings : [];
+  const findings: ArchitectureFinding[] = findingsRaw
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      severity: String(item.severity ?? "unknown"),
+      location: String(item.location ?? "unknown"),
+      rule: String(item.rule ?? "other"),
+      message: String(item.message ?? ""),
+      recommendedAction: String(item.recommendedAction ?? "")
+    }));
+
+  return {
+    eventId: event.id,
+    ts: event.ts,
+    iteration: Number(record.iteration ?? 0),
+    maxIterations: Number(record.maxIterations ?? 0),
+    status: String(review.status ?? "unknown"),
+    summary: String(review.summary ?? ""),
+    confidence: typeof review.confidence === "number" ? review.confidence : null,
+    findings
+  };
+}
+
 /* ── Component ─────────────────────────────────────────── */
 
 /**
@@ -144,6 +207,13 @@ export function LiveRunView(): JSX.Element {
   const logs: string[] = runId ? (runLogs[runId] ?? []) : [];
   const logOverflow: number = runId ? (runLogOverflow[runId] ?? 0) : 0;
   const todos: TodoItem[] = runId ? (runTodos[runId] ?? []) : [];
+  const architectureReviews = useMemo<ArchitectureReviewSnapshot[]>(() => {
+    if (!runId) return [];
+    return recentEvents
+      .filter((event) => event.runId === runId)
+      .map(parseArchitectureReviewEvent)
+      .filter((review): review is ArchitectureReviewSnapshot => review !== null);
+  }, [recentEvents, runId]);
 
   /** Determine the run status: prefer activeRuns (live), fall back to TaskRun record. */
   const runStatus = useMemo((): string => {
@@ -330,6 +400,52 @@ export function LiveRunView(): JSX.Element {
             </ul>
           ) : (
             <p className={styles.todoEmpty}>No todo items yet.</p>
+          )}
+        </div>
+
+        {/* Architecture review snapshots */}
+        <div className={styles.archPanel}>
+          <h2 className={styles.archPanelTitle}>Architecture Review</h2>
+          {architectureReviews.length > 0 ? (
+            <ul className={styles.archList}>
+              {architectureReviews.map((review) => (
+                <li key={review.eventId} className={styles.archItem}>
+                  <div className={styles.archHeaderRow}>
+                    <span className={styles.archMeta}>
+                      Iteration {review.iteration}/{review.maxIterations || "--"}
+                    </span>
+                    <span className={styles.archMeta}>{formatTimestamp(review.ts)}</span>
+                  </div>
+                  <div className={styles.archStatusRow}>
+                    <span className={styles.archStatusLabel}>status:</span>
+                    <span className={cn(styles.archStatus, styles[`archStatus_${review.status}`])}>
+                      {review.status}
+                    </span>
+                    {review.confidence !== null ? (
+                      <span className={styles.archConfidence}>confidence: {review.confidence}%</span>
+                    ) : null}
+                  </div>
+                  <p className={styles.archSummary}>{review.summary || "No summary."}</p>
+
+                  {review.findings.length > 0 ? (
+                    <ul className={styles.archFindings}>
+                      {review.findings.map((finding, index) => (
+                        <li key={`${review.eventId}-${index}`} className={styles.archFinding}>
+                          <strong>[{finding.severity}]</strong> ({finding.rule}) {finding.location}: {finding.message}
+                          {finding.recommendedAction ? (
+                            <div className={styles.archAction}>Action: {finding.recommendedAction}</div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className={styles.archNoFindings}>No findings.</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.archEmpty}>No architecture review snapshots yet.</p>
           )}
         </div>
 

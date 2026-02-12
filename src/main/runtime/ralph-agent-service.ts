@@ -1,5 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { z } from "zod";
 import type {
@@ -52,6 +53,9 @@ interface RunTaskArgs {
   task: RalphTask;
   callbacks: RunTaskCallbacks;
   retryContext?: RetryContext;
+  workingDirectory?: string;
+  branchName?: string;
+  phaseNumber?: number;
 }
 
 interface RunTaskResult {
@@ -60,6 +64,25 @@ interface RunTaskResult {
   stopReason: string | null;
   durationMs: number | null;
   totalCostUsd: number | null;
+}
+
+interface CommitterCallbacks {
+  onLog: (line: string) => void;
+  onQuery: (queryHandle: { interrupt: () => Promise<void> }) => void;
+}
+
+interface MergePhaseArgs {
+  repoRoot: string;
+  targetBranch: string;
+  branches: string[];
+  phaseNumber: number;
+  callbacks: CommitterCallbacks;
+}
+
+interface MergePhaseResult {
+  sessionId: string | null;
+  resultText: string;
+  stopReason: string | null;
 }
 
 interface DiscoveryOutput {
@@ -105,6 +128,10 @@ type SpecialistAgentId =
   | "scope-analyst"
   | "pain-analyst"
   | "constraints-analyst";
+
+const MAX_ARCH_REFACTOR_CYCLES = 2;
+const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
+const CLAUDE_COAUTHOR_TRAILER = /co-authored-by:\s*.*claude/i;
 
 interface SpecialistAnalysis {
   summary: string;
@@ -387,6 +414,63 @@ const specialistAnalysisJsonSchema = {
   ]
 } as const;
 
+const architectureFindingSchema = z.object({
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  location: z.string().min(1),
+  rule: z.enum(["boundary", "srp", "duplication", "solid", "other"]),
+  message: z.string().min(8),
+  recommendedAction: z.string().min(8)
+});
+
+const architectureReviewSchema = z.object({
+  status: z.enum(["pass", "pass_with_notes", "needs_refactor", "blocked"]),
+  summary: z.string().min(10),
+  findings: z.array(architectureFindingSchema),
+  recommendedActions: z.array(z.string()),
+  confidence: z.number().min(0).max(100)
+});
+
+type ArchitectureReview = z.infer<typeof architectureReviewSchema>;
+
+const architectureReviewJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    status: {
+      type: "string",
+      enum: ["pass", "pass_with_notes", "needs_refactor", "blocked"]
+    },
+    summary: { type: "string" },
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          severity: {
+            type: "string",
+            enum: ["low", "medium", "high", "critical"]
+          },
+          location: { type: "string" },
+          rule: {
+            type: "string",
+            enum: ["boundary", "srp", "duplication", "solid", "other"]
+          },
+          message: { type: "string" },
+          recommendedAction: { type: "string" }
+        },
+        required: ["severity", "location", "rule", "message", "recommendedAction"]
+      }
+    },
+    recommendedActions: {
+      type: "array",
+      items: { type: "string" }
+    },
+    confidence: { type: "number" }
+  },
+  required: ["status", "summary", "findings", "recommendedActions", "confidence"]
+} as const;
+
 function extractTextDelta(message: unknown): string | null {
   const maybe = message as {
     type?: string;
@@ -425,12 +509,224 @@ function extractAssistantToolBlocks(
   return maybe.message.content;
 }
 
+function tryParseStructuredOutputFromText(text: string): unknown | null {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const pushCandidate = (value: string): void => {
+    const normalized = value.trim();
+    if (normalized.length === 0 || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  pushCandidate(trimmed);
+
+  const fencedBlockRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  for (const match of trimmed.matchAll(fencedBlockRegex)) {
+    if (typeof match[1] === "string") {
+      pushCandidate(match[1]);
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    pushCandidate(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+
+  const firstBracket = trimmed.indexOf("[");
+  const lastBracket = trimmed.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    pushCandidate(trimmed.slice(firstBracket, lastBracket + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Continue trying other candidates.
+    }
+  }
+
+  return null;
+}
+
+function normalizeConfidencePercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value <= 1) {
+    return Math.max(0, Math.min(100, Math.round(value * 100)));
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 function resolveQueryCwd(projectPath: string): string {
   const normalized = projectPath.trim();
   if (normalized.length > 0 && existsSync(normalized)) {
     return normalized;
   }
   return process.cwd();
+}
+
+async function runGitCommand(cwd: string, args: string[]): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    execFile(
+      "git",
+      args,
+      {
+        cwd,
+        windowsHide: true,
+        maxBuffer: 16 * 1024 * 1024
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          const details = String(stderr ?? "").trim() || error.message;
+          reject(new Error(`git ${args.join(" ")} failed in ${cwd}: ${details}`));
+          return;
+        }
+        resolve(String(stdout ?? ""));
+      }
+    );
+  });
+}
+
+async function readGitHeadCommit(cwd: string): Promise<string | null> {
+  return await new Promise((resolve) => {
+    execFile(
+      "git",
+      ["rev-parse", "HEAD"],
+      {
+        cwd,
+        windowsHide: true
+      },
+      (error, stdout) => {
+        if (error) {
+          resolve(null);
+          return;
+        }
+        resolve(String(stdout ?? "").trim() || null);
+      }
+    );
+  });
+}
+
+async function validateCommitPolicyForRange(cwd: string, range: string, context: string): Promise<void> {
+  const output = await runGitCommand(cwd, ["log", "--format=%H%x1f%s%x1f%B%x1e", range]);
+  const records = output
+    .split("\x1e")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  if (records.length === 0) {
+    throw new Error(`No commits found in ${context}.`);
+  }
+
+  for (const record of records) {
+    const [hash, subject = "", ...bodyParts] = record.split("\x1f");
+    const body = bodyParts.join("\x1f");
+    if (!CONVENTIONAL_COMMIT_HEADER.test(subject.trim())) {
+      throw new Error(
+        `Commit policy violation in ${context}: commit ${hash} is not Conventional Commit compliant.`
+      );
+    }
+    if (CLAUDE_COAUTHOR_TRAILER.test(body)) {
+      throw new Error(
+        `Commit policy violation in ${context}: commit ${hash} includes forbidden Claude co-author trailer.`
+      );
+    }
+  }
+}
+
+function summarizeArchitectureFindings(review: ArchitectureReview): string {
+  if (review.findings.length === 0) {
+    return review.summary;
+  }
+  return review.findings
+    .map(
+      (finding, index) =>
+        `${index + 1}. [${finding.severity}] (${finding.rule}) ${finding.location}: ${finding.message}`
+    )
+    .join("\n");
+}
+
+const ARCHITECTURE_STATUS_RANK: Record<ArchitectureReview["status"], number> = {
+  pass: 0,
+  pass_with_notes: 1,
+  needs_refactor: 2,
+  blocked: 3
+};
+
+function mostRestrictiveStatus(
+  left: ArchitectureReview["status"],
+  right: ArchitectureReview["status"]
+): ArchitectureReview["status"] {
+  return ARCHITECTURE_STATUS_RANK[left] >= ARCHITECTURE_STATUS_RANK[right] ? left : right;
+}
+
+function mapStageToAgentRole(stageName: string): AgentRole {
+  if (stageName === "tester") {
+    return "tester";
+  }
+  if (stageName === "committer") {
+    return "committer";
+  }
+  if (stageName.startsWith("architecture-review")) {
+    return "architecture_specialist";
+  }
+  return "task_execution";
+}
+
+function enforceArchitectureQualityGate(review: ArchitectureReview): ArchitectureReview {
+  const qualityRules = new Set(["boundary", "srp", "duplication", "solid"]);
+  const hasCritical = review.findings.some((finding) => finding.severity === "critical");
+  const hasHigh = review.findings.some((finding) => finding.severity === "high");
+  const hasMediumQualityIssue = review.findings.some(
+    (finding) => finding.severity === "medium" && qualityRules.has(finding.rule)
+  );
+  const hasQualityFinding = review.findings.some((finding) => qualityRules.has(finding.rule));
+  const missingActions = review.findings.length > 0 && review.recommendedActions.length === 0;
+
+  let enforcedStatus = review.status;
+  const enforcementNotes: string[] = [];
+
+  if (hasCritical) {
+    enforcedStatus = mostRestrictiveStatus(enforcedStatus, "blocked");
+    enforcementNotes.push("critical finding present");
+  } else if (hasHigh || hasMediumQualityIssue || missingActions) {
+    enforcedStatus = mostRestrictiveStatus(enforcedStatus, "needs_refactor");
+    if (hasHigh) {
+      enforcementNotes.push("high-severity finding present");
+    }
+    if (hasMediumQualityIssue) {
+      enforcementNotes.push("medium-severity quality rule violation present");
+    }
+    if (missingActions) {
+      enforcementNotes.push("missing recommended actions");
+    }
+  } else if (review.findings.length > 0 || (review.status === "pass" && hasQualityFinding)) {
+    enforcedStatus = mostRestrictiveStatus(enforcedStatus, "pass_with_notes");
+    enforcementNotes.push("non-critical findings present");
+  } else {
+    enforcedStatus = "pass";
+  }
+
+  if (enforcedStatus === review.status) {
+    return review;
+  }
+
+  return {
+    ...review,
+    status: enforcedStatus,
+    summary: `${review.summary} [quality gate enforced: ${enforcementNotes.join(", ")}]`
+  };
 }
 
 function formatAnswers(answers: DiscoveryAnswer[]): string {
@@ -476,6 +772,15 @@ const SPECIALIST_JOBS: SpecialistJob[] = [
   }
 ];
 
+const DEFAULT_MODEL_BY_ROLE: Record<AgentRole, string> = {
+  discovery_specialist: "claude-sonnet-4-5",
+  plan_synthesis: "claude-sonnet-4-5",
+  task_execution: "claude-opus-4-6",
+  architecture_specialist: "claude-sonnet-4-5",
+  tester: "claude-sonnet-4-5",
+  committer: "claude-sonnet-4-5"
+};
+
 export class RalphAgentService {
   private readonly modelConfig: ModelConfigMap;
 
@@ -485,10 +790,10 @@ export class RalphAgentService {
 
   /**
    * Resolve the model ID for a given agent role.
-   * Returns undefined when no configuration exists (SDK will use its default).
+   * Falls back to opinionated defaults when no DB config exists.
    */
-  private getModel(role: AgentRole): string | undefined {
-    return this.modelConfig.get(role);
+  private getModel(role: AgentRole): string {
+    return this.modelConfig.get(role) ?? DEFAULT_MODEL_BY_ROLE[role];
   }
 
   async startDiscovery(args: StartDiscoveryArgs): Promise<DiscoveryOutput> {
@@ -566,41 +871,75 @@ Goal:
     });
 
     const specialistTurns = Math.max(8, Math.ceil(maxTurns * 0.6));
-    const specialistResults = await Promise.allSettled(
-      SPECIALIST_JOBS.map((job) =>
-        this.runSpecialistAnalysis({
+    const specialistMaxAttempts = 2;
+
+    const specialistOutcomes = await Promise.all(
+      SPECIALIST_JOBS.map(async (job) => {
+        let lastError = "Unknown specialist failure.";
+
+        for (let attempt = 1; attempt <= specialistMaxAttempts; attempt += 1) {
+          try {
+            const result = await this.runSpecialistAnalysis({
+              job,
+              prompt,
+              cwd,
+              maxTurns: specialistTurns,
+              callbacks,
+              attempt,
+              maxAttempts: specialistMaxAttempts
+            });
+            return {
+              job,
+              report: result.report,
+              error: null,
+              attemptsUsed: attempt
+            };
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error);
+            callbacks?.onEvent({
+              type: "agent",
+              level: "error",
+              message: `Specialist attempt failed: ${job.id} (${attempt}/${specialistMaxAttempts})`,
+              agent: job.id,
+              details: lastError
+            });
+          }
+        }
+
+        return {
           job,
-          prompt,
-          cwd,
-          maxTurns: specialistTurns,
-          callbacks
-        })
-      )
+          report: null,
+          error: lastError,
+          attemptsUsed: specialistMaxAttempts
+        };
+      })
     );
 
-    const completedReports: Array<{ job: SpecialistJob; report: SpecialistAnalysis }> = [];
-    for (const result of specialistResults) {
-      if (result.status === "fulfilled") {
-        completedReports.push(result.value);
-      } else {
-        const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-        callbacks?.onEvent({
-          type: "agent",
-          level: "error",
-          message: `A specialist failed: ${reason}`
-        });
-      }
-    }
+    const completedReports: Array<{ job: SpecialistJob; report: SpecialistAnalysis }> = specialistOutcomes
+      .filter((outcome) => outcome.report !== null)
+      .map((outcome) => ({ job: outcome.job, report: outcome.report as SpecialistAnalysis }));
+    const failedReports = specialistOutcomes.filter((outcome) => outcome.report === null);
 
     if (completedReports.length === 0) {
       throw new Error("All specialist analyses failed.");
     }
 
-    callbacks?.onEvent({
-      type: "status",
-      level: "info",
-      message: `Specialists completed (${completedReports.length}/${SPECIALIST_JOBS.length}). Synthesizing final PRD input...`
-    });
+    if (failedReports.length > 0) {
+      callbacks?.onEvent({
+        type: "status",
+        level: "error",
+        message:
+          `Specialists finished with partial failures: ` +
+          `${completedReports.length} succeeded, ${failedReports.length} failed. ` +
+          "Synthesizing PRD input with available analyses."
+      });
+    } else {
+      callbacks?.onEvent({
+        type: "status",
+        level: "info",
+        message: `All specialists completed (${completedReports.length}/${SPECIALIST_JOBS.length}). Synthesizing final PRD input...`
+      });
+    }
 
     const specialistSummary = completedReports
       .map(
@@ -624,6 +963,12 @@ Goal:
           )
       )
       .join("\n\n");
+    const failedSpecialistSummary =
+      failedReports.length > 0
+        ? failedReports
+            .map((failed) => `- ${failed.job.id} (attempts: ${failed.attemptsUsed}): ${failed.error}`)
+            .join("\n")
+        : "none";
 
     const synthesisPrompt = `
 You are a senior PRD discovery synthesizer.
@@ -632,6 +977,9 @@ ${prompt}
 
 Specialist outputs (parallel analyses):
 ${specialistSummary}
+
+Failed specialists after retries:
+${failedSpecialistSummary}
 
 Synthesis requirements:
 1) Merge specialist findings into one coherent direction summary.
@@ -646,6 +994,8 @@ Synthesis requirements:
 `;
 
     let structuredOutput: unknown;
+    let resultText = "";
+    let streamedText = "";
     let logBuffer = "";
 
     for await (const message of query({
@@ -673,6 +1023,7 @@ Synthesis requirements:
 
       const textChunk = extractTextDelta(message);
       if (textChunk) {
+        streamedText += textChunk;
         logBuffer += textChunk;
         while (true) {
           const nextBreakIndex = logBuffer.indexOf("\n");
@@ -693,14 +1044,20 @@ Synthesis requirements:
         }
       }
 
-      const resultMessage = message as { type?: string; structured_output?: unknown };
+      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
       if (resultMessage.type === "result") {
         callbacks?.onEvent({
           type: "status",
           level: "info",
           message: "Structured discovery output received. Validating..."
         });
-        structuredOutput = resultMessage.structured_output;
+        if (typeof resultMessage.result === "string") {
+          resultText = resultMessage.result;
+        }
+        structuredOutput =
+          resultMessage.structured_output ??
+          tryParseStructuredOutputFromText(resultText) ??
+          tryParseStructuredOutputFromText(streamedText);
       }
     }
 
@@ -726,13 +1083,17 @@ Synthesis requirements:
     cwd: string;
     maxTurns: number;
     callbacks?: DiscoveryCallbacks;
+    attempt?: number;
+    maxAttempts?: number;
   }): Promise<{ job: SpecialistJob; report: SpecialistAnalysis }> {
+    const attempt = input.attempt ?? 1;
+    const maxAttempts = input.maxAttempts ?? 1;
     input.callbacks?.onEvent({
       type: "agent",
       level: "info",
       message: `Starting specialist agent: ${input.job.id}`,
       agent: input.job.id,
-      details: input.job.title
+      details: `${input.job.title} (attempt ${attempt}/${maxAttempts})`
     });
 
     const specialistPrompt = `
@@ -745,12 +1106,16 @@ ${input.job.objective}
 
 Output requirements:
 - Return structured JSON only.
+- Do not use markdown fences or commentary outside JSON.
+- Required top-level keys: summary, findings, signals, painPoints, constraints, scopeHints, stackHints, documentationHints, questions, confidence.
 - Be concrete and evidence-oriented.
 - Prefer repository signals when a project path exists.
 - Include unresolved questions that materially affect implementation decisions.
 `;
 
     let structuredOutput: unknown;
+    let resultText = "";
+    let streamedText = "";
     let logBuffer = "";
 
     for await (const message of query({
@@ -769,6 +1134,7 @@ Output requirements:
     })) {
       const textChunk = extractTextDelta(message);
       if (textChunk) {
+        streamedText += textChunk;
         logBuffer += textChunk;
         while (true) {
           const nextBreakIndex = logBuffer.indexOf("\n");
@@ -790,9 +1156,15 @@ Output requirements:
         }
       }
 
-      const resultMessage = message as { type?: string; structured_output?: unknown };
+      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
       if (resultMessage.type === "result") {
-        structuredOutput = resultMessage.structured_output;
+        if (typeof resultMessage.result === "string") {
+          resultText = resultMessage.result;
+        }
+        structuredOutput =
+          resultMessage.structured_output ??
+          tryParseStructuredOutputFromText(resultText) ??
+          tryParseStructuredOutputFromText(streamedText);
       }
     }
 
@@ -810,7 +1182,11 @@ Output requirements:
       throw new Error(`${input.job.id} produced no structured output.`);
     }
 
-    const report = specialistAnalysisSchema.parse(structuredOutput);
+    const parsedReport = specialistAnalysisSchema.parse(structuredOutput);
+    const report: SpecialistAnalysis = {
+      ...parsedReport,
+      confidence: normalizeConfidencePercent(parsedReport.confidence)
+    };
     input.callbacks?.onEvent({
       type: "agent",
       level: "info",
@@ -871,6 +1247,7 @@ Instructions:
 `;
 
     let structuredOutput: unknown;
+    let resultText = "";
 
     for await (const message of query({
       prompt,
@@ -894,9 +1271,12 @@ Prefer concrete evidence and practical tradeoffs.
         }
       }
     })) {
-      const resultMessage = message as { type?: string; structured_output?: unknown };
+      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
       if (resultMessage.type === "result") {
-        structuredOutput = resultMessage.structured_output;
+        if (typeof resultMessage.result === "string") {
+          resultText = resultMessage.result;
+        }
+        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -956,6 +1336,7 @@ Important:
 
     const cwd = input.projectPath.trim().length > 0 ? input.projectPath : process.cwd();
     let structuredOutput: unknown;
+    let resultText = "";
 
     for await (const message of query({
       prompt,
@@ -981,9 +1362,12 @@ Optimize for actionable, implementation-ready outcomes.
         }
       }
     })) {
-      const resultMessage = message as { type?: string; structured_output?: unknown };
+      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
       if (resultMessage.type === "result") {
-        structuredOutput = resultMessage.structured_output;
+        if (typeof resultMessage.result === "string") {
+          resultText = resultMessage.result;
+        }
+        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -1015,6 +1399,7 @@ Rules:
 `;
 
     let structuredOutput: unknown;
+    let resultText = "";
 
     for await (const message of query({
       prompt,
@@ -1035,9 +1420,12 @@ Rules:
         args.onLog?.(textChunk);
       }
 
-      const resultMessage = message as { type?: string; structured_output?: unknown };
+      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
       if (resultMessage.type === "result") {
-        structuredOutput = resultMessage.structured_output;
+        if (typeof resultMessage.result === "string") {
+          resultText = resultMessage.result;
+        }
+        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
       }
     }
 
@@ -1053,8 +1441,11 @@ Rules:
   }
 
   async runTask(args: RunTaskArgs): Promise<RunTaskResult> {
-    const cwd = resolveQueryCwd(args.plan.projectPath);
+    const cwd = resolveQueryCwd(args.workingDirectory ?? args.plan.projectPath);
     const taskModel = this.getModel("task_execution");
+    const architectureModel = this.getModel("architecture_specialist");
+    const testerModel = this.getModel("tester");
+    const committerModel = this.getModel("committer");
     const clearResponse = query({
       prompt: "/clear",
       options: {
@@ -1077,80 +1468,467 @@ Rules:
       throw new Error("Unable to start a cleared task session.");
     }
 
-    const retryInjection = args.retryContext
-      ? `
-IMPORTANT: A previous attempt at this task failed with the following error: ${args.retryContext.previousError}. Please analyze this failure and take a different approach to avoid the same issue. This is retry attempt #${args.retryContext.retryCount}.
-`
-      : "";
+    let runSessionId: string | null = clearSessionId;
+    let totalDurationMs = 0;
+    let totalCostUsd = 0;
+    let hasCost = false;
+    const finalSections: string[] = [];
 
-    const taskPrompt = `
-You are executing a strict Ralph iteration.
-${retryInjection}
+    const initialHead = await readGitHeadCommit(cwd);
+    if (!initialHead) {
+      throw new Error("Unable to determine current git HEAD for task execution.");
+    }
+
+    const ensureNoCommitYet = async (stageLabel: string): Promise<void> => {
+      const currentHead = await readGitHeadCommit(cwd);
+      if (currentHead && currentHead !== initialHead) {
+        throw new Error(
+          `Runtime policy violation: commit detected before committer stage (${stageLabel}).`
+        );
+      }
+    };
+
+    const runStage = async (input: {
+      stageName: string;
+      prompt: string;
+      model: string;
+      maxTurns: number;
+      outputSchema?: Record<string, unknown>;
+      agents?: NonNullable<Options["agents"]>;
+    }): Promise<{
+      resultText: string;
+      stopReason: string | null;
+      durationMs: number | null;
+      totalCostUsd: number | null;
+      structuredOutput?: unknown;
+    }> => {
+      const agentRole = mapStageToAgentRole(input.stageName);
+      args.callbacks.onLog(`\n[stage] ${input.stageName} started\n`);
+      args.callbacks.onSubagent({
+        kind: "agent_stage",
+        stage: input.stageName,
+        agentRole,
+        status: "started",
+        summary: `${input.stageName} started`
+      });
+
+      try {
+        const options: Options = {
+          ...baseOptions,
+          model: input.model,
+          cwd,
+          resume: runSessionId ?? clearSessionId,
+          includePartialMessages: true,
+          maxTurns: input.maxTurns
+        };
+
+        if (input.agents) {
+          options.agents = input.agents;
+        }
+
+        if (input.outputSchema) {
+          options.outputFormat = {
+            type: "json_schema",
+            schema: input.outputSchema
+          };
+        }
+
+        const response = query({
+          prompt: input.prompt,
+          options
+        });
+
+        args.callbacks.onQuery(response);
+
+        let resultText = "";
+        let stopReason: string | null = null;
+        let stageDurationMs: number | null = null;
+        let stageCostUsd: number | null = null;
+        let structuredOutput: unknown;
+
+        for await (const message of response) {
+          const textChunk = extractTextDelta(message);
+          if (textChunk) {
+            args.callbacks.onLog(textChunk);
+          }
+
+          const initMessage = message as { type?: string; subtype?: string; session_id?: string };
+          if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+            runSessionId = initMessage.session_id;
+            args.callbacks.onSession(runSessionId);
+          }
+
+          const blocks = extractAssistantToolBlocks(message);
+          for (const block of blocks) {
+            if (block.type !== "tool_use" || !block.name) {
+              continue;
+            }
+
+            if (block.name === "TodoWrite") {
+              const toolInput = block.input as { todos?: TodoItem[] } | undefined;
+              if (Array.isArray(toolInput?.todos)) {
+                args.callbacks.onTodo(toolInput.todos);
+              }
+            }
+
+            if (block.name === "Task") {
+              args.callbacks.onSubagent({
+                stage: input.stageName,
+                ...(typeof block.input === "object" && block.input ? (block.input as Record<string, unknown>) : {})
+              });
+            }
+          }
+
+          const resultMessage = message as {
+            type?: string;
+            result?: string;
+            stop_reason?: string | null;
+            duration_ms?: number;
+            total_cost_usd?: number;
+            structured_output?: unknown;
+          };
+          if (resultMessage.type === "result") {
+            resultText = resultMessage.result ?? "";
+            stopReason = resultMessage.stop_reason ?? null;
+            stageDurationMs = resultMessage.duration_ms ?? null;
+            stageCostUsd = resultMessage.total_cost_usd ?? null;
+            structuredOutput = resultMessage.structured_output;
+          }
+        }
+
+        totalDurationMs += stageDurationMs ?? 0;
+        if (stageCostUsd !== null) {
+          totalCostUsd += stageCostUsd;
+          hasCost = true;
+        }
+
+        if (resultText.trim().length > 0) {
+          finalSections.push(`## ${input.stageName}\n${resultText.trim()}`);
+        }
+
+        args.callbacks.onLog(`\n[stage] ${input.stageName} completed\n`);
+        args.callbacks.onSubagent({
+          kind: "agent_stage",
+          stage: input.stageName,
+          agentRole,
+          status: "completed",
+          summary: resultText.trim().slice(0, 400),
+          stopReason: stopReason ?? undefined
+        });
+
+        return {
+          resultText,
+          stopReason,
+          durationMs: stageDurationMs,
+          totalCostUsd: stageCostUsd,
+          structuredOutput
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        args.callbacks.onSubagent({
+          kind: "agent_stage",
+          stage: input.stageName,
+          agentRole,
+          status: "failed",
+          summary: message.slice(0, 400)
+        });
+        throw error;
+      }
+    };
+
+    const retryInjection = args.retryContext
+      ? `\nPrevious attempt failed: ${args.retryContext.previousError}\nRetry attempt: #${args.retryContext.retryCount}\n`
+      : "";
+    const worktreeInjection = args.branchName
+      ? `\nExecution context: cwd=${cwd}, branch=${args.branchName}, phase=${args.phaseNumber ?? "n/a"}\n`
+      : "";
+    const taskContext = `
 Plan summary:
 ${args.plan.summary}
 
-Task to execute now (ONLY this task):
-- Task ID: ${args.task.id}
-- Title: ${args.task.title}
-- Description: ${args.task.description}
-- Dependencies already completed: ${
-      args.task.dependencies.length > 0 ? args.task.dependencies.join(", ") : "none"
-    }
+Task:
+- id: ${args.task.id}
+- title: ${args.task.title}
+- description: ${args.task.description}
+- dependencies completed: ${args.task.dependencies.length > 0 ? args.task.dependencies.join(", ") : "none"}
 
 Technical notes:
 ${args.task.technicalNotes}
-
-Strict workflow:
-1) Read PRD.md (or equivalent PRD context in repo).
-2) Read progress.txt.
-3) Implement only this task.
-4) Run build and required tests. Use the project's build and test commands as detected from project configuration files (package.json, Cargo.toml, Makefile, etc.) or as specified in the plan's technical notes.
-5) Commit with Ralph format.
-6) Append progress entry in Ralph format.
-7) Stop.
-
-Hard rules:
-- Do not implement additional tasks.
-- Use TodoWrite to track progress.
-- If build/tests fail and quick fix is impossible, revert partial task changes, write failure note in progress.txt, and stop.
-- Return a concise final report including changed files, commit hash, and appended progress entry.
-
-Execution instruction:
-- Use the "ralph-worker" agent via Task for focused implementation.
 `;
 
-    let runSessionId: string | null = clearSessionId;
-    let resultText = "";
-    let stopReason: string | null = null;
-    let totalCostUsd: number | null = null;
-    let durationMs: number | null = null;
+    await runStage({
+      stageName: "implementation",
+      model: taskModel,
+      maxTurns: 40,
+      agents: {
+        "ralph-worker": {
+          description:
+            "Strict implementation worker for one task. Never run git commit or git merge.",
+          prompt: `
+You implement only the requested task.
+Stay in scope, update code, and prepare for architecture review.
+Do NOT run git commit or git merge.
+`
+        }
+      },
+      prompt: `
+You are running stage: implementation.
+${retryInjection}
+${worktreeInjection}
+${taskContext}
 
-    const runResponse = query({
-      prompt: taskPrompt,
-      options: {
-        ...baseOptions,
+Instructions:
+1) Read PRD.md and progress.txt.
+2) Implement only this task.
+3) Keep code changes scoped and production-safe.
+4) Do NOT run git commit or git merge.
+5) Return concise changed-files summary.
+`
+    });
+    await ensureNoCommitYet("implementation");
+
+    let architectureReviewIteration = 0;
+    let lastArchitectureReview: ArchitectureReview | null = null;
+
+    while (true) {
+      architectureReviewIteration += 1;
+
+      const reviewResult = await runStage({
+        stageName: `architecture-review-${architectureReviewIteration}`,
+        model: architectureModel,
+        maxTurns: 16,
+        outputSchema: architectureReviewJsonSchema,
+        prompt: `
+You are running stage: architecture-review.
+${taskContext}
+
+Return ONLY valid JSON for this schema.
+
+Review objectives:
+- Check if the task changes are in the right service/module.
+- Enforce SOLID with strong SRP focus.
+- Detect duplicate code and suggest safe DRY refactors.
+- Recommend concrete refactor actions when needed.
+
+Status policy:
+- pass: zero findings and no actionable quality issue.
+- pass_with_notes: only non-critical notes with no required code changes.
+- needs_refactor: any structural/code-quality issue that should be fixed before testing.
+- blocked: critical issue that prevents safe continuation.
+
+Quality gate rules (strict):
+- Any critical finding => blocked.
+- Any high finding => needs_refactor or blocked.
+- Any medium finding on boundary/srp/duplication/solid => needs_refactor.
+- If findings exist, recommendedActions must be concrete and non-empty.
+`
+      });
+
+      const parsedReview = architectureReviewSchema.parse(reviewResult.structuredOutput);
+      const review = enforceArchitectureQualityGate(parsedReview);
+      lastArchitectureReview = review;
+      args.callbacks.onSubagent({
+        kind: "architecture_review",
+        iteration: architectureReviewIteration,
+        maxIterations: MAX_ARCH_REFACTOR_CYCLES,
+        review
+      });
+
+      if (review.status === "pass" || review.status === "pass_with_notes") {
+        break;
+      }
+
+      if (review.status === "blocked") {
+        throw new Error(
+          `Architecture review blocked execution: ${review.summary}\n${summarizeArchitectureFindings(review)}`
+        );
+      }
+
+      if (architectureReviewIteration >= MAX_ARCH_REFACTOR_CYCLES) {
+        throw new Error(
+          `Architecture review still requires refactor after ${MAX_ARCH_REFACTOR_CYCLES} cycle(s): ${review.summary}`
+        );
+      }
+
+      await runStage({
+        stageName: `architecture-refactor-${architectureReviewIteration}`,
         model: taskModel,
-        cwd,
-        resume: clearSessionId,
-        includePartialMessages: true,
-        maxTurns: 60,
+        maxTurns: 28,
         agents: {
           "ralph-worker": {
-            description: "Strict Ralph implementation worker for one checklist item.",
+            description:
+              "Focused refactor worker for architecture findings. Never run git commit or git merge.",
             prompt: `
-You execute one Ralph task at a time with strict compliance.
-Stay scoped to the requested checklist item only.
-Provide clear final implementation report.
-`,
-            model: "inherit"
+Apply only targeted refactors from architecture findings.
+Do not widen scope.
+Do NOT run git commit or git merge.
+`
           }
-        }
+        },
+        prompt: `
+You are running stage: architecture-refactor.
+${taskContext}
+
+Architecture findings to fix now:
+${summarizeArchitectureFindings(review)}
+
+Recommended actions:
+${review.recommendedActions.length > 0 ? review.recommendedActions.join("\n") : "- none provided"}
+
+Instructions:
+1) Apply only necessary refactors to resolve findings.
+2) Preserve task scope and behavior.
+3) Do NOT run git commit or git merge.
+4) Return concise summary of refactors.
+`
+      });
+      await ensureNoCommitYet(`architecture-refactor-${architectureReviewIteration}`);
+    }
+
+    await ensureNoCommitYet("architecture-gate-complete");
+
+    await runStage({
+      stageName: "tester",
+      model: testerModel,
+      maxTurns: 28,
+      prompt: `
+You are running stage: tester.
+${taskContext}
+
+Testing policy (strict):
+1) Prefer integration/e2e/system tests in real runtime conditions whenever available.
+2) If integration tests are not feasible, run strongest fallback and explain why.
+3) Unit tests are fallback-only.
+4) Provide commands run and pass/fail evidence.
+5) Do NOT run git commit or git merge.
+`
+    });
+    await ensureNoCommitYet("tester");
+
+    const headBeforeCommitter = await readGitHeadCommit(cwd);
+    if (!headBeforeCommitter) {
+      throw new Error("Unable to determine HEAD before committer stage.");
+    }
+
+    const committerResult = await runStage({
+      stageName: "committer",
+      model: committerModel,
+      maxTurns: 24,
+      prompt: `
+You are running stage: committer.
+${taskContext}
+${worktreeInjection}
+
+Commit policy (strict):
+1) Review current diff and ensure task scope is respected.
+2) Create commit(s) using Conventional Commits:
+   <type>[optional scope]: <description>
+3) Allowed examples: feat, fix, docs, refactor, test, chore, perf, improvement.
+4) Never include "Co-authored-by" trailer mentioning Claude.
+5) Do NOT run git merge in this stage.
+6) Return commit hash(es) and commit message(s).
+`
+    });
+
+    const headAfterCommitter = await readGitHeadCommit(cwd);
+    if (!headAfterCommitter || headAfterCommitter === headBeforeCommitter) {
+      throw new Error("Runtime policy violation: committer stage completed without creating a commit.");
+    }
+
+    await validateCommitPolicyForRange(
+      cwd,
+      `${headBeforeCommitter}..${headAfterCommitter}`,
+      `task ${args.task.id} committer stage`
+    );
+
+    args.callbacks.onSubagent({
+      kind: "committer_summary",
+      headBefore: headBeforeCommitter,
+      headAfter: headAfterCommitter
+    });
+
+    if (lastArchitectureReview) {
+      finalSections.push(
+        `## architecture-gate-summary\nstatus: ${lastArchitectureReview.status}\nsummary: ${lastArchitectureReview.summary}`
+      );
+    }
+
+    return {
+      sessionId: runSessionId,
+      resultText: finalSections.join("\n\n"),
+      stopReason: committerResult.stopReason,
+      durationMs: totalDurationMs > 0 ? totalDurationMs : null,
+      totalCostUsd: hasCost ? totalCostUsd : null
+    };
+  }
+
+  async mergePhaseWithCommitter(args: MergePhaseArgs): Promise<MergePhaseResult> {
+    const cwd = resolveQueryCwd(args.repoRoot);
+    const committerModel = this.getModel("committer");
+
+    const clearResponse = query({
+      prompt: "/clear",
+      options: {
+        ...baseOptions,
+        model: committerModel,
+        cwd,
+        maxTurns: 1
       }
     });
 
-    args.callbacks.onQuery(runResponse);
+    let clearSessionId: string | null = null;
+    for await (const message of clearResponse) {
+      const initMessage = message as { type?: string; subtype?: string; session_id?: string };
+      if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
+        clearSessionId = initMessage.session_id;
+      }
+    }
 
-    for await (const message of runResponse) {
+    if (!clearSessionId) {
+      throw new Error("Unable to start a cleared committer session for phase merge.");
+    }
+
+    const mergePrompt = `
+You are the dedicated Ralph committer agent for queue merge.
+
+Repository root: ${cwd}
+Target branch: ${args.targetBranch}
+Phase number: ${args.phaseNumber}
+Branches to merge in order:
+${args.branches.map((branch, index) => `${index + 1}. ${branch}`).join("\n")}
+
+Merge policy (strict):
+1) Verify working tree is clean before merging.
+2) Checkout the target branch.
+3) Merge each branch in listed order using no-fast-forward merge commits.
+4) Merge commit messages MUST follow Conventional Commits:
+   <type>[optional scope]: <description>
+5) Never include any Co-authored-by trailer that mentions Claude.
+6) If a conflict occurs, abort the merge and report clearly.
+7) Provide a concise summary of merged branches and resulting commit hashes.
+
+You are the only agent allowed to run git merge in this step.
+`;
+
+    let sessionId: string | null = clearSessionId;
+    let resultText = "";
+    let stopReason: string | null = null;
+
+    const mergeResponse = query({
+      prompt: mergePrompt,
+      options: {
+        ...baseOptions,
+        model: committerModel,
+        cwd,
+        resume: clearSessionId,
+        includePartialMessages: true,
+        maxTurns: 30
+      }
+    });
+
+    args.callbacks.onQuery(mergeResponse);
+
+    for await (const message of mergeResponse) {
       const textChunk = extractTextDelta(message);
       if (textChunk) {
         args.callbacks.onLog(textChunk);
@@ -1158,50 +1936,24 @@ Provide clear final implementation report.
 
       const initMessage = message as { type?: string; subtype?: string; session_id?: string };
       if (initMessage.type === "system" && initMessage.subtype === "init" && initMessage.session_id) {
-        runSessionId = initMessage.session_id;
-        args.callbacks.onSession(runSessionId);
-      }
-
-      const blocks = extractAssistantToolBlocks(message);
-      for (const block of blocks) {
-        if (block.type !== "tool_use" || !block.name) {
-          continue;
-        }
-
-        if (block.name === "TodoWrite") {
-          const input = block.input as { todos?: TodoItem[] } | undefined;
-          if (Array.isArray(input?.todos)) {
-            args.callbacks.onTodo(input.todos);
-          }
-        }
-
-        if (block.name === "Task") {
-          args.callbacks.onSubagent(block.input ?? {});
-        }
+        sessionId = initMessage.session_id;
       }
 
       const resultMessage = message as {
         type?: string;
         result?: string;
         stop_reason?: string | null;
-        total_cost_usd?: number;
-        duration_ms?: number;
       };
-
       if (resultMessage.type === "result") {
         resultText = resultMessage.result ?? "";
         stopReason = resultMessage.stop_reason ?? null;
-        totalCostUsd = resultMessage.total_cost_usd ?? null;
-        durationMs = resultMessage.duration_ms ?? null;
       }
     }
 
     return {
-      sessionId: runSessionId,
+      sessionId,
       resultText,
-      stopReason,
-      durationMs,
-      totalCostUsd
+      stopReason
     };
   }
 }

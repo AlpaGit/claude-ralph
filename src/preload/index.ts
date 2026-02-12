@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { IPC_CHANNELS } from "@shared/ipc";
 import type {
   AbandonDiscoveryInput,
   AbortQueueInput,
   ArchivePlanInput,
+  AppSettings,
   CancelDiscoveryInput,
   CancelDiscoveryResponse,
   CancelRunInput,
@@ -37,8 +37,41 @@ import type {
   StartDiscoveryInput,
   UnarchivePlanInput,
   UpdateModelConfigInput,
+  UpdateAppSettingsInput,
   WizardGuidanceResult
 } from "@shared/types";
+
+// Keep preload runtime minimal: do not import @shared/ipc here because it
+// depends on zod/runtime modules that can fail in sandboxed preload contexts.
+const IPC_CHANNELS = {
+  createPlan: "plan:create",
+  getPlan: "plan:get",
+  listPlans: "plan:list",
+  deletePlan: "plan:delete",
+  archivePlan: "plan:archive",
+  unarchivePlan: "plan:unarchive",
+  runTask: "task:run",
+  runAll: "task:runAll",
+  cancelRun: "run:cancel",
+  retryTask: "task:retry",
+  skipTask: "task:skip",
+  abortQueue: "queue:abort",
+  startDiscovery: "discovery:start",
+  continueDiscovery: "discovery:continue",
+  discoveryEvent: "discovery:event",
+  wizardGuidance: "wizard:guidance",
+  inferStack: "wizard:inferStack",
+  runEvent: "run:event",
+  getModelConfig: "config:getModels",
+  updateModelConfig: "config:updateModel",
+  getAppSettings: "config:getAppSettings",
+  updateAppSettings: "config:updateAppSettings",
+  discoverySessions: "discovery:sessions",
+  discoveryResume: "discovery:resume",
+  discoveryAbandon: "discovery:abandon",
+  discoveryCancel: "discovery:cancel",
+  getRunEvents: "run:getEvents"
+} as const;
 
 const api: RalphApi = {
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
@@ -111,6 +144,14 @@ const api: RalphApi = {
 
   updateModelConfig(input: UpdateModelConfigInput): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.updateModelConfig, input);
+  },
+
+  getAppSettings(): Promise<AppSettings> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getAppSettings);
+  },
+
+  updateAppSettings(input: UpdateAppSettingsInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.updateAppSettings, input);
   },
 
   getDiscoverySessions(): Promise<DiscoverySessionSummary[]> {

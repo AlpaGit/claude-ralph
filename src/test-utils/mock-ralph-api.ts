@@ -50,6 +50,8 @@ export function createMockRalphApi(): MockRalphApi {
     inferStack: vi.fn(),
     getModelConfig: vi.fn(),
     updateModelConfig: vi.fn(),
+    getAppSettings: vi.fn(),
+    updateAppSettings: vi.fn(),
     getDiscoverySessions: vi.fn(),
     resumeDiscoverySession: vi.fn(),
     abandonDiscoverySession: vi.fn(),

@@ -21,6 +21,8 @@ export const IPC_CHANNELS = {
   runEvent: "run:event",
   getModelConfig: "config:getModels",
   updateModelConfig: "config:updateModel",
+  getAppSettings: "config:getAppSettings",
+  updateAppSettings: "config:updateAppSettings",
   discoverySessions: "discovery:sessions",
   discoveryResume: "discovery:resume",
   discoveryAbandon: "discovery:abandon",
@@ -125,8 +127,25 @@ export const inferStackInputSchema = z.object({
 });
 
 export const updateModelConfigInputSchema = z.object({
-  agentRole: z.enum(["discovery_specialist", "plan_synthesis", "task_execution"]),
+  agentRole: z.enum([
+    "discovery_specialist",
+    "plan_synthesis",
+    "task_execution",
+    "tester",
+    "architecture_specialist",
+    "committer"
+  ]),
   modelId: z.string().min(1)
+});
+
+export const updateAppSettingsInputSchema = z.object({
+  discordWebhookUrl: z
+    .string()
+    .transform((value) => value.trim())
+    .refine(
+      (value) => value.length === 0 || /^https?:\/\//i.test(value),
+      "discordWebhookUrl must be empty or a valid URL."
+    )
 });
 
 export const discoveryResumeInputSchema = z.object({
