@@ -139,3 +139,40 @@ p1-06: Create UModal and USkeleton components   [DONE]
     - All values reference tokens.css custom properties
   - src/renderer/components/ui.ts -- barrel export updated with UModal, UConfirmModal, USkeleton
   - Build and typecheck pass
+
+p1-07: Create ULogViewer component with virtualization   [DONE]
+  - Installed react-window@2 as production dependency (v2 ships bundled types, no @types needed)
+  - src/renderer/components/ui/RingBuffer.ts
+    - Generic circular fixed-capacity array for log line storage
+    - Default capacity 5 000 lines, configurable via constructor
+    - Circular array with head pointer and count tracking
+    - push() O(1): appends item, overwrites oldest when full
+    - get(index) O(1): retrieves item at logical index (0 = oldest)
+    - toArray() O(n): returns all items in insertion order
+    - clear(): resets buffer to empty state
+    - Exports RingBuffer class
+  - src/renderer/components/ui/ULogViewer.tsx
+    - Virtualized log viewer using react-window v2 List component
+    - rowHeight 20px (IBM Plex Mono line height), overscanCount 20
+    - Accepts external lines[] prop or uses internal RingBuffer via imperative handle
+    - Auto-scroll to bottom (toggleable): tracks visible rows via onRowsRendered
+    - Disables auto-scroll when user scrolls up, re-enables on button click
+    - Line numbers: 1-based, right-aligned, non-selectable
+    - ANSI color support: strips ANSI escape codes via regex (\x1b\[[0-9;]*[A-Za-z])
+    - Search/filter input: case-insensitive substring match, shows match count
+    - Expand-to-fullscreen toggle: fixed position overlay with z-index 9999
+    - Copy-all button: copies all visible (filtered) lines to clipboard via navigator.clipboard
+    - Scroll-to-bottom indicator button when auto-scroll is off
+    - Footer status bar showing line count and capacity
+    - ULogViewerHandle interface for imperative push/pushMany/clear/copyAll/scrollToBottom
+    - Exports ULogViewerProps, ULogViewerHandle types
+  - src/renderer/components/ui/ULogViewer.module.css
+    - Dark terminal theme: --color-log-bg (#111), --color-log-text (#e6e6e6)
+    - Toolbar: search input, auto-scroll toggle, copy button, fullscreen toggle
+    - Fullscreen mode: position fixed, inset 0, z-index 9999
+    - Row hover highlight, search match highlight (accent rgba)
+    - Line number column: fixed width, right-aligned, muted color
+    - Scroll-to-bottom indicator: absolute positioned pill button
+    - All values reference tokens.css custom properties
+  - src/renderer/components/ui.ts -- barrel export updated with ULogViewer, ULogViewerHandle, RingBuffer
+  - Build and typecheck pass
