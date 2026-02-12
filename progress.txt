@@ -242,3 +242,34 @@ p1-10: Create Sidebar component with plan list navigation   [DONE]
     - Content area uses flex: 1 to fill remaining width
     - Responsive: flex-direction column below 768px
   - Build and typecheck pass
+
+p1-11: Implement ErrorBoundary components   [DONE]
+  - src/renderer/components/layout/ErrorBoundary.tsx
+    - AppErrorBoundary: class component wrapping entire RouterProvider
+    - Catches catastrophic errors, shows full-page error card with Restart App button
+    - Uses getDerivedStateFromError + componentDidCatch for error capture
+    - Logs errors to console with [AppErrorBoundary] prefix
+    - Displays error message in styled pre block; shows component stack in dev mode
+    - Restart button calls window.location.reload()
+    - ViewErrorBoundary: class component wrapping individual route views
+    - Catches per-view errors, shows error card with Retry and Go Home buttons
+    - Retry resets error state to re-render children
+    - Go Home resets error state and calls onNavigateHome callback
+    - Logs errors to console with [ViewErrorBoundary] prefix
+    - Displays error message and component stack (dev only) in styled pre blocks
+    - RouteErrorBoundary: functional wrapper around ViewErrorBoundary
+    - Uses useNavigate hook to provide onNavigateHome callback (navigates to "/")
+    - Decouples class components from react-router-dom hooks
+  - src/renderer/components/layout/ErrorBoundary.module.css
+    - AppError: full-viewport centered layout with gradient background
+    - ViewError: top-aligned centered layout for in-shell display
+    - Error message: mono font, red text on error-bg, 1px border, scrollable
+    - Component stack: mono font, muted text, dashed border, scrollable
+    - All values reference tokens.css custom properties
+  - src/renderer/index.tsx
+    - Wrapped <RouterProvider> with <AppErrorBoundary> inside StrictMode
+  - src/renderer/router.tsx
+    - Wrapped each route element with <RouteErrorBoundary> for per-view error isolation
+    - All five routes (/, /plan/:planId, /discovery, /run/:runId, /settings) wrapped
+  - Uses UCard and UButton from existing UI primitives for error display
+  - Build and typecheck pass
