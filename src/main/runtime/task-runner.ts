@@ -1638,11 +1638,19 @@ export class TaskRunner {
     branches: string[],
     gitContext: QueueGitContext
   ): Promise<void> {
-    const cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
+    let cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
     if (cleanResult.stdout.trim().length > 0) {
-      throw new Error(
-        `Cannot merge phase ${phaseNumber}: main checkout contains uncommitted changes.`
+      this.emitQueueInfo(
+        planId,
+        `Main checkout became dirty before phase ${phaseNumber} merge. Running automatic cleanup/commit.`
       );
+      await this.autoCleanWorkspaceForQueue(planId, gitContext.repoRoot);
+      cleanResult = await this.runGitCommand(["status", "--porcelain"], gitContext.repoRoot);
+      if (cleanResult.stdout.trim().length > 0) {
+        throw new Error(
+          `Cannot merge phase ${phaseNumber}: main checkout still contains uncommitted changes after automatic cleanup.`
+        );
+      }
     }
 
     const currentBranchResult = await this.runGitCommand(
