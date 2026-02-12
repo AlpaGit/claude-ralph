@@ -621,3 +621,33 @@ p2-02: Add plan management IPC channels   [DONE]
     - loadPlanList(filter?), deletePlan(planId), archivePlan(planId), unarchivePlan(planId)
       all wired to real IPC through window.ralphApi
   - Build and typecheck pass
+
+p2-03: Implement PlanListView with full plan management   [DONE]
+  - src/renderer/views/PlanListView.tsx
+    - Debounced search input (300ms) using useRef timer, filters by summary or project path
+    - Archive toggle button: toggles showArchived state, re-fetches via loadPlanList({ archived })
+    - Plan cards with UStatusPill status badges, project path, created date, and timeAgo
+    - Archived plans: dashed border card style, reduced opacity, "Archived" badge next to status pill
+    - Click-to-navigate: cards are role="button" with Enter/Space keyboard support -> /plan/:planId
+    - Per-card action buttons: Archive/Unarchive and Delete with stopPropagation to avoid navigation
+    - UConfirmModal confirmation dialogs for all destructive actions
+    - Delete confirmation text: "This will permanently delete the plan and all associated tasks, runs, and logs. This cannot be undone."
+    - Archive confirmation: lighter text mentioning plans are hidden but restorable
+    - Unarchive confirmation: lighter text mentioning plan returns to main list
+    - Loading state with actionLoading flag during confirm operations
+    - Empty states: "No plans yet" (default), "No archived plans" (archive mode), "No matching plans" (search)
+    - Match count indicator shown when search is active
+    - Uses planStore.loadPlanList, deletePlan, archivePlan, unarchivePlan actions (wired in p2-01)
+  - src/renderer/views/PlanListView.module.css
+    - Controls row: flex layout with search input + archive toggle button
+    - Archive toggle: brutalist button with active state (accent-2 background, white text)
+    - Plan card actions: dashed border-top separator, small action buttons
+    - Danger button variant: red border/text, red background on hover
+    - Archived card state: dashed border, 0.7 opacity
+    - Archived badge: mono font, uppercase, muted border pill
+    - Status row: flex container for status pill + archived badge
+    - Responsive: controls row stacks vertically below 768px
+    - All values reference tokens.css custom properties
+  - planStore already had all needed actions (loadPlanList, deletePlan, archivePlan, unarchivePlan)
+    fully wired to real IPC from p2-01/p2-02 -- no store changes needed
+  - Build and typecheck pass
