@@ -157,9 +157,7 @@ export class RalphAgentService {
 
   constructor(modelConfig?: ModelConfigMap, stackProfileStore?: StackProfileStore) {
     this.modelConfig = modelConfig ?? new Map();
-    const getModel = (role: AgentRole): string =>
-      this.modelConfig.get(role) ?? DEFAULT_MODEL_BY_ROLE[role];
-    this.discovery = new DiscoveryAgent(getModel, stackProfileStore);
+    this.discovery = new DiscoveryAgent(this.getModel.bind(this), stackProfileStore);
   }
 
   /**
