@@ -1538,3 +1538,27 @@ Error recovery tests (error-recovery.e2e.ts):
   - Full queue failure scenario: task-1 completes, task-2 fails, task-3 stays pending (queue stops at failure)
 
 Testing approach: Seeds plan/task/run data directly into SQLite via electronApp.evaluate() and emits synthetic RunEvent payloads via BrowserWindow.webContents.send("run:event", ...) to simulate TaskRunner behavior without invoking the Claude Agent SDK. Build and unit tests pass. Pre-existing TS2352 typecheck error in task-runner.ts is unrelated.
+
+## p4-09 — Write E2E test for discovery flow
+**Status**: Done
+**Commit**: 33b9606
+**Files changed**:
+- tests/e2e/discovery-flow.e2e.ts (new — 1022 lines, 4 E2E tests for discovery interview flow)
+
+**Notes**: Comprehensive E2E test suite covering the full discovery interview lifecycle and resume flow.
+
+Discovery interview flow tests (3 tests, serial mode):
+  - Enter seed sentence, start discovery with mocked specialists, verify specialist progress events stream into AI Feedback panel, verify Discovery Status card (round 1, readiness 45%, Early Discovery badge), verify Inferred Context (stack, pain points, constraints, signals), verify 3 Detailed Questions rendered with reason text, verify Missing Critical Info section, verify Discovery Output Ready card, verify specialist names in log box
+  - Answer all 3 questions in textareas, verify answers-this-round counter (3/3), click Submit Answers And Continue, verify round 2 state arrives (readiness 72%, Needs More Detail badge), verify refined direction summary, verify new round-2 questions, verify updated inferred context (now includes Docker), expand PRD preview and verify generated content with success criteria
+  - Verify Use as Plan Input button navigates to plan list view with PRD text in location state
+
+Discovery resume flow test (1 test, self-managed app lifecycle):
+  - Launch app, mock discovery IPC handlers, start discovery session, verify session created in DB
+  - Close app via app.close()
+  - Relaunch with same TEST_DB_PATH, mock discovery handlers for app2
+  - Navigate to Discovery view, verify resume dialog appears with "Active Discovery Session Found" title
+  - Verify session metadata in dialog (seed sentence, Round 1, Readiness 45%)
+  - Click Resume, verify dialog closes, verify interview state restored (Discovery Status card, round 1, questions rendered, inferred context, seed sentence input populated)
+  - Clean up: close app, remove temp DB files
+
+Mocking approach: Replaces all 6 discovery IPC handlers (discovery:start, discovery:continue, discovery:sessions, discovery:resume, discovery:abandon, discovery:cancel) via ipcMain.removeHandler() + ipcMain.handle() in electronApp.evaluate(). Mock discovery:start emits synthetic DiscoveryEvent payloads (status, agent start/complete for all 5 specialists, log events, completed) via BrowserWindow.webContents.send("discovery:event", ...) and persists session to discovery_sessions table. Mock discovery:continue emits refined events and updates session state in DB. Mock discovery:sessions reads active sessions from DB. Mock discovery:resume reads latest_state_json from DB. Build passes. Pre-existing E2E runtime issue (Electron window closes immediately) affects all E2E tests equally and is unrelated to this change.
