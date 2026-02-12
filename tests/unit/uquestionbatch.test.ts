@@ -526,6 +526,38 @@ describe("UQuestionBatch ↔ UOptionCard integration", () => {
 });
 
 // ---------------------------------------------------------------------------
+// UQuestionBatch — disabled prop (back-navigation read-only mode)
+// ---------------------------------------------------------------------------
+
+describe("UQuestionBatch disabled prop", () => {
+  const tsx = readSrc(BATCH_TSX);
+
+  it("props interface includes optional disabled field", () => {
+    expect(tsx).toContain("disabled?: boolean");
+  });
+
+  it("disabled prop defaults to false in destructuring", () => {
+    expect(tsx).toContain("disabled = false");
+  });
+
+  it("submit batch footer is hidden when disabled", () => {
+    // The footer should be wrapped in !disabled conditional
+    expect(tsx).toContain("!disabled");
+    expect(tsx).toContain("styles.batchFooter");
+  });
+
+  it("disabled state is combined with isSubmitting for QuestionBlock", () => {
+    // QuestionBlock's isSubmitting should combine disabled || isSubmitting
+    expect(tsx).toContain("isSubmitting={isSubmitting || disabled}");
+  });
+
+  it("disabled prop has JSDoc comment explaining its purpose", () => {
+    expect(tsx).toMatch(/disabled.*\?.*boolean/);
+    expect(tsx).toContain("read-only");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // UQuestionBatch ↔ DiscoveryView integration
 // ---------------------------------------------------------------------------
 
@@ -545,5 +577,9 @@ describe("UQuestionBatch ↔ DiscoveryView integration", () => {
     expect(viewTsx).toContain("onSkip={");
     expect(viewTsx).toContain("onSubmitBatch={");
     expect(viewTsx).toContain("isSubmitting={");
+  });
+
+  it("DiscoveryView passes disabled={isViewingPast} to UQuestionBatch", () => {
+    expect(viewTsx).toContain("disabled={isViewingPast}");
   });
 });
