@@ -36,7 +36,7 @@
   gap: 0.5rem;
   padding: 0.35rem 0.6rem;
   border-bottom: 1px solid var(--color-log-border);
-  background: #1a1a1a;
+  background: var(--color-surface-dark);
   flex-shrink: 0;
 }
 
@@ -54,7 +54,7 @@
 }
 
 .searchInput::placeholder {
-  color: #666;
+  color: var(--color-text-on-dark-placeholder);
 }
 
 .searchInput:focus {
@@ -62,7 +62,7 @@
 }
 
 .matchCount {
-  color: #888;
+  color: var(--color-text-on-dark-subtle);
   font-size: 0.72rem;
   white-space: nowrap;
 }
@@ -84,7 +84,7 @@
 }
 
 .toolbarBtn:hover {
-  background: #333;
+  background: var(--color-surface-dark-raised);
 }
 
 .toolbarBtn:focus-visible {
@@ -117,7 +117,7 @@
 }
 
 .row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--color-overlay-white-subtle);
 }
 
 .lineNumber {
@@ -125,7 +125,7 @@
   width: 3.5rem;
   text-align: right;
   padding-right: 0.8rem;
-  color: #555;
+  color: var(--color-text-on-dark-dim);
   user-select: none;
 }
 
@@ -137,7 +137,7 @@
 }
 
 .highlight {
-  background: rgba(229, 72, 40, 0.25);
+  background: var(--color-highlight-search);
 }
 
 /* ── Footer / status bar ──────────────────────────────── */
@@ -148,9 +148,9 @@
   justify-content: space-between;
   padding: 0.2rem 0.6rem;
   border-top: 1px solid var(--color-log-border);
-  background: #1a1a1a;
+  background: var(--color-surface-dark);
   font-size: 0.7rem;
-  color: #888;
+  color: var(--color-text-on-dark-subtle);
   flex-shrink: 0;
 }
 
@@ -172,7 +172,7 @@
   padding: 0.25rem 0.6rem;
   border: 1px solid var(--color-log-border);
   border-radius: var(--radius-sm);
-  background: #222;
+  background: var(--color-log-border);
   color: var(--color-log-text);
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -184,5 +184,5 @@
 
 .scrollIndicator:hover {
   opacity: 1;
-  background: #333;
+  background: var(--color-surface-dark-raised);
 }

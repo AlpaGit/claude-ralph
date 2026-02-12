@@ -51,7 +51,7 @@
 }
 
 .toggle:hover {
-  background: rgba(185, 28, 28, 0.08);
+  background: var(--color-error-hover-alpha-light);
 }
 
 .toggle:focus-visible {

@@ -64,7 +64,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
+    var(--color-overlay-white-shimmer) 50%,
     transparent 100%
   );
   animation: shimmer 2s linear infinite;
