@@ -11,3 +11,39 @@ p1-02: Implement DB migration system            [DONE]
   - AppDatabase constructor updated to accept migrationsDir param
   - Replaces inline CREATE TABLE with MigrationRunner.run()
   - index.ts updated to resolve migrationsDir (dev vs packaged)
+
+p1-03: Extract theme tokens into tokens.css       [DONE]
+  - Created src/renderer/tokens.css with all CSS custom properties
+  - Fonts: --font-sans (Space Grotesk), --font-mono (IBM Plex Mono)
+  - Colors: core palette, gradients, surfaces, borders, wizard, thinking, status, feedback, log
+  - Border radius: --radius-sm (8px) through --radius-circle (999px)
+  - Box shadows: --shadow-hero, --shadow-panel
+  - Transitions: --transition-fast (100ms ease-in-out)
+  - Spacing: --space-xs through --space-xl
+  - Layout: --max-width-app, --opacity-disabled
+  - Updated src/renderer/styles.css to @import ./tokens.css
+  - Replaced all hardcoded hex colors, font-family, border-radius, shadows with var() refs
+  - Removed :root block from styles.css (moved to tokens.css)
+  - Build and typecheck pass
+
+p1-08: Install and configure Zustand stores       [DONE]
+  - Installed zustand@5 and immer@10 as production dependencies
+  - src/renderer/stores/planStore.ts
+    - State: currentPlan, plansList, loadingPlan, loadingList, creating, error
+    - Actions: createPlan, loadPlan, loadPlanList, deletePlan, archivePlan, clearError
+    - Wraps window.ralphApi.createPlan and getPlan; list/delete/archive are stubs pending backend IPC
+  - src/renderer/stores/runStore.ts
+    - State: activeRuns map, runLogs map, runTodos map, selectedRunId, recentEvents
+    - Actions: startRun, cancelRun, appendLog, appendTodo, selectRun
+    - Uses immer middleware for efficient nested map updates
+    - initRunEventSubscription() exported for one-time setup from App.tsx
+    - Internal _handleRunEvent dispatches started/log/todo_update/completed/failed/cancelled events
+  - src/renderer/stores/discoveryStore.ts
+    - State: interview, answers, events, loading, error
+    - Actions: startDiscovery, continueDiscovery, reset
+    - Subscribes to onDiscoveryEvent during startDiscovery; cleans up on reset
+  - src/renderer/stores/settingsStore.ts
+    - State: modelConfig map (planning/discovery/execution/wizard roles), loading, error
+    - Actions: loadSettings, updateModelForRole
+    - Defaults all roles to claude-opus-4-6; stubs pending backend settings IPC
+  - Build and typecheck pass
