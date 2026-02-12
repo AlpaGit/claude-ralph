@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { app, ipcMain } from "electron";
 import { z } from "zod";
 import {
   abortQueueInputSchema,
@@ -107,6 +107,15 @@ function createIpcError(error: unknown): Error {
 }
 
 export function registerIpcHandlers(taskRunner: TaskRunner): void {
+  ipcMain.handle(IPC_CHANNELS.getAppVersion, () => {
+    return {
+      appVersion: app.getVersion(),
+      electronVersion: process.versions.electron,
+      nodeVersion: process.versions.node,
+      chromeVersion: process.versions.chrome
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.createPlan, async (_event, rawInput) => {
     try {
       const input = createPlanInputSchema.parse(rawInput);

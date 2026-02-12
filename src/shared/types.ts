@@ -466,6 +466,14 @@ export interface CancelDiscoveryResponse {
   ok: boolean;
 }
 
+/** Version information returned by the app:get-version IPC channel. */
+export interface AppVersionInfo {
+  appVersion: string;
+  electronVersion: string;
+  nodeVersion: string;
+  chromeVersion: string;
+}
+
 /** Structured IPC error detail for a single Zod validation issue. */
 export interface IpcZodIssue {
   path: (string | number)[];
@@ -501,6 +509,7 @@ export interface GetRunEventsResponse {
 }
 
 export interface RalphApi {
+  getAppVersion(): Promise<AppVersionInfo>;
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse>;
   getPlan(planId: string): Promise<RalphPlan | null>;
   listPlans(input: ListPlansInput): Promise<PlanListItem[]>;

@@ -32,6 +32,12 @@ export function createMockRalphApi(): MockRalphApi {
   const noopUnsubscribe = () => {};
 
   return {
+    getAppVersion: vi.fn().mockResolvedValue({
+      appVersion: "0.0.0-test",
+      electronVersion: "0.0.0",
+      nodeVersion: "0.0.0",
+      chromeVersion: "0.0.0"
+    }),
     createPlan: vi.fn(),
     getPlan: vi.fn(),
     listPlans: vi.fn(),

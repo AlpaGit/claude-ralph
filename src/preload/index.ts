@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AbandonDiscoveryInput,
+  AppVersionInfo,
   AbortQueueInput,
   ApproveTaskProposalInput,
   ApproveTaskProposalResponse,
@@ -50,6 +51,7 @@ import type {
 // Keep preload runtime minimal: do not import @shared/ipc here because it
 // depends on zod/runtime modules that can fail in sandboxed preload contexts.
 const IPC_CHANNELS = {
+  getAppVersion: "app:get-version",
   createPlan: "plan:create",
   getPlan: "plan:get",
   listPlans: "plan:list",
@@ -84,6 +86,10 @@ const IPC_CHANNELS = {
 } as const;
 
 const api: RalphApi = {
+  getAppVersion(): Promise<AppVersionInfo> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getAppVersion);
+  },
+
   createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
     return ipcRenderer.invoke(IPC_CHANNELS.createPlan, input);
   },

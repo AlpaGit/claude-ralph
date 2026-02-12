@@ -43,16 +43,8 @@ const ROLE_DESCRIPTIONS: Record<AgentRole, string> = {
     "Verifies worktree changes, commits with Conventional Commits, and performs controlled merges",
 };
 
-/**
- * Hardcoded version info.
- *
- * In a future phase these will be read from electron app.getVersion() via IPC.
- * For now, values are hardcoded from package.json.
- */
-const APP_VERSION = "0.1.0";
-const ELECTRON_VERSION = "33.x";
-const NODE_VERSION = "20.x";
-const CHROME_VERSION = "130.x";
+/** Default version placeholder shown while loading. */
+const VERSION_LOADING = "—";
 
 /* -- Component -- */
 
@@ -75,9 +67,21 @@ export function SettingsView(): JSX.Element {
   const updateAppSettings = useSettingsStore((s) => s.updateAppSettings);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
 
-  /* -- Load settings on mount -- */
+  /* -- Version info from main process -- */
+  const [appVersion, setAppVersion] = useState(VERSION_LOADING);
+  const [electronVersion, setElectronVersion] = useState(VERSION_LOADING);
+  const [nodeVersion, setNodeVersion] = useState(VERSION_LOADING);
+  const [chromeVersion, setChromeVersion] = useState(VERSION_LOADING);
+
+  /* -- Load settings and version info on mount -- */
   useEffect(() => {
     void loadSettings();
+    void window.ralphApi.getAppVersion().then((info) => {
+      setAppVersion(info.appVersion);
+      setElectronVersion(info.electronVersion);
+      setNodeVersion(info.nodeVersion);
+      setChromeVersion(info.chromeVersion);
+    });
   }, [loadSettings]);
 
   useEffect(() => {
@@ -191,16 +195,16 @@ export function SettingsView(): JSX.Element {
         <UCard title="About">
           <div className={styles.aboutGrid}>
             <span className={styles.aboutLabel}>App Version</span>
-            <span className={styles.aboutValue}>{APP_VERSION}</span>
+            <span className={styles.aboutValue}>{appVersion}</span>
 
             <span className={styles.aboutLabel}>Electron</span>
-            <span className={styles.aboutValue}>{ELECTRON_VERSION}</span>
+            <span className={styles.aboutValue}>{electronVersion}</span>
 
             <span className={styles.aboutLabel}>Node.js</span>
-            <span className={styles.aboutValue}>{NODE_VERSION}</span>
+            <span className={styles.aboutValue}>{nodeVersion}</span>
 
             <span className={styles.aboutLabel}>Chromium</span>
-            <span className={styles.aboutValue}>{CHROME_VERSION}</span>
+            <span className={styles.aboutValue}>{chromeVersion}</span>
           </div>
         </UCard>
       </div>

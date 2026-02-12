@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const IPC_CHANNELS = {
+  getAppVersion: "app:get-version",
   createPlan: "plan:create",
   getPlan: "plan:get",
   listPlans: "plan:list",
