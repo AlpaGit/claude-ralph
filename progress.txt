@@ -1196,3 +1196,47 @@ p3-08: Cap log accumulation with ring buffer in runStore   [DONE]
     - Derives logOverflow number for current runId
     - Passes truncatedCount={logOverflow} to ULogViewer
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-09: Preserve IPC error context in development mode   [DONE]
+  - src/shared/types.ts
+    - IpcZodIssue interface (new): path (string|number)[], message, code?, expected?, received?
+    - IpcError interface (new): message, code, details? (IpcZodIssue[]), stack?
+  - src/main/ipc.ts
+    - isDev flag: derived from import.meta.env.DEV with process.env.NODE_ENV fallback
+    - formatIpcError(error): returns structured IpcError instead of plain string
+    - Zod v4 branch: maps ZodError.issues to IpcZodIssue[] with path, message, code,
+      expected type, received value (dev only); dev message includes all field paths,
+      prod message: "Invalid input."
+    - Error branch: dev preserves original message + stack, prod: "An unexpected error occurred."
+    - Unknown branch: dev uses String(error), prod: "An unexpected error occurred."
+    - createIpcError(error): wraps structured IpcError as JSON in Error.message
+      for Electron IPC serialization (.message is the only field that survives ipcMain.handle)
+    - All 22 IPC handlers updated from `throw new Error(formatIpcError(error))` to
+      `throw createIpcError(error)`
+  - src/renderer/services/ipcErrorService.ts (new)
+    - parseIpcError(caught): extracts JSON IpcError from Electron-wrapped error messages
+    - extractJsonFromMessage(message): brace-balanced JSON extraction from prefixed messages
+      (handles "Error invoking remote method '<channel>': Error: {json}" pattern)
+    - getIpcErrorMessage(caught): convenience helper returning just the message string
+    - hasIpcErrorDetails(error): checks if IpcError has details array or stack trace
+  - src/renderer/components/ui/IpcErrorDetails.tsx (new)
+    - IpcErrorDetails component: collapsible error details panel
+    - Header: error code badge + message text
+    - Toggle button: "Show Details" / "Hide Details" with chevron rotation
+    - Expanded section: Zod validation issues list (path, message, expected/received, code)
+      and stack trace in scrollable pre block
+    - Only shows toggle when hasIpcErrorDetails returns true
+  - src/renderer/components/ui/IpcErrorDetails.module.css (new)
+    - Brutalist error panel: error-colored border, mono font, dashed separators
+    - Toggle button: full-width, uppercase, hover highlight
+    - Issue items: dashed border cards with path (accent-2), message, meta row
+    - Stack trace: mono pre block, 200px max-height, scrollable
+    - All values reference tokens.css custom properties
+  - src/renderer/components/ui.ts
+    - Barrel export: IpcErrorDetails component and IpcErrorDetailsProps type
+  - src/renderer/stores/planStore.ts
+    - lastIpcError state: IpcError | null, cleared on each action start
+    - All catch blocks: replaced manual message extraction with parseIpcError()
+    - Sets both error (string) and lastIpcError (IpcError) for backward compatibility
+    - toastService.error calls use parsed ipcError.message
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
