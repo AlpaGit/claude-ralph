@@ -1,0 +1,50 @@
+/*
+ * USkeleton CSS Module
+ * Animated placeholder component for loading states.
+ * Pulses between --color-surface and --color-surface-warm.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Base ──────────────────────────────────────────────── */
+
+.skeleton {
+  display: block;
+  background: var(--color-surface);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Variants ──────────────────────────────────────────── */
+
+.text {
+  height: 0.9em;
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+
+.card {
+  height: 120px;
+  border-radius: var(--radius-panel);
+  border: 2px solid var(--color-border-soft);
+  width: 100%;
+}
+
+.circle {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-circle);
+  flex-shrink: 0;
+}
+
+/* ── Pulse animation ──────────────────────────────────── */
+
+@keyframes skeleton-pulse {
+  0% {
+    background: var(--color-surface);
+  }
+  50% {
+    background: var(--color-surface-warm);
+  }
+  100% {
+    background: var(--color-surface);
+  }
+}

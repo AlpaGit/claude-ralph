@@ -1,0 +1,128 @@
+/*
+ * UModal CSS Module
+ * Dialog overlay with brutalist styling, backdrop, and focus trap.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Backdrop ─────────────────────────────────────────── */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  animation: backdrop-in 150ms ease-out;
+}
+
+/* ── Dialog ───────────────────────────────────────────── */
+
+.dialog {
+  position: relative;
+  z-index: 1001;
+  width: 90vw;
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  box-shadow: var(--shadow-panel);
+  animation: dialog-in 150ms ease-out;
+}
+
+.dialog:focus {
+  outline: none;
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  padding: var(--space-lg) var(--space-lg) 0 var(--space-lg);
+}
+
+.title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  transform: translateY(-1px);
+}
+
+.closeBtn:active {
+  transform: translateY(0);
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── Body ─────────────────────────────────────────────── */
+
+.body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-lg);
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+
+.footer {
+  border-top: 1px dashed var(--color-border-dashed);
+  padding: var(--space-md) var(--space-lg) var(--space-lg) var(--space-lg);
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+/* ── Animations ───────────────────────────────────────── */
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

@@ -16,3 +16,9 @@ export type { UInputProps } from "./UInput/UInput";
 
 export { UTextArea } from "./UTextArea/UTextArea";
 export type { UTextAreaProps } from "./UTextArea/UTextArea";
+
+export { UModal, UConfirmModal } from "./UModal/UModal";
+export type { UModalProps, UConfirmModalProps } from "./UModal/UModal";
+
+export { USkeleton } from "./USkeleton/USkeleton";
+export type { USkeletonProps, USkeletonVariant } from "./USkeleton/USkeleton";
