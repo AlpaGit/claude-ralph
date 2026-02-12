@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { JSX } from "react";
 import type { RalphTask, TaskRun } from "@shared/types";
 import { UStatusPill } from "../ui";
@@ -8,6 +7,10 @@ export interface TaskCardProps {
   task: RalphTask;
   /** The most recent run for this task, if any. */
   latestRun: TaskRun | null;
+  /** Whether the card body is expanded. Controlled by parent. */
+  expanded: boolean;
+  /** Called when the user toggles expand/collapse. */
+  onToggleExpand: (taskId: string) => void;
   /** Called when the user clicks "Run Task". */
   onRunTask: (task: RalphTask) => void;
   /** Called when the user clicks "Open Latest Run". */
@@ -39,6 +42,8 @@ function cn(...classes: (string | false | undefined | null)[]): string {
 export function TaskCard({
   task,
   latestRun,
+  expanded,
+  onToggleExpand,
   onRunTask,
   onOpenRun,
   onRetryTask,
@@ -46,7 +51,6 @@ export function TaskCard({
   onAbortQueue,
   queueRunning
 }: TaskCardProps): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
 
   return (
     <div className={styles.card}>
@@ -55,7 +59,7 @@ export function TaskCard({
         <button
           type="button"
           className={styles.expandToggle}
-          onClick={() => setExpanded((prev) => !prev)}
+          onClick={() => onToggleExpand(task.id)}
           aria-expanded={expanded}
           aria-label={expanded ? "Collapse task details" : "Expand task details"}
         >

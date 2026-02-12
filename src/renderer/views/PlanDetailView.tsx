@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type { RalphTask, TaskRun } from "@shared/types";
@@ -111,6 +111,61 @@ export function PlanDetailView(): JSX.Element {
     () => (planId ? recentEvents.filter((e) => e.planId === planId) : []),
     [recentEvents, planId]
   );
+
+  /* ── Expanded task IDs (collapsible cards) ────────────── */
+
+  /** Set of task IDs whose cards are currently expanded. */
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+
+  /** Toggle a single task card open/closed. */
+  const handleToggleExpand = useCallback((taskId: string) => {
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  }, []);
+
+  /** Expand all task cards. */
+  const handleExpandAll = useCallback(() => {
+    if (!plan) return;
+    setExpandedTaskIds(new Set(plan.tasks.map((t) => t.id)));
+  }, [plan]);
+
+  /** Collapse all task cards. */
+  const handleCollapseAll = useCallback(() => {
+    setExpandedTaskIds(new Set());
+  }, []);
+
+  /** Whether all tasks are currently expanded (for toggle button label). */
+  const allExpanded = plan ? plan.tasks.length > 0 && expandedTaskIds.size === plan.tasks.length : false;
+
+  /**
+   * Auto-expand tasks with in_progress or failed status.
+   * Runs whenever the plan's tasks change so newly failed or
+   * running tasks are automatically visible.
+   */
+  useEffect(() => {
+    if (!plan) return;
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const task of plan.tasks) {
+        if (
+          (task.status === "in_progress" || task.status === "failed") &&
+          !next.has(task.id)
+        ) {
+          next.add(task.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [plan]);
 
   /* ── Callbacks ───────────────────────────────────────── */
   const handleRunTask = useCallback(
@@ -294,13 +349,23 @@ export function PlanDetailView(): JSX.Element {
         <div className={styles.spanFull}>
           <div className={styles.checklistHeader}>
             <h2>Checklist</h2>
-            <button
-              type="button"
-              className={styles.runAllBtn}
-              onClick={() => void handleRunAll()}
-            >
-              Run Next Available Tasks
-            </button>
+            <div className={styles.checklistActions}>
+              <button
+                type="button"
+                className={styles.expandCollapseBtn}
+                onClick={allExpanded ? handleCollapseAll : handleExpandAll}
+                aria-label={allExpanded ? "Collapse all tasks" : "Expand all tasks"}
+              >
+                {allExpanded ? "Collapse All" : "Expand All"}
+              </button>
+              <button
+                type="button"
+                className={styles.runAllBtn}
+                onClick={() => void handleRunAll()}
+              >
+                Run Next Available Tasks
+              </button>
+            </div>
           </div>
           <div className={styles.taskList}>
             {plan.tasks.map((task) => (
@@ -308,6 +373,8 @@ export function PlanDetailView(): JSX.Element {
                 key={task.id}
                 task={task}
                 latestRun={latestRunByTask.get(task.id) ?? null}
+                expanded={expandedTaskIds.has(task.id)}
+                onToggleExpand={handleToggleExpand}
                 onRunTask={(t) => void handleRunTask(t)}
                 onOpenRun={handleOpenRun}
                 onRetryTask={(t) => void handleRetryTask(t)}
