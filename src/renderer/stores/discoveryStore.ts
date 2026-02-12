@@ -55,6 +55,12 @@ interface DiscoveryState {
   /** Transient copy / status notice shown to the user. */
   copyNotice: string | null;
 
+  // ── Batch state ─────────────────────────────────────────
+  /** Index of the current question within the batch (0-based, max 2 for 3 questions). */
+  currentBatchIndex: number;
+  /** Set of question IDs that were explicitly skipped by the user. */
+  skippedQuestions: string[];
+
   // ── Session management ────────────────────────────────
   /** Active discovery sessions retrieved from the backend. */
   activeSessions: DiscoverySessionSummary[];
@@ -69,10 +75,16 @@ interface DiscoveryState {
   setProjectPath: (value: string) => void;
   /** Update the additional context input. */
   setAdditionalContext: (value: string) => void;
-  /** Update a single answer in the answer map. */
-  setAnswer: (questionId: string, answer: string) => void;
+  /** Update a single answer in the answer map. Accepts a string or string[] (multi-select). */
+  setAnswer: (questionId: string, answer: string | string[]) => void;
   /** Set the copy notice. */
   setCopyNotice: (notice: string | null) => void;
+  /** Mark a question as skipped and record an empty sentinel in the answer map. */
+  skipQuestion: (questionId: string) => void;
+  /** Navigate to a specific question within the current batch (0-based). */
+  setCurrentBatchIndex: (index: number) => void;
+  /** Submit the current batch of answers (excluding skips) and advance to the next round. */
+  submitBatch: () => Promise<void>;
 
   /** Start a new discovery interview session. */
   startDiscovery: () => Promise<void>;
@@ -100,6 +112,118 @@ function getApi(): typeof window.ralphApi {
   return api;
 }
 
+/** Config for the shared continue-discovery call helper. */
+interface ContinueCallConfig {
+  /** Pre-built answer payload to send to the backend. */
+  answerPayload: DiscoveryAnswer[];
+  /** Build the next answer map from the returned interview state. */
+  buildNextAnswerMap: (
+    nextState: DiscoveryInterviewState,
+    currentAnswerMap: AnswerMap
+  ) => AnswerMap;
+  /** Copy notice shown on success. */
+  successNotice: string;
+  /** Toast message shown on success. */
+  successToast: string;
+}
+
+/**
+ * Shared helper that executes a continueDiscovery API call with standardised
+ * loading / error / timing lifecycle. Both submitBatch and continueDiscovery
+ * delegate to this to avoid duplicating the guard, state-setup, error-handling,
+ * and finally blocks.
+ */
+function executeContinueCall(
+  config: ContinueCallConfig,
+  set: (
+    fn:
+      | Partial<DiscoveryState>
+      | ((state: DiscoveryState) => Partial<DiscoveryState>)
+  ) => void,
+  get: () => DiscoveryState
+): Promise<void> {
+  const { interview, answerMap } = get();
+  if (!interview) {
+    set({ error: "No active discovery session." });
+    return Promise.resolve();
+  }
+
+  const { answerPayload, buildNextAnswerMap, successNotice, successToast } =
+    config;
+
+  const startedAt = Date.now();
+  set({
+    loading: true,
+    error: null,
+    copyNotice: null,
+    thinkingStartedAtMs: startedAt,
+    lastDiscoveryDurationSec: null,
+  });
+
+  const api = getApi();
+  const payload: ContinueDiscoveryInput = {
+    sessionId: interview.sessionId,
+    answers: answerPayload,
+  };
+
+  return api
+    .continueDiscovery(payload)
+    .then((nextState) => {
+      const nextMap = buildNextAnswerMap(nextState, answerMap);
+
+      set((state) => ({
+        interview: nextState,
+        answerMap: nextMap,
+        submittedAnswers: [...state.submittedAnswers, ...answerPayload],
+        currentBatchIndex: 0,
+        skippedQuestions: [],
+        lastReadyAtIso: new Date().toISOString(),
+        copyNotice: successNotice,
+      }));
+      toastService.success(successToast);
+    })
+    .catch((caught) => {
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message });
+      toastService.error(ipcError.message, ipcError);
+    })
+    .finally(() => {
+      set({
+        loading: false,
+        thinkingStartedAtMs: null,
+        lastDiscoveryDurationSec: Math.max(
+          0,
+          Math.floor((Date.now() - startedAt) / 1000)
+        ),
+      });
+    });
+}
+
+/* ── Answer-map builders ──────────────────────────────── */
+
+/** Creates a fresh answer map with empty entries for every question. */
+function buildFreshAnswerMap(nextState: DiscoveryInterviewState): AnswerMap {
+  const map: AnswerMap = {};
+  for (const q of nextState.questions) {
+    map[q.id] = "";
+  }
+  return map;
+}
+
+/** Merges new question IDs into the existing answer map, keeping prior answers. */
+function buildMergedAnswerMap(
+  nextState: DiscoveryInterviewState,
+  currentMap: AnswerMap
+): AnswerMap {
+  const merged: AnswerMap = { ...currentMap };
+  for (const q of nextState.questions) {
+    if (!(q.id in merged)) {
+      merged[q.id] = "";
+    }
+  }
+  return merged;
+}
+
 /* ── Initial state (data-only, no actions) ─────────────── */
 
 const initialState = {
@@ -117,6 +241,8 @@ const initialState = {
   lastDiscoveryDurationSec: null as number | null,
   lastReadyAtIso: null as string | null,
   copyNotice: null as string | null,
+  currentBatchIndex: 0,
+  skippedQuestions: [] as string[],
   activeSessions: [] as DiscoverySessionSummary[],
   checkingSessions: false,
 };
@@ -131,9 +257,55 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
   setProjectPath: (value: string) => set({ projectPath: value }),
   setSeedSentence: (value: string) => set({ seedSentence: value }),
   setAdditionalContext: (value: string) => set({ additionalContext: value }),
-  setAnswer: (questionId: string, answer: string) =>
-    set((state) => ({ answerMap: { ...state.answerMap, [questionId]: answer } })),
+  setAnswer: (questionId: string, answer: string | string[]) =>
+    set((state) => ({
+      answerMap: {
+        ...state.answerMap,
+        [questionId]: Array.isArray(answer) ? JSON.stringify(answer) : answer,
+      },
+    })),
   setCopyNotice: (notice: string | null) => set({ copyNotice: notice }),
+
+  skipQuestion: (questionId: string) =>
+    set((state) => ({
+      skippedQuestions: state.skippedQuestions.includes(questionId)
+        ? state.skippedQuestions
+        : [...state.skippedQuestions, questionId],
+      answerMap: { ...state.answerMap, [questionId]: "" },
+    })),
+
+  setCurrentBatchIndex: (index: number) => set({ currentBatchIndex: index }),
+
+  // ── Submit batch ────────────────────────────────────
+
+  submitBatch: async (): Promise<void> => {
+    const { interview, answerMap } = get();
+    if (!interview) {
+      set({ error: "No active discovery session." });
+      return;
+    }
+
+    // Collect only non-empty answers. Skipped questions are excluded from the
+    // payload entirely — the backend .min(0) allows an empty array for
+    // all-skipped batches, but individual entries must satisfy .min(1).
+    const answerPayload: DiscoveryAnswer[] = interview.questions
+      .map((q) => ({
+        questionId: q.id,
+        answer: (answerMap[q.id] ?? "").trim(),
+      }))
+      .filter((item) => item.answer.length > 0);
+
+    return executeContinueCall(
+      {
+        answerPayload,
+        buildNextAnswerMap: (nextState) => buildFreshAnswerMap(nextState),
+        successNotice: "Batch submitted. Next questions are ready.",
+        successToast: "Batch submitted. Next questions ready.",
+      },
+      set,
+      get
+    );
+  },
 
   // ── Start discovery ─────────────────────────────────
 
@@ -153,6 +325,8 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       copyNotice: null,
       submittedAnswers: [],
       events: [],
+      currentBatchIndex: 0,
+      skippedQuestions: [],
       thinkingStartedAtMs: startedAt,
       lastDiscoveryDurationSec: null,
       lastEventAtMs: null,
@@ -178,15 +352,11 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       };
       const result = await api.startDiscovery(payload);
 
-      // Build initial answer map from the returned questions.
-      const newAnswerMap: AnswerMap = {};
-      for (const q of result.questions) {
-        newAnswerMap[q.id] = "";
-      }
-
       set({
         interview: result,
-        answerMap: newAnswerMap,
+        answerMap: buildFreshAnswerMap(result),
+        currentBatchIndex: 0,
+        skippedQuestions: [],
         lastReadyAtIso: new Date().toISOString(),
         copyNotice: "Discovery output is ready. PRD Input has been updated.",
       });
@@ -231,53 +401,16 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       return;
     }
 
-    const startedAt = Date.now();
-    set({
-      loading: true,
-      error: null,
-      copyNotice: null,
-      thinkingStartedAtMs: startedAt,
-      lastDiscoveryDurationSec: null,
-    });
-
-    try {
-      const api = getApi();
-      const payload: ContinueDiscoveryInput = {
-        sessionId: interview.sessionId,
-        answers: answerPayload,
-      };
-      const nextState = await api.continueDiscovery(payload);
-
-      // Merge new question IDs into answer map, keep existing answers.
-      const mergedMap: AnswerMap = { ...answerMap };
-      for (const q of nextState.questions) {
-        if (!(q.id in mergedMap)) {
-          mergedMap[q.id] = "";
-        }
-      }
-
-      set((state) => ({
-        interview: nextState,
-        answerMap: mergedMap,
-        submittedAnswers: [...state.submittedAnswers, ...answerPayload],
-        lastReadyAtIso: new Date().toISOString(),
-        copyNotice: "Discovery updated. PRD Input has been refreshed.",
-      }));
-      toastService.success("Discovery updated. PRD input refreshed.");
-    } catch (caught) {
-      const ipcError = parseIpcError(caught);
-      set({ error: ipcError.message });
-      toastService.error(ipcError.message, ipcError);
-    } finally {
-      set((state) => ({
-        loading: false,
-        thinkingStartedAtMs: null,
-        lastDiscoveryDurationSec: Math.max(
-          0,
-          Math.floor((Date.now() - startedAt) / 1000)
-        ),
-      }));
-    }
+    return executeContinueCall(
+      {
+        answerPayload,
+        buildNextAnswerMap: buildMergedAnswerMap,
+        successNotice: "Discovery updated. PRD Input has been refreshed.",
+        successToast: "Discovery updated. PRD input refreshed.",
+      },
+      set,
+      get
+    );
   },
 
   // ── Session management ─────────────────────────────
@@ -302,18 +435,14 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       const api = getApi();
       const state = await api.resumeDiscoverySession({ sessionId });
 
-      // Build answer map from the returned questions
-      const newAnswerMap: AnswerMap = {};
-      for (const q of state.questions) {
-        newAnswerMap[q.id] = "";
-      }
-
       set({
         interview: state,
         projectPath:
           get().activeSessions.find((session) => session.id === sessionId)?.projectPath ?? get().projectPath,
         seedSentence: state.directionSummary,
-        answerMap: newAnswerMap,
+        answerMap: buildFreshAnswerMap(state),
+        currentBatchIndex: 0,
+        skippedQuestions: [],
         activeSessions: [],
         lastReadyAtIso: new Date().toISOString(),
         copyNotice: `Resumed discovery session (round ${state.round}).`,
