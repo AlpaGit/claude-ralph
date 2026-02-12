@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import type { RalphPlan, RalphTask, RunEvent, TaskRun, TodoItem } from "@shared/types";
 import { PromptTemplateBuilder } from "./components/PromptTemplateBuilder";
+import styles from "./App.module.css";
 
 type RunLogState = Record<string, string[]>;
 type TodoState = Record<string, TodoItem[]>;
@@ -11,8 +12,16 @@ function getRalphApi(): typeof window.ralphApi | null {
   return (window as WindowWithOptionalApi).ralphApi ?? null;
 }
 
+const STATUS_CLASS_MAP: Record<string, string> = {
+  pending: styles.statusPending,
+  in_progress: styles.statusInProgress,
+  completed: styles.statusCompleted,
+  failed: styles.statusFailed,
+  cancelled: styles.statusCancelled,
+};
+
 function statusClass(status: string): string {
-  return `status-pill status-${status}`;
+  return `${styles.statusPill} ${STATUS_CLASS_MAP[status] ?? ""}`;
 }
 
 function taskRunMap(runs: TaskRun[]): Map<string, TaskRun> {
@@ -197,17 +206,17 @@ export function App(): JSX.Element {
   };
 
   return (
-    <main className="app-shell">
-      <header className="hero">
-        <div className="hero-badge">RALPH ORCHESTRATOR</div>
-        <h1>Discovery To Ralph Loop</h1>
-        <p>
+    <main className={styles.appShell}>
+      <header className={styles.hero}>
+        <div className={styles.heroBadge}>RALPH ORCHESTRATOR</div>
+        <h1 className={styles.heroTitle}>Discovery To Ralph Loop</h1>
+        <p className={styles.heroDescription}>
           Start with a short goal sentence, run an AI discovery interview, generate PRD input, then execute
           checklist tasks one-by-one in isolated Ralph runs.
         </p>
       </header>
 
-      <section className="panel plan-input">
+      <section className={`${styles.panel} ${styles.planInput}`}>
         <PromptTemplateBuilder
           projectPath={projectPath}
           onUsePrompt={(generatedPrompt) => {
@@ -215,34 +224,34 @@ export function App(): JSX.Element {
           }}
         />
 
-        <div className="panel-header">
+        <div className={styles.panelHeader}>
           <h2>Plan Builder</h2>
         </div>
 
-        <label className="label" htmlFor="project-path">
+        <label className={styles.label} htmlFor="project-path">
           Project Path
         </label>
         <input
           id="project-path"
-          className="text-input"
+          className={styles.textInput}
           value={projectPath}
           onChange={(event) => setProjectPath(event.target.value)}
           placeholder="C:\\path\\to\\repo (recommended for stack inference + Ralph execution)"
         />
 
-        <label className="label" htmlFor="prd-input">
+        <label className={styles.label} htmlFor="prd-input">
           PRD Input
         </label>
         <textarea
           id="prd-input"
-          className="text-area"
+          className={styles.textArea}
           value={prdText}
           onChange={(event) => setPrdText(event.target.value)}
           placeholder="Paste PRD content here..."
         />
 
         <button
-          className="action-btn primary"
+          className={`${styles.actionBtn} ${styles.primary}`}
           onClick={() => void handleCreatePlan()}
           disabled={creatingPlan || prdText.trim().length < 20}
         >
@@ -250,28 +259,28 @@ export function App(): JSX.Element {
         </button>
       </section>
 
-      {error ? <section className="panel error-panel">{error}</section> : null}
+      {error ? <section className={`${styles.panel} ${styles.errorPanel}`}>{error}</section> : null}
 
       {plan ? (
-        <section className="layout-grid">
-          <article className="panel">
-            <div className="panel-header">
+        <section className={styles.layoutGrid}>
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
               <h2>Plan Overview</h2>
               <span className={statusClass(plan.status)}>{plan.status}</span>
             </div>
             <p>{plan.summary}</p>
-            <div className="meta-row">
+            <div className={styles.metaRow}>
               <span>Project: {plan.projectPath}</span>
               <span>Tasks: {plan.tasks.length}</span>
               <span>Runs: {plan.runs.length}</span>
             </div>
           </article>
 
-          <article className="panel">
-            <div className="panel-header">
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
               <h2>Technical Pack</h2>
             </div>
-            <div className="two-col">
+            <div className={styles.twoCol}>
               <div>
                 <h3>Architecture</h3>
                 <ul>
@@ -307,46 +316,46 @@ export function App(): JSX.Element {
             </div>
           </article>
 
-          <article className="panel checklist-panel">
-            <div className="panel-header">
+          <article className={`${styles.panel} ${styles.checklistPanel}`}>
+            <div className={styles.panelHeader}>
               <h2>Checklist</h2>
-              <button className="action-btn secondary" onClick={() => void handleRunAll()}>
+              <button className={`${styles.actionBtn} ${styles.secondary}`} onClick={() => void handleRunAll()}>
                 Run Next Available Tasks
               </button>
             </div>
-            <div className="task-list">
+            <div className={styles.taskList}>
               {plan.tasks.map((task) => {
                 const lastRun = latestRunByTask.get(task.id);
                 return (
-                  <div key={task.id} className="task-card">
-                    <div className="task-header">
+                  <div key={task.id} className={styles.taskCard}>
+                    <div className={styles.taskHeader}>
                       <strong>
                         #{task.ordinal} {task.title}
                       </strong>
                       <span className={statusClass(task.status)}>{task.status}</span>
                     </div>
                     <p>{task.description}</p>
-                    <div className="meta-row">
+                    <div className={styles.metaRow}>
                       <span>ID: {task.id}</span>
                       <span>
                         Depends on: {task.dependencies.length > 0 ? task.dependencies.join(", ") : "none"}
                       </span>
                     </div>
                     {task.acceptanceCriteria.length > 0 ? (
-                      <ul className="acceptance-list">
+                      <ul className={styles.acceptanceList}>
                         {task.acceptanceCriteria.map((criterion) => (
                           <li key={criterion}>{criterion}</li>
                         ))}
                       </ul>
                     ) : null}
-                    <p className="notes">{task.technicalNotes}</p>
-                    <div className="task-actions">
-                      <button className="action-btn primary" onClick={() => void handleRunTask(task)}>
+                    <p className={styles.notes}>{task.technicalNotes}</p>
+                    <div className={styles.taskActions}>
+                      <button className={`${styles.actionBtn} ${styles.primary}`} onClick={() => void handleRunTask(task)}>
                         Run Task
                       </button>
                       {lastRun ? (
                         <button
-                          className="action-btn ghost"
+                          className={`${styles.actionBtn} ${styles.ghost}`}
                           onClick={() => {
                             setSelectedRunId(lastRun.id);
                           }}
@@ -361,20 +370,20 @@ export function App(): JSX.Element {
             </div>
           </article>
 
-          <article className="panel run-panel">
-            <div className="panel-header">
+          <article className={`${styles.panel} ${styles.runPanel}`}>
+            <div className={styles.panelHeader}>
               <h2>Live Run</h2>
-              <div className="panel-header-actions">
+              <div className={styles.panelHeaderActions}>
                 {selectedRun ? <span className={statusClass(selectedRun.status)}>{selectedRun.status}</span> : null}
-                <button className="action-btn danger" onClick={() => void handleCancelSelectedRun()}>
+                <button className={`${styles.actionBtn} ${styles.danger}`} onClick={() => void handleCancelSelectedRun()}>
                   Cancel Run
                 </button>
               </div>
             </div>
 
             {selectedRun ? (
-              <div className="run-content">
-                <div className="meta-row">
+              <div className={styles.runContent}>
+                <div className={styles.metaRow}>
                   <span>Run: {selectedRun.id}</span>
                   <span>Task: {selectedRun.taskId}</span>
                   <span>Stop reason: {selectedRun.stopReason ?? "n/a"}</span>
@@ -390,12 +399,12 @@ export function App(): JSX.Element {
                 </ul>
 
                 <h3>Streamed Logs</h3>
-                <pre className="log-box">{(runLogs[selectedRun.id] ?? []).join("") || "No streamed logs yet."}</pre>
+                <pre className={styles.logBox}>{(runLogs[selectedRun.id] ?? []).join("") || "No streamed logs yet."}</pre>
 
                 {selectedRun.resultText ? (
                   <>
                     <h3>Final Result</h3>
-                    <pre className="log-box">{selectedRun.resultText}</pre>
+                    <pre className={styles.logBox}>{selectedRun.resultText}</pre>
                   </>
                 ) : null}
               </div>
@@ -404,11 +413,11 @@ export function App(): JSX.Element {
             )}
           </article>
 
-          <article className="panel">
-            <div className="panel-header">
+          <article className={styles.panel}>
+            <div className={styles.panelHeader}>
               <h2>Recent Events</h2>
             </div>
-            <ul className="event-list">
+            <ul className={styles.eventList}>
               {recentEvents.map((event) => (
                 <li key={event.id}>
                   <span>{event.ts}</span>
