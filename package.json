@@ -12,6 +12,8 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
+    "pretest:e2e": "electron-vite build",
+    "test:e2e": "npx playwright test --config playwright.config.ts",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "postinstall": "npm run rebuild:native"
   },
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
+    "@playwright/test": "^1.58.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",

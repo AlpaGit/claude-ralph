@@ -56,10 +56,11 @@ async function bootstrap(): Promise<void> {
     ? join(process.resourcesPath, "migrations")
     : join(app.getAppPath(), "resources", "migrations");
 
-  database = new AppDatabase(
-    join(app.getPath("userData"), "ralph-desktop.sqlite"),
-    migrationsDir
-  );
+  // E2E tests pass TEST_DB_PATH to use an isolated temporary database.
+  const dbPath = process.env.TEST_DB_PATH
+    ?? join(app.getPath("userData"), "ralph-desktop.sqlite");
+
+  database = new AppDatabase(dbPath, migrationsDir);
   taskRunner = new TaskRunner(database, () => mainWindow);
   registerIpcHandlers(taskRunner);
 
