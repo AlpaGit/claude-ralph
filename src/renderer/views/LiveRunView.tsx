@@ -105,6 +105,7 @@ export function LiveRunView(): JSX.Element {
 
   const activeRuns = useRunStore((s) => s.activeRuns);
   const runLogs = useRunStore((s) => s.runLogs);
+  const runLogOverflow = useRunStore((s) => s.runLogOverflow);
   const runTodos = useRunStore((s) => s.runTodos);
   const recentEvents = useRunStore((s) => s.recentEvents);
   const cancelRequestedAt = useRunStore((s) => s.cancelRequestedAt);
@@ -141,6 +142,7 @@ export function LiveRunView(): JSX.Element {
 
   /* ── Derived state ───────────────────────────────────── */
   const logs: string[] = runId ? (runLogs[runId] ?? []) : [];
+  const logOverflow: number = runId ? (runLogOverflow[runId] ?? 0) : 0;
   const todos: TodoItem[] = runId ? (runTodos[runId] ?? []) : [];
 
   /** Determine the run status: prefer activeRuns (live), fall back to TaskRun record. */
@@ -338,6 +340,7 @@ export function LiveRunView(): JSX.Element {
             lines={logs}
             height={500}
             autoScroll={isActive}
+            truncatedCount={logOverflow}
           />
         </div>
 

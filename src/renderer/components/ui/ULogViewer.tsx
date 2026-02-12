@@ -39,6 +39,11 @@ export interface ULogViewerProps {
   showLineNumbers?: boolean;
   /** Auto-scroll to bottom on new lines. Default true. */
   autoScroll?: boolean;
+  /**
+   * Number of log lines that have been dropped due to ring buffer overflow.
+   * When > 0, a truncation indicator is shown in the footer.
+   */
+  truncatedCount?: number;
   /** Extra CSS class on the root element. */
   className?: string;
   /** Extra inline style on the root element. */
@@ -98,6 +103,7 @@ export function ULogViewer(props: ULogViewerProps): ReactNode {
     height = DEFAULT_HEIGHT,
     showLineNumbers = true,
     autoScroll: autoScrollProp = true,
+    truncatedCount = 0,
     className,
     style,
   } = props;
@@ -286,6 +292,11 @@ export function ULogViewer(props: ULogViewerProps): ReactNode {
       {/* ── Footer ──────────────────────────── */}
       <div className={styles.footer}>
         <span>{filteredLines.length} lines</span>
+        {truncatedCount > 0 && (
+          <span className={styles.truncatedIndicator}>
+            {truncatedCount.toLocaleString()} older lines truncated
+          </span>
+        )}
         <span>capacity {capacity}</span>
       </div>
     </div>

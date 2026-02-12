@@ -1,10 +1,47 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { RunEvent, TodoItem } from "@shared/types";
+import { RingBuffer } from "../components/ui/RingBuffer";
 import { toastService } from "../services/toastService";
 
 /** Cancel timeout in ms -- must match the backend CANCEL_TIMEOUT_MS. */
 const CANCEL_TIMEOUT_MS = 10_000;
+
+/** Maximum in-memory log lines per run, backed by RingBuffer. */
+const LOG_BUFFER_CAPACITY = 5_000;
+
+/* ── Module-level ring buffer storage ──────────────────────
+ * RingBuffer instances live outside Zustand/immer state because they are
+ * mutable containers that should not be proxied.  The store's `runLogs`
+ * field is derived from `ringBuffer.toArray()` after each mutation so
+ * React subscribers see the updated array reference.
+ * ───────────────────────────────────────────────────────── */
+
+/** Ring buffer instance per runId. */
+const logBuffers = new Map<string, RingBuffer<string>>();
+
+/** Total lines pushed per runId (including those dropped by the ring buffer). */
+const totalPushed = new Map<string, number>();
+
+/** Get or create the RingBuffer for a given runId. */
+function getLogBuffer(runId: string): RingBuffer<string> {
+  let buf = logBuffers.get(runId);
+  if (!buf) {
+    buf = new RingBuffer<string>(LOG_BUFFER_CAPACITY);
+    logBuffers.set(runId, buf);
+    totalPushed.set(runId, 0);
+  }
+  return buf;
+}
+
+/** Push a line into a run's ring buffer and return the current overflow count. */
+function pushToBuffer(runId: string, line: string): number {
+  const buf = getLogBuffer(runId);
+  buf.push(line);
+  const pushed = (totalPushed.get(runId) ?? 0) + 1;
+  totalPushed.set(runId, pushed);
+  return Math.max(0, pushed - buf.capacity);
+}
 
 interface RunState {
   /**
@@ -13,8 +50,18 @@ interface RunState {
    */
   activeRuns: Record<string, string>;
 
-  /** Map of runId -> streamed log lines. Uses immer for efficient nested updates. */
+  /**
+   * Map of runId -> streamed log lines visible in-memory.
+   * Capped at LOG_BUFFER_CAPACITY (5 000) via RingBuffer; oldest lines are
+   * dropped when the buffer overflows.  DB persistence is unaffected.
+   */
   runLogs: Record<string, string[]>;
+
+  /**
+   * Map of runId -> number of log lines dropped due to ring buffer overflow.
+   * Zero when no overflow has occurred.
+   */
+  runLogOverflow: Record<string, number>;
 
   /** Map of runId -> latest todo snapshot for the run. */
   runTodos: Record<string, TodoItem[]>;
@@ -67,6 +114,7 @@ export const useRunStore = create<RunState>()(
   immer((set) => ({
     activeRuns: {},
     runLogs: {},
+    runLogOverflow: {},
     runTodos: {},
     selectedRunId: null,
     recentEvents: [],
@@ -109,11 +157,11 @@ export const useRunStore = create<RunState>()(
     getCancelTimeoutMs: (): number => CANCEL_TIMEOUT_MS,
 
     appendLog: (runId: string, line: string): void => {
+      const overflow = pushToBuffer(runId, line);
+      const buf = getLogBuffer(runId);
       set((draft) => {
-        if (!draft.runLogs[runId]) {
-          draft.runLogs[runId] = [];
-        }
-        draft.runLogs[runId].push(line);
+        draft.runLogs[runId] = buf.toArray();
+        draft.runLogOverflow[runId] = overflow;
       });
     },
 
@@ -147,10 +195,10 @@ export const useRunStore = create<RunState>()(
           case "log": {
             const line = String((event.payload as { line?: string })?.line ?? "");
             if (line.trim().length > 0) {
-              if (!draft.runLogs[event.runId]) {
-                draft.runLogs[event.runId] = [];
-              }
-              draft.runLogs[event.runId].push(line);
+              const overflow = pushToBuffer(event.runId, line);
+              const buf = getLogBuffer(event.runId);
+              draft.runLogs[event.runId] = buf.toArray();
+              draft.runLogOverflow[event.runId] = overflow;
             }
             break;
           }

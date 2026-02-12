@@ -153,6 +153,15 @@
   flex-shrink: 0;
 }
 
+/* ── Truncation indicator ─────────────────────────────── */
+
+.truncatedIndicator {
+  color: var(--color-accent-2);
+  font-weight: 700;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
 /* ── Scroll-to-bottom indicator ───────────────────────── */
 
 .scrollIndicator {
