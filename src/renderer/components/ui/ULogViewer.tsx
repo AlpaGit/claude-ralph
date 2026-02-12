@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { List, useListRef } from "react-window";
 import { RingBuffer } from "./RingBuffer";
+import { toastService } from "../../services/toastService";
 import styles from "./ULogViewer.module.css";
 
 /* ── Constants ────────────────────────────────────────── */
@@ -178,6 +179,7 @@ export function ULogViewer(props: ULogViewerProps): ReactNode {
   const copyAll = useCallback(async () => {
     const text = filteredLines.map(stripAnsi).join("\n");
     await navigator.clipboard.writeText(text);
+    toastService.success("Logs copied to clipboard.");
   }, [filteredLines]);
 
   /* Expose imperative handle via a stable ref object for advanced usage.

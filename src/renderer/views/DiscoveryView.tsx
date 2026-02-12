@@ -6,6 +6,7 @@ import { useDiscoveryStore } from "../stores/discoveryStore";
 import { UButton } from "../components/ui/UButton";
 import { UTextArea } from "../components/UTextArea/UTextArea";
 import { UStatusPill } from "../components/UStatusPill/UStatusPill";
+import { toastService } from "../services/toastService";
 import styles from "./DiscoveryView.module.css";
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -227,11 +228,14 @@ export function DiscoveryView(): JSX.Element {
       if (typeof navigator !== "undefined" && navigator.clipboard) {
         await navigator.clipboard.writeText(interview.prdInputDraft);
         setCopyNotice("PRD input copied to clipboard.");
+        toastService.success("PRD input copied to clipboard.");
       } else {
         setCopyNotice("Clipboard API not available in this environment.");
+        toastService.warning("Clipboard API not available in this environment.");
       }
     } catch {
       setCopyNotice("Failed to copy PRD input.");
+      toastService.error("Failed to copy PRD input.");
     }
   };
 

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { RunEvent, TodoItem } from "@shared/types";
+import { toastService } from "../services/toastService";
 
 /** Cancel timeout in ms -- must match the backend CANCEL_TIMEOUT_MS. */
 const CANCEL_TIMEOUT_MS = 10_000;
@@ -160,12 +161,24 @@ export const useRunStore = create<RunState>()(
             break;
           }
 
-          case "completed":
-          case "failed":
+          case "completed": {
+            draft.activeRuns[event.runId] = event.type;
+            delete draft.cancelRequestedAt[event.runId];
+            toastService.success(`Task completed: ${event.taskId.slice(0, 8)}`);
+            break;
+          }
+
+          case "failed": {
+            draft.activeRuns[event.runId] = event.type;
+            delete draft.cancelRequestedAt[event.runId];
+            toastService.error(`Task failed: ${event.taskId.slice(0, 8)}`);
+            break;
+          }
+
           case "cancelled": {
             draft.activeRuns[event.runId] = event.type;
-            // Clear cancel tracking when a terminal event arrives
             delete draft.cancelRequestedAt[event.runId];
+            toastService.info("Run cancelled.");
             break;
           }
 

@@ -954,3 +954,46 @@ p3-03: Add discovery abort/cancellation support   [DONE]
   - src/renderer/views/DiscoveryView.module.css
     - .feedbackHeaderActions: flex row with gap for thinking indicator + cancel button
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-04: Install and configure toast notification system   [DONE]
+  - Installed react-hot-toast as production dependency
+  - src/renderer/services/toastService.ts (new)
+    - Typed wrapper module around react-hot-toast
+    - Exported methods: success(msg), error(msg), info(msg), warning(msg)
+    - Each method returns toast ID string for programmatic dismissal
+    - success: green accent icon, 4s duration
+    - error: red accent icon, 6s duration
+    - info: info emoji icon, 4s duration
+    - warning: warning emoji icon, 5s duration
+    - Namespace export: toastService object for convenient import
+  - src/renderer/components/AppShell/AppShell.tsx
+    - Added react-hot-toast Toaster provider, position: "bottom-right"
+    - Brutalist toast styling: dark background (#1a1a1a), warm border (#d97706),
+      Space Grotesk font, bold weight, hard shadow (4px 4px 0 #000), 8px radius
+    - Success variant: green border (#15803d)
+    - Error variant: red border (#b91c1c), 6s duration
+    - Max width 420px, padded 12px 16px
+  - src/renderer/stores/planStore.ts
+    - createPlan: success toast "Plan created successfully." on success,
+      error toast with message on failure
+    - deletePlan: success toast "Plan deleted." on success,
+      error toast on failure
+    - archivePlan: success toast "Plan archived." on success,
+      error toast on failure
+    - unarchivePlan: success toast "Plan restored from archive." on success,
+      error toast on failure
+  - src/renderer/stores/runStore.ts
+    - _handleRunEvent "completed": success toast "Task completed: {taskId}"
+    - _handleRunEvent "failed": error toast "Task failed: {taskId}"
+    - _handleRunEvent "cancelled": info toast "Run cancelled."
+  - src/renderer/stores/discoveryStore.ts
+    - startDiscovery success: success toast "Discovery completed. PRD input is ready."
+    - startDiscovery failure: error toast with error message
+    - continueDiscovery success: success toast "Discovery updated. PRD input refreshed."
+    - continueDiscovery failure: error toast with error message
+  - src/renderer/views/DiscoveryView.tsx
+    - handleCopyPrdInput: success toast on clipboard copy, warning toast if API
+      unavailable, error toast on failure
+  - src/renderer/components/ui/ULogViewer.tsx
+    - copyAll: success toast "Logs copied to clipboard." after copy
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)

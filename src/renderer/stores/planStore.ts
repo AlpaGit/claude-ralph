@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PlanListItem, RalphPlan } from "@shared/types";
+import { toastService } from "../services/toastService";
 
 /** Lightweight plan summary for the plans list sidebar. */
 export interface PlanSummary {
@@ -77,10 +78,12 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       const result = await api.createPlan({ prdText, projectPath });
       // Auto-load the newly created plan.
       await get().loadPlan(result.planId);
+      toastService.success("Plan created successfully.");
       return result.planId;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to create plan.";
       set({ error: message });
+      toastService.error(message);
       throw caught;
     } finally {
       set({ creating: false });
@@ -154,9 +157,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         plansList: state.plansList.filter((p) => p.id !== planId),
         currentPlan: state.currentPlan?.id === planId ? null : state.currentPlan,
       }));
+      toastService.success("Plan deleted.");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to delete plan.";
       set({ error: message });
+      toastService.error("Failed to delete plan.");
     }
   },
 
@@ -170,9 +175,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
           p.id === planId ? { ...p, archivedAt: new Date().toISOString() } : p
         ),
       }));
+      toastService.success("Plan archived.");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to archive plan.";
       set({ error: message });
+      toastService.error("Failed to archive plan.");
     }
   },
 
@@ -186,9 +193,11 @@ export const usePlanStore = create<PlanState>((set, get) => ({
           p.id === planId ? { ...p, archivedAt: null } : p
         ),
       }));
+      toastService.success("Plan restored from archive.");
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to unarchive plan.";
       set({ error: message });
+      toastService.error("Failed to restore plan from archive.");
     }
   },
 

@@ -7,6 +7,7 @@ import type {
   StartDiscoveryInput,
   ContinueDiscoveryInput,
 } from "@shared/types";
+import { toastService } from "../services/toastService";
 
 /* ── Answer map: questionId -> answer text ─────────────── */
 
@@ -182,12 +183,14 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
         lastReadyAtIso: new Date().toISOString(),
         copyNotice: "Discovery output is ready. PRD Input has been updated.",
       });
+      toastService.success("Discovery completed. PRD input is ready.");
 
       _discoveryUnsubscribe = unsubscribe;
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Failed to start discovery.";
       set({ error: message });
+      toastService.error(message);
     } finally {
       set((state) => ({
         loading: false,
@@ -254,10 +257,12 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
         lastReadyAtIso: new Date().toISOString(),
         copyNotice: "Discovery updated. PRD Input has been refreshed.",
       }));
+      toastService.success("Discovery updated. PRD input refreshed.");
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Failed to continue discovery.";
       set({ error: message });
+      toastService.error(message);
     } finally {
       set((state) => ({
         loading: false,
