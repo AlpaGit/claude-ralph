@@ -103,3 +103,39 @@ p1-05: Create UCard, UStatusPill, UInput, UTextArea components  [DONE]
     - Auto-resize class disables manual resize and hides overflow
   - src/renderer/components/ui.ts -- barrel export for all four UI primitives
   - Build and typecheck pass
+
+p1-06: Create UModal and USkeleton components   [DONE]
+  - src/renderer/components/UModal/UModal.tsx
+    - UModal: dialog overlay with title, body (children), footer actions, close button
+    - Uses React.createPortal to render outside component tree (creates #u-modal-root)
+    - Backdrop click-to-close, Escape key to close
+    - aria-modal, role="dialog", aria-label for accessibility
+    - Focus trap: Tab/Shift+Tab cycles through focusable elements inside dialog
+    - Saves and restores focus on open/close
+    - Locks body scroll while open
+    - UConfirmModal: convenience wrapper with confirm/cancel buttons
+    - Supports confirmVariant ("primary" | "danger"), loading state, custom labels
+    - Exports UModalProps, UConfirmModalProps types
+  - src/renderer/components/UModal/UModal.module.css
+    - Brutalist panel styling: 2px solid border, --radius-panel, --shadow-panel
+    - Backdrop with rgba overlay and fade-in animation
+    - Dialog slide-up + scale entrance animation (150ms ease-out)
+    - Header with title and close button, dashed border footer separator
+    - Close button with hover translateY(-1px) micro-interaction
+    - focus-visible outline for accessibility
+    - All values reference tokens.css custom properties
+  - src/renderer/components/USkeleton/USkeleton.tsx
+    - Animated placeholder for loading states
+    - Variants: text (line), card (rectangle), circle (avatar)
+    - Configurable width, height, lines (multi-line text), lineGap
+    - Multi-line text variant: last line shorter (65%) for natural appearance
+    - role="status" and aria-label="Loading" for accessibility
+    - Exports USkeletonProps, USkeletonVariant types
+  - src/renderer/components/USkeleton/USkeleton.module.css
+    - Pulse animation: subtle 1.5s ease-in-out infinite between --color-surface and --color-surface-warm
+    - Text variant: 0.9em height, --radius-sm, full width
+    - Card variant: 120px height, --radius-panel, 2px border
+    - Circle variant: 2.5rem diameter, --radius-circle
+    - All values reference tokens.css custom properties
+  - src/renderer/components/ui.ts -- barrel export updated with UModal, UConfirmModal, USkeleton
+  - Build and typecheck pass
