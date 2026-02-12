@@ -759,3 +759,53 @@ p2-07: Add discovery_sessions table and persistence   [DONE]
     - mapDiscoverySessionRow() private helper: parses answer_history_json and latest_state_json,
       throws PlanParseError on corrupt latest_state_json
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p2-08: Add discovery session IPC and resume flow   [DONE]
+  - src/shared/ipc.ts
+    - IPC_CHANNELS: added discoverySessions ("discovery:sessions"),
+      discoveryResume ("discovery:resume"), discoveryAbandon ("discovery:abandon")
+    - Zod schemas: discoveryResumeInputSchema ({ sessionId: uuid }),
+      discoveryAbandonInputSchema ({ sessionId: uuid })
+  - src/shared/types.ts
+    - DiscoverySessionSummary interface: id, projectPath, seedSentence,
+      roundNumber, readinessScore, updatedAt
+    - ResumeDiscoveryInput interface: sessionId
+    - AbandonDiscoveryInput interface: sessionId
+    - RalphApi: added getDiscoverySessions(), resumeDiscoverySession(),
+      abandonDiscoverySession() methods
+  - src/main/ipc.ts
+    - Registered ipcMain.handle for discovery:sessions (lists active sessions),
+      discovery:resume (resumes by ID), discovery:abandon (abandons by ID)
+    - Each handler validates with Zod schema, delegates to TaskRunner
+  - src/main/runtime/task-runner.ts
+    - startDiscovery(): now persists session to DB via db.createDiscoverySession()
+      after initial round completes
+    - continueDiscovery(): now persists updated session state via
+      db.updateDiscoverySession() after each round (answerHistory, roundNumber, latestState)
+    - getActiveDiscoverySessions(): returns lightweight summaries from DB active sessions
+    - resumeDiscoverySession(sessionId): loads session from DB, validates active status,
+      hydrates in-memory DiscoverySession map, returns latestState for UI restoration
+    - abandonDiscoverySession(sessionId): removes from in-memory map, marks abandoned in DB
+  - src/preload/index.ts
+    - Bridge methods: getDiscoverySessions(), resumeDiscoverySession(),
+      abandonDiscoverySession() via ipcRenderer.invoke
+  - src/renderer/stores/discoveryStore.ts
+    - New state: activeSessions (DiscoverySessionSummary[]), checkingSessions (boolean)
+    - checkActiveSessions(): fetches active sessions from backend, populates activeSessions
+    - resumeSession(sessionId): calls resumeDiscoverySession IPC, hydrates store from
+      returned latestState, builds answerMap from questions, clears activeSessions
+    - abandonSession(sessionId): calls abandonDiscoverySession IPC, removes from local list
+  - src/renderer/views/DiscoveryView.tsx
+    - On mount: calls checkActiveSessions() if no interview is loaded
+    - Resume dialog: shown when activeSessions exist and no interview/loading active
+    - Dialog lists each active session with seed sentence (truncated), round number,
+      readiness score, project path, updated timestamp
+    - "Resume" button per session hydrates store from persisted state
+    - "Start Fresh (abandon all)" button abandons all active sessions and closes dialog
+  - src/renderer/views/DiscoveryView.module.css
+    - Resume overlay: fixed position, centered, semi-transparent backdrop
+    - Resume dialog: brutalist panel with 2px border, shadow, max-width 520px
+    - Session items: dashed border, flex layout with info + resume button
+    - Session meta: mono font, muted color, flex-wrap row
+    - Dialog footer: dashed border-top separator, right-aligned ghost button
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
