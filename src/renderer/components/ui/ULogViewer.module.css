@@ -1,0 +1,178 @@
+/*
+ * ULogViewer CSS Module
+ * Virtualized log viewer with dark terminal-style theme.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Container ────────────────────────────────────────── */
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-log-bg);
+  border: 2px solid var(--color-log-border);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  position: relative;
+}
+
+.viewer.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+}
+
+/* ── Toolbar ──────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--color-log-border);
+  background: #1a1a1a;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--color-log-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-log-bg);
+  color: var(--color-log-text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: #666;
+}
+
+.searchInput:focus {
+  border-color: var(--color-accent-2);
+}
+
+.matchCount {
+  color: #888;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.toolbarBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--color-log-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-log-text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.toolbarBtn:hover {
+  background: #333;
+}
+
+.toolbarBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.toolbarBtn.active {
+  background: var(--color-accent-2);
+  color: var(--color-white);
+  border-color: var(--color-accent-2);
+}
+
+/* ── Log list area ────────────────────────────────────── */
+
+.listContainer {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Log line row ─────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  padding: 0 0.6rem;
+  color: var(--color-log-text);
+  white-space: pre;
+  box-sizing: border-box;
+}
+
+.row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.lineNumber {
+  flex-shrink: 0;
+  width: 3.5rem;
+  text-align: right;
+  padding-right: 0.8rem;
+  color: #555;
+  user-select: none;
+}
+
+.lineText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.highlight {
+  background: rgba(229, 72, 40, 0.25);
+}
+
+/* ── Footer / status bar ──────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.2rem 0.6rem;
+  border-top: 1px solid var(--color-log-border);
+  background: #1a1a1a;
+  font-size: 0.7rem;
+  color: #888;
+  flex-shrink: 0;
+}
+
+/* ── Scroll-to-bottom indicator ───────────────────────── */
+
+.scrollIndicator {
+  position: absolute;
+  bottom: 2rem;
+  right: 1rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--color-log-border);
+  border-radius: var(--radius-sm);
+  background: #222;
+  color: var(--color-log-text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity var(--transition-fast);
+  z-index: 1;
+}
+
+.scrollIndicator:hover {
+  opacity: 1;
+  background: #333;
+}
