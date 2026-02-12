@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AbandonDiscoveryInput,
   AbortQueueInput,
+  ApproveTaskProposalInput,
+  ApproveTaskProposalResponse,
   ArchivePlanInput,
   AppSettings,
   CancelDiscoveryInput,
@@ -12,6 +14,7 @@ import type {
   CreatePlanInput,
   CreatePlanResponse,
   DeletePlanInput,
+  DismissTaskProposalInput,
   DiscoveryEvent,
   DiscoveryInterviewState,
   DiscoverySessionSummary,
@@ -60,6 +63,8 @@ const IPC_CHANNELS = {
   cancelRun: "run:cancel",
   retryTask: "task:retry",
   skipTask: "task:skip",
+  approveTaskProposal: "proposal:approve",
+  dismissTaskProposal: "proposal:dismiss",
   abortQueue: "queue:abort",
   startDiscovery: "discovery:start",
   continueDiscovery: "discovery:continue",
@@ -129,6 +134,14 @@ const api: RalphApi = {
 
   skipTask(input: SkipTaskInput): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.skipTask, input);
+  },
+
+  approveTaskProposal(input: ApproveTaskProposalInput): Promise<ApproveTaskProposalResponse> {
+    return ipcRenderer.invoke(IPC_CHANNELS.approveTaskProposal, input);
+  },
+
+  dismissTaskProposal(input: DismissTaskProposalInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.dismissTaskProposal, input);
   },
 
   abortQueue(input: AbortQueueInput): Promise<void> {

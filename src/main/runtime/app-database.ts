@@ -17,6 +17,8 @@ import type {
   RalphTask,
   RunEvent,
   RunStatus,
+  TaskFollowupProposal,
+  TaskFollowupProposalStatus,
   TaskRun,
   TaskStatus,
   TechnicalPack,
@@ -133,6 +135,36 @@ interface RunEventRow {
   level: "info" | "error";
   event_type: string;
   payload_json: string;
+}
+
+interface PlanProgressEntryRow {
+  id: string;
+  plan_id: string;
+  run_id: string | null;
+  status: "completed" | "failed" | "cancelled";
+  entry_text: string;
+  created_at: string;
+}
+
+interface TaskFollowupProposalRow {
+  id: string;
+  plan_id: string;
+  source_run_id: string | null;
+  source_task_id: string;
+  finding_key: string;
+  title: string;
+  description: string;
+  severity: string;
+  rule: string;
+  location: string;
+  message: string;
+  recommended_action: string;
+  acceptance_criteria_json: string;
+  technical_notes: string;
+  status: TaskFollowupProposalStatus;
+  approved_task_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface DiscoverySessionRow {
@@ -335,6 +367,33 @@ export class AppDatabase {
       projectPath: row.project_path,
       createdAt: row.created_at,
       archivedAt: row.archived_at
+    };
+  }
+
+  private mapTaskFollowupProposalRow(row: TaskFollowupProposalRow): TaskFollowupProposal {
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      sourceRunId: row.source_run_id,
+      sourceTaskId: row.source_task_id,
+      findingKey: row.finding_key,
+      title: row.title,
+      description: row.description,
+      severity: row.severity,
+      rule: row.rule,
+      location: row.location,
+      message: row.message,
+      recommendedAction: row.recommended_action,
+      acceptanceCriteria: parseJsonArray(
+        row.acceptance_criteria_json,
+        "acceptance_criteria_json",
+        row.id
+      ),
+      technicalNotes: row.technical_notes,
+      status: row.status,
+      approvedTaskId: row.approved_task_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
   }
 
@@ -607,6 +666,18 @@ export class AppDatabase {
     const runRows = this.db
       .prepare("SELECT * FROM runs WHERE plan_id = ? ORDER BY started_at DESC;")
       .all(planId) as RunRow[];
+    const proposalRows = this.db
+      .prepare(`
+        SELECT
+          id, plan_id, source_run_id, source_task_id, finding_key,
+          title, description, severity, rule, location, message, recommended_action,
+          acceptance_criteria_json, technical_notes,
+          status, approved_task_id, created_at, updated_at
+        FROM task_followup_proposals
+        WHERE plan_id = ?
+        ORDER BY created_at DESC;
+      `)
+      .all(planId) as TaskFollowupProposalRow[];
 
     let technicalPack: TechnicalPack;
     try {
@@ -646,6 +717,7 @@ export class AppDatabase {
       errorText: row.error_text,
       retryCount: row.retry_count ?? 0
     }));
+    const taskProposals = proposalRows.map((row) => this.mapTaskFollowupProposalRow(row));
 
     return {
       id: planRow.id,
@@ -658,7 +730,8 @@ export class AppDatabase {
       updatedAt: planRow.updated_at,
       archivedAt: planRow.archived_at,
       tasks,
-      runs
+      runs,
+      taskProposals
     };
   }
 
@@ -919,6 +992,281 @@ export class AppDatabase {
         completed,
         todos_json: JSON.stringify(todos)
       });
+  }
+
+  appendPlanProgressEntry(input: {
+    planId: string;
+    runId?: string | null;
+    status: "completed" | "failed" | "cancelled";
+    entryText: string;
+  }): void {
+    const trimmed = input.entryText.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+
+    const maxLength = 16_000;
+    const truncated =
+      trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed;
+
+    this.db
+      .prepare(`
+        INSERT INTO plan_progress_entries (
+          id, plan_id, run_id, status, entry_text, created_at
+        ) VALUES (
+          @id, @plan_id, @run_id, @status, @entry_text, @created_at
+        );
+      `)
+      .run({
+        id: randomUUID(),
+        plan_id: input.planId,
+        run_id: input.runId ?? null,
+        status: input.status,
+        entry_text: truncated,
+        created_at: nowIso()
+      });
+  }
+
+  listPlanProgressEntries(
+    planId: string,
+    limit = 12
+  ): Array<{
+    id: string;
+    planId: string;
+    runId: string | null;
+    status: "completed" | "failed" | "cancelled";
+    entryText: string;
+    createdAt: string;
+  }> {
+    const boundedLimit = Math.min(Math.max(limit, 1), 100);
+    const rows = this.db
+      .prepare(`
+        SELECT id, plan_id, run_id, status, entry_text, created_at
+        FROM plan_progress_entries
+        WHERE plan_id = @plan_id
+        ORDER BY created_at DESC
+        LIMIT @limit;
+      `)
+      .all({
+        plan_id: planId,
+        limit: boundedLimit
+      }) as PlanProgressEntryRow[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      planId: row.plan_id,
+      runId: row.run_id,
+      status: row.status,
+      entryText: row.entry_text,
+      createdAt: row.created_at
+    }));
+  }
+
+  createTaskFollowupProposal(input: {
+    planId: string;
+    sourceRunId?: string | null;
+    sourceTaskId: string;
+    findingKey: string;
+    title: string;
+    description: string;
+    severity: string;
+    rule: string;
+    location: string;
+    message: string;
+    recommendedAction: string;
+    acceptanceCriteria: string[];
+    technicalNotes: string;
+  }): boolean {
+    const now = nowIso();
+    const result = this.db
+      .prepare(`
+        INSERT INTO task_followup_proposals (
+          id, plan_id, source_run_id, source_task_id, finding_key,
+          title, description, severity, rule, location, message, recommended_action,
+          acceptance_criteria_json, technical_notes,
+          status, approved_task_id, created_at, updated_at
+        ) VALUES (
+          @id, @plan_id, @source_run_id, @source_task_id, @finding_key,
+          @title, @description, @severity, @rule, @location, @message, @recommended_action,
+          @acceptance_criteria_json, @technical_notes,
+          'proposed', NULL, @created_at, @updated_at
+        )
+        ON CONFLICT(plan_id, finding_key) DO NOTHING;
+      `)
+      .run({
+        id: randomUUID(),
+        plan_id: input.planId,
+        source_run_id: input.sourceRunId ?? null,
+        source_task_id: input.sourceTaskId,
+        finding_key: input.findingKey,
+        title: input.title,
+        description: input.description,
+        severity: input.severity,
+        rule: input.rule,
+        location: input.location,
+        message: input.message,
+        recommended_action: input.recommendedAction,
+        acceptance_criteria_json: JSON.stringify(input.acceptanceCriteria),
+        technical_notes: input.technicalNotes,
+        created_at: now,
+        updated_at: now
+      });
+
+    return result.changes > 0;
+  }
+
+  listTaskFollowupProposals(
+    planId: string,
+    statuses?: TaskFollowupProposalStatus[]
+  ): TaskFollowupProposal[] {
+    const rows = this.db
+      .prepare(`
+        SELECT
+          id, plan_id, source_run_id, source_task_id, finding_key,
+          title, description, severity, rule, location, message, recommended_action,
+          acceptance_criteria_json, technical_notes,
+          status, approved_task_id, created_at, updated_at
+        FROM task_followup_proposals
+        WHERE plan_id = @plan_id
+        ORDER BY created_at DESC;
+      `)
+      .all({
+        plan_id: planId
+      }) as TaskFollowupProposalRow[];
+
+    const filteredRows =
+      statuses && statuses.length > 0 ? rows.filter((row) => statuses.includes(row.status)) : rows;
+
+    return filteredRows.map((row) => this.mapTaskFollowupProposalRow(row));
+  }
+
+  approveTaskFollowupProposal(input: {
+    planId: string;
+    proposalId: string;
+  }): { taskId: string } | null {
+    const transaction = this.db.transaction(() => {
+      const proposal = this.db
+        .prepare(`
+          SELECT
+            id, plan_id, source_run_id, source_task_id, finding_key,
+            title, description, severity, rule, location, message, recommended_action,
+            acceptance_criteria_json, technical_notes,
+            status, approved_task_id, created_at, updated_at
+          FROM task_followup_proposals
+          WHERE id = @id AND plan_id = @plan_id
+          LIMIT 1;
+        `)
+        .get({
+          id: input.proposalId,
+          plan_id: input.planId
+        }) as TaskFollowupProposalRow | undefined;
+
+      if (!proposal || proposal.status !== "proposed") {
+        return null;
+      }
+
+      const maxOrdinalRow = this.db
+        .prepare("SELECT MAX(ordinal) AS max_ordinal FROM tasks WHERE plan_id = @plan_id;")
+        .get({
+          plan_id: input.planId
+        }) as { max_ordinal: number | null } | undefined;
+      const nextOrdinal = (maxOrdinalRow?.max_ordinal ?? 0) + 1;
+
+      const taskId = randomUUID();
+      const now = nowIso();
+      const sourceTaskExists = this.db
+        .prepare(`
+          SELECT 1
+          FROM tasks
+          WHERE id = @task_id
+            AND plan_id = @plan_id
+          LIMIT 1;
+        `)
+        .get({
+          task_id: proposal.source_task_id,
+          plan_id: input.planId
+        }) as { 1: number } | undefined;
+      const dependencies = sourceTaskExists ? [proposal.source_task_id] : [];
+
+      this.db
+        .prepare(`
+          INSERT INTO tasks (
+            id, plan_id, ordinal, title, description,
+            dependencies_json, acceptance_criteria_json, technical_notes,
+            status, created_at, updated_at, completed_at
+          ) VALUES (
+            @id, @plan_id, @ordinal, @title, @description,
+            @dependencies_json, @acceptance_criteria_json, @technical_notes,
+            'pending', @created_at, @updated_at, NULL
+          );
+        `)
+        .run({
+          id: taskId,
+          plan_id: input.planId,
+          ordinal: nextOrdinal,
+          title: proposal.title,
+          description: proposal.description,
+          dependencies_json: JSON.stringify(dependencies),
+          acceptance_criteria_json: proposal.acceptance_criteria_json,
+          technical_notes: `${proposal.technical_notes}\n\nApproved from proposal ${proposal.id}.`,
+          created_at: now,
+          updated_at: now
+        });
+
+      const updateResult = this.db
+        .prepare(`
+          UPDATE task_followup_proposals
+          SET status = 'approved',
+              approved_task_id = @approved_task_id,
+              updated_at = @updated_at
+          WHERE id = @id
+            AND plan_id = @plan_id
+            AND status = 'proposed';
+        `)
+        .run({
+          id: input.proposalId,
+          plan_id: input.planId,
+          approved_task_id: taskId,
+          updated_at: now
+        });
+
+      if (updateResult.changes === 0) {
+        throw new Error(`Proposal approval race detected for proposal ${input.proposalId}.`);
+      }
+
+      this.db
+        .prepare("UPDATE plans SET updated_at = @updated_at WHERE id = @plan_id;")
+        .run({
+          plan_id: input.planId,
+          updated_at: now
+        });
+
+      return { taskId };
+    });
+
+    return transaction();
+  }
+
+  dismissTaskFollowupProposal(input: {
+    planId: string;
+    proposalId: string;
+  }): boolean {
+    const result = this.db
+      .prepare(`
+        UPDATE task_followup_proposals
+        SET status = 'dismissed',
+            updated_at = @updated_at
+        WHERE id = @id
+          AND plan_id = @plan_id
+          AND status = 'proposed';
+      `)
+      .run({
+        id: input.proposalId,
+        plan_id: input.planId,
+        updated_at: nowIso()
+      });
+
+    return result.changes > 0;
   }
 
   countRunnableTasks(planId: string): number {

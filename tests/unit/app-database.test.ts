@@ -476,6 +476,243 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (comprehensive)", () => {
   });
 
   // =========================================================================
+  // plan progress entries
+  // =========================================================================
+
+  describe("plan progress entries", () => {
+    it("should append and list progress entries for a plan", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "t1", title: "Task 1" }]
+      });
+      const runId = createTestRun(db, planId, "t1", { status: "completed" });
+
+      db.appendPlanProgressEntry({
+        planId,
+        runId,
+        status: "completed",
+        entryText: "Completed task t1."
+      });
+
+      const entries = db.listPlanProgressEntries(planId);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].planId).toBe(planId);
+      expect(entries[0].runId).toBe(runId);
+      expect(entries[0].status).toBe("completed");
+      expect(entries[0].entryText).toContain("Completed task");
+      expect(entries[0].createdAt).toBeTruthy();
+    });
+
+    it("should scope progress entries by plan ID", () => {
+      const planA = createTestPlan(db, {
+        id: "progress-plan-a",
+        tasks: [{ id: "progress-task-a", title: "A" }]
+      });
+      const planB = createTestPlan(db, {
+        id: "progress-plan-b",
+        tasks: [{ id: "progress-task-b", title: "B" }]
+      });
+
+      db.appendPlanProgressEntry({
+        planId: planA,
+        status: "completed",
+        entryText: "Plan A entry"
+      });
+      db.appendPlanProgressEntry({
+        planId: planB,
+        status: "failed",
+        entryText: "Plan B entry"
+      });
+
+      const entriesA = db.listPlanProgressEntries(planA);
+      const entriesB = db.listPlanProgressEntries(planB);
+      expect(entriesA).toHaveLength(1);
+      expect(entriesB).toHaveLength(1);
+      expect(entriesA[0].entryText).toContain("Plan A");
+      expect(entriesB[0].entryText).toContain("Plan B");
+    });
+
+    it("should ignore blank progress entries", () => {
+      const planId = createTestPlan(db, { tasks: [] });
+
+      db.appendPlanProgressEntry({
+        planId,
+        status: "completed",
+        entryText: "   "
+      });
+
+      const entries = db.listPlanProgressEntries(planId);
+      expect(entries).toHaveLength(0);
+    });
+
+    it("should cascade delete plan progress entries when deleting a plan", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "t-cascade", title: "Task" }]
+      });
+
+      db.appendPlanProgressEntry({
+        planId,
+        status: "completed",
+        entryText: "Entry that should be deleted with plan."
+      });
+      expect(db.listPlanProgressEntries(planId)).toHaveLength(1);
+
+      db.deletePlan(planId);
+      expect(db.listPlanProgressEntries(planId)).toHaveLength(0);
+    });
+  });
+
+  // =========================================================================
+  // task followup proposals
+  // =========================================================================
+
+  describe("task followup proposals", () => {
+    it("should create and list followup proposals", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "source-task", title: "Source task" }]
+      });
+
+      const inserted = db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "finding-key-1",
+        title: "Architecture follow-up: boundary",
+        description: "Direct import should be replaced by a UI barrel import.",
+        severity: "low",
+        rule: "boundary",
+        location: "src/renderer/views/DiscoveryView.tsx",
+        message: "Direct import bypasses the ui.ts boundary.",
+        recommendedAction: "Import from @renderer/components/ui instead.",
+        acceptanceCriteria: ["Use the shared UI barrel import."],
+        technicalNotes: "Generated from pass_with_notes architecture review."
+      });
+
+      expect(inserted).toBe(true);
+
+      const proposals = db.listTaskFollowupProposals(planId);
+      expect(proposals).toHaveLength(1);
+      expect(proposals[0].status).toBe("proposed");
+      expect(proposals[0].title).toContain("Architecture follow-up");
+      expect(proposals[0].acceptanceCriteria).toContain("Use the shared UI barrel import.");
+    });
+
+    it("should deduplicate proposals by finding key per plan", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "source-task", title: "Source task" }]
+      });
+
+      const first = db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "duplicate-finding",
+        title: "Note A",
+        description: "Desc",
+        severity: "low",
+        rule: "duplication",
+        location: "src/a.ts",
+        message: "dup message",
+        recommendedAction: "refactor",
+        acceptanceCriteria: ["ac"],
+        technicalNotes: "notes"
+      });
+      const second = db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "duplicate-finding",
+        title: "Note B",
+        description: "Desc",
+        severity: "low",
+        rule: "duplication",
+        location: "src/a.ts",
+        message: "dup message",
+        recommendedAction: "refactor",
+        acceptanceCriteria: ["ac"],
+        technicalNotes: "notes"
+      });
+
+      expect(first).toBe(true);
+      expect(second).toBe(false);
+      expect(db.listTaskFollowupProposals(planId)).toHaveLength(1);
+    });
+
+    it("should approve a proposal and create a new pending task", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "source-task", ordinal: 1, title: "Source task" }]
+      });
+
+      db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "finding-to-approve",
+        title: "Architecture follow-up: barrel export",
+        description: "Add missing export to ui.ts.",
+        severity: "low",
+        rule: "boundary",
+        location: "src/renderer/components/ui.ts",
+        message: "Component missing in barrel export.",
+        recommendedAction: "Export UQuestionBatch from ui.ts.",
+        acceptanceCriteria: ["Component is exported from ui.ts."],
+        technicalNotes: "Generated from architecture review."
+      });
+
+      const proposal = db.listTaskFollowupProposals(planId)[0];
+      const approval = db.approveTaskFollowupProposal({
+        planId,
+        proposalId: proposal.id
+      });
+
+      expect(approval).not.toBeNull();
+
+      const updated = db.listTaskFollowupProposals(planId)[0];
+      expect(updated.status).toBe("approved");
+      expect(updated.approvedTaskId).toBe(approval!.taskId);
+
+      const tasks = db.getTasks(planId);
+      const createdTask = tasks.find((task) => task.id === approval!.taskId);
+      expect(createdTask).toBeDefined();
+      expect(createdTask!.status).toBe("pending");
+      expect(createdTask!.dependencies).toContain("source-task");
+    });
+
+    it("should dismiss a proposal", () => {
+      const planId = createTestPlan(db, {
+        tasks: [{ id: "source-task", title: "Source task" }]
+      });
+
+      db.createTaskFollowupProposal({
+        planId,
+        sourceRunId: null,
+        sourceTaskId: "source-task",
+        findingKey: "finding-to-dismiss",
+        title: "Architecture follow-up: dismiss",
+        description: "Dismiss me.",
+        severity: "low",
+        rule: "other",
+        location: "src/renderer/components/any.tsx",
+        message: "Optional note.",
+        recommendedAction: "none",
+        acceptanceCriteria: ["none"],
+        technicalNotes: "notes"
+      });
+
+      const proposal = db.listTaskFollowupProposals(planId)[0];
+      const changed = db.dismissTaskFollowupProposal({
+        planId,
+        proposalId: proposal.id
+      });
+
+      expect(changed).toBe(true);
+      expect(db.listTaskFollowupProposals(planId)[0].status).toBe("dismissed");
+      expect(
+        db.listTaskFollowupProposals(planId, ["proposed"])
+      ).toHaveLength(0);
+    });
+  });
+
+  // =========================================================================
   // deletePlan
   // =========================================================================
 

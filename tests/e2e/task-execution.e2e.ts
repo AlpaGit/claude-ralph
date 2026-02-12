@@ -319,7 +319,7 @@ test.describe("Task execution flow", () => {
     // Seed a completed run with log lines, emitting events to the renderer
     const logLines = [
       "Reading PRD.md...\n",
-      "Reading progress.txt...\n",
+      "Loading plan progress history...\n",
       "Implementing execution handler...\n",
       "Running build...\n",
       "Build succeeded.\n",

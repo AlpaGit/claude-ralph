@@ -660,6 +660,8 @@ describe.skipIf(!sqliteAvailable)("MigrationRunner", () => {
       expect(tableExists(db, "runs")).toBe(true);
       expect(tableExists(db, "run_events")).toBe(true);
       expect(tableExists(db, "todo_snapshots")).toBe(true);
+      expect(tableExists(db, "plan_progress_entries")).toBe(true);
+      expect(tableExists(db, "task_followup_proposals")).toBe(true);
 
       // Verify schema_migrations has entries for all migration files
       const applied = getAppliedMigrations(db);

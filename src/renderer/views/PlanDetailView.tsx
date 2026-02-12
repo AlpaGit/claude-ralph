@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import type { RalphTask, TaskRun } from "@shared/types";
+import type { RalphTask, TaskFollowupProposal, TaskRun } from "@shared/types";
 import { usePlanStore } from "../stores/planStore";
 import { useRunStore, initRunEventSubscription } from "../stores/runStore";
 import { USkeleton } from "../components/ui";
@@ -9,6 +9,7 @@ import { PlanOverview } from "../components/plan/PlanOverview";
 import { TechnicalPackPanel } from "../components/plan/TechnicalPackPanel";
 import { TaskCard } from "../components/plan/TaskCard";
 import { RecentEvents } from "../components/plan/RecentEvents";
+import { toastService } from "../services/toastService";
 import styles from "./PlanDetailView.module.css";
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -100,6 +101,13 @@ export function PlanDetailView(): JSX.Element {
     () => (plan ? buildTaskRunMap(plan.runs) : new Map<string, TaskRun>()),
     [plan]
   );
+  const followupProposals = useMemo(
+    () =>
+      ((plan?.taskProposals ?? []).filter(
+        (proposal) => proposal.status === "proposed"
+      ) as TaskFollowupProposal[]),
+    [plan]
+  );
 
   const selectedRun = useMemo(
     () => (plan?.runs ?? []).find((run) => run.id === selectedRunId) ?? null,
@@ -116,6 +124,7 @@ export function PlanDetailView(): JSX.Element {
 
   /** Set of task IDs whose cards are currently expanded. */
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(new Set());
+  const [proposalActionId, setProposalActionId] = useState<string | null>(null);
 
   /** Toggle a single task card open/closed. */
   const handleToggleExpand = useCallback((taskId: string) => {
@@ -168,6 +177,56 @@ export function PlanDetailView(): JSX.Element {
   }, [plan]);
 
   /* ── Callbacks ───────────────────────────────────────── */
+  const handleApproveProposal = useCallback(
+    async (proposalId: string) => {
+      if (!plan) return;
+      const api = window.ralphApi;
+      if (!api) return;
+
+      setProposalActionId(proposalId);
+      try {
+        const result = await api.approveTaskProposal({
+          planId: plan.id,
+          proposalId
+        });
+        toastService.success(`Follow-up task created: ${result.taskId.slice(0, 8)}...`);
+        await loadPlan(plan.id);
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : "Failed to approve follow-up proposal.";
+        toastService.error(message);
+      } finally {
+        setProposalActionId(null);
+      }
+    },
+    [plan, loadPlan]
+  );
+
+  const handleDismissProposal = useCallback(
+    async (proposalId: string) => {
+      if (!plan) return;
+      const api = window.ralphApi;
+      if (!api) return;
+
+      setProposalActionId(proposalId);
+      try {
+        await api.dismissTaskProposal({
+          planId: plan.id,
+          proposalId
+        });
+        toastService.info("Follow-up proposal dismissed.");
+        await loadPlan(plan.id);
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : "Failed to dismiss follow-up proposal.";
+        toastService.error(message);
+      } finally {
+        setProposalActionId(null);
+      }
+    },
+    [plan, loadPlan]
+  );
+
   const handleRunTask = useCallback(
     async (task: RalphTask) => {
       if (!plan) return;
@@ -188,9 +247,15 @@ export function PlanDetailView(): JSX.Element {
     const api = window.ralphApi;
     if (!api) return;
     try {
-      await api.runAll({ planId: plan.id });
-    } catch {
-      // Error will be surfaced on next plan reload
+      const result = await api.runAll({ planId: plan.id });
+      if (result.queued === 0) {
+        toastService.warning("No task was queued. Check Recent Events for the queue reason.");
+      } else {
+        toastService.success(`Queue started with ${result.queued} task(s) ready.`);
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Failed to start queue.";
+      toastService.error(message);
     }
   }, [plan]);
 
@@ -345,6 +410,62 @@ export function PlanDetailView(): JSX.Element {
           <TechnicalPackPanel technicalPack={plan.technicalPack} />
         </div>
 
+        {/* Architecture Follow-up Proposals */}
+        {followupProposals.length > 0 ? (
+          <div className={styles.spanFull}>
+            <div className={styles.followupPanel}>
+              <div className={styles.followupHeader}>
+                <h2>Architecture Follow-up Proposals</h2>
+                <span className={styles.followupCount}>
+                  {followupProposals.length} pending
+                </span>
+              </div>
+              <p className={styles.followupIntro}>
+                These notes came from architecture review (`pass_with_notes`). Approve to add a new
+                checklist task, or dismiss if you do not want to apply the change.
+              </p>
+              <div className={styles.followupList}>
+                {followupProposals.map((proposal) => (
+                  <article key={proposal.id} className={styles.followupItem}>
+                    <div className={styles.followupItemHeader}>
+                      <h3>{proposal.title}</h3>
+                      <span className={styles.followupSeverity}>{proposal.severity}</span>
+                    </div>
+                    <p className={styles.followupMessage}>{proposal.message}</p>
+                    {proposal.recommendedAction.trim().length > 0 ? (
+                      <p className={styles.followupAction}>
+                        Recommended: {proposal.recommendedAction}
+                      </p>
+                    ) : null}
+                    <p className={styles.followupMeta}>
+                      Rule: {proposal.rule} | Location: {proposal.location} | Source task:{" "}
+                      {proposal.sourceTaskId}
+                    </p>
+                    <div className={styles.followupActions}>
+                      <button
+                        type="button"
+                        className={styles.followupApproveBtn}
+                        onClick={() => void handleApproveProposal(proposal.id)}
+                        disabled={proposalActionId === proposal.id}
+                      >
+                        Approve and Add Task
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.followupDismissBtn}
+                        onClick={() => void handleDismissProposal(proposal.id)}
+                        disabled={proposalActionId === proposal.id}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* Checklist Panel */}
         <div className={styles.spanFull}>
           <div className={styles.checklistHeader}>
@@ -362,7 +483,7 @@ export function PlanDetailView(): JSX.Element {
                 type="button"
                 className={styles.runAllBtn}
                 onClick={() => void handleStartPlan()}
-                disabled={plan.status === "running" || !plan.tasks.some((task) => task.status === "pending")}
+                disabled={!plan.tasks.some((task) => task.status === "pending")}
                 title="Démarrer le plan automatiquement (Ctrl+R)"
               >
                 Démarrer le plan

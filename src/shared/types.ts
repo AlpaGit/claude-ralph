@@ -1,6 +1,7 @@
 export type TaskStatus = "pending" | "in_progress" | "completed" | "failed" | "skipped";
 export type PlanStatus = "draft" | "ready" | "running" | "completed" | "failed";
 export type RunStatus = "queued" | "in_progress" | "completed" | "failed" | "cancelled";
+export type TaskFollowupProposalStatus = "proposed" | "approved" | "dismissed";
 
 export interface TodoItem {
   content: string;
@@ -61,6 +62,27 @@ export interface TaskRun {
   retryCount: number;
 }
 
+export interface TaskFollowupProposal {
+  id: string;
+  planId: string;
+  sourceRunId: string | null;
+  sourceTaskId: string;
+  findingKey: string;
+  title: string;
+  description: string;
+  severity: string;
+  rule: string;
+  location: string;
+  message: string;
+  recommendedAction: string;
+  acceptanceCriteria: string[];
+  technicalNotes: string;
+  status: TaskFollowupProposalStatus;
+  approvedTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RalphPlan {
   id: string;
   projectPath: string;
@@ -73,6 +95,7 @@ export interface RalphPlan {
   archivedAt: string | null;
   tasks: RalphTask[];
   runs: TaskRun[];
+  taskProposals?: TaskFollowupProposal[];
 }
 
 /** Lightweight plan record returned by listPlans (no tasks, runs, or PRD body). */
@@ -211,6 +234,20 @@ export interface RetryTaskResponse {
 export interface SkipTaskInput {
   planId: string;
   taskId: string;
+}
+
+export interface ApproveTaskProposalInput {
+  planId: string;
+  proposalId: string;
+}
+
+export interface ApproveTaskProposalResponse {
+  taskId: string;
+}
+
+export interface DismissTaskProposalInput {
+  planId: string;
+  proposalId: string;
 }
 
 /** Input for aborting the queue for a plan. */
@@ -476,6 +513,8 @@ export interface RalphApi {
   cancelRun(input: CancelRunInput): Promise<CancelRunResponse>;
   retryTask(input: RetryTaskInput): Promise<RetryTaskResponse>;
   skipTask(input: SkipTaskInput): Promise<void>;
+  approveTaskProposal(input: ApproveTaskProposalInput): Promise<ApproveTaskProposalResponse>;
+  dismissTaskProposal(input: DismissTaskProposalInput): Promise<void>;
   abortQueue(input: AbortQueueInput): Promise<void>;
   startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState>;
   continueDiscovery(input: ContinueDiscoveryInput): Promise<DiscoveryInterviewState>;

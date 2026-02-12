@@ -2,11 +2,13 @@ import { ipcMain } from "electron";
 import { z } from "zod";
 import {
   abortQueueInputSchema,
+  approveTaskProposalInputSchema,
   archivePlanInputSchema,
   cancelRunInputSchema,
   continueDiscoveryInputSchema,
   createPlanInputSchema,
   deletePlanInputSchema,
+  dismissTaskProposalInputSchema,
   discoveryAbandonInputSchema,
   discoveryCancelInputSchema,
   discoveryResumeInputSchema,
@@ -217,6 +219,24 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = skipTaskInputSchema.parse(rawInput);
       taskRunner.skipTask(input);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.approveTaskProposal, async (_event, rawInput) => {
+    try {
+      const input = approveTaskProposalInputSchema.parse(rawInput);
+      return taskRunner.approveTaskProposal(input);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.dismissTaskProposal, async (_event, rawInput) => {
+    try {
+      const input = dismissTaskProposalInputSchema.parse(rawInput);
+      taskRunner.dismissTaskProposal(input);
     } catch (error) {
       throw createIpcError(error);
     }

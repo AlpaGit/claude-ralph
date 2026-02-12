@@ -22,6 +22,8 @@ import {
   cancelRunInputSchema,
   retryTaskInputSchema,
   skipTaskInputSchema,
+  approveTaskProposalInputSchema,
+  dismissTaskProposalInputSchema,
   abortQueueInputSchema,
   startDiscoveryInputSchema,
   continueDiscoveryInputSchema,
@@ -460,6 +462,66 @@ describe("skipTaskInputSchema", () => {
     const result = skipTaskInputSchema.safeParse({
       planId: VALID_UUID,
       taskId: ""
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// approveTaskProposalInputSchema
+// ---------------------------------------------------------------------------
+
+describe("approveTaskProposalInputSchema", () => {
+  it("accepts valid input", () => {
+    const result = approveTaskProposalInputSchema.safeParse({
+      planId: VALID_UUID,
+      proposalId: VALID_UUID_2
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects non-UUID planId", () => {
+    const result = approveTaskProposalInputSchema.safeParse({
+      planId: INVALID_UUID,
+      proposalId: VALID_UUID_2
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-UUID proposalId", () => {
+    const result = approveTaskProposalInputSchema.safeParse({
+      planId: VALID_UUID,
+      proposalId: INVALID_UUID
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dismissTaskProposalInputSchema
+// ---------------------------------------------------------------------------
+
+describe("dismissTaskProposalInputSchema", () => {
+  it("accepts valid input", () => {
+    const result = dismissTaskProposalInputSchema.safeParse({
+      planId: VALID_UUID,
+      proposalId: VALID_UUID_2
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects non-UUID planId", () => {
+    const result = dismissTaskProposalInputSchema.safeParse({
+      planId: INVALID_UUID,
+      proposalId: VALID_UUID_2
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-UUID proposalId", () => {
+    const result = dismissTaskProposalInputSchema.safeParse({
+      planId: VALID_UUID,
+      proposalId: INVALID_UUID
     });
     expect(result.success).toBe(false);
   });
@@ -1120,6 +1182,24 @@ describe("IPC handler validation (schema.parse rejects before handler)", () => {
 
   it("runTaskInputSchema.parse throws on missing fields", () => {
     expect(() => runTaskInputSchema.parse({})).toThrow();
+  });
+
+  it("approveTaskProposalInputSchema.parse throws on invalid UUIDs", () => {
+    expect(() =>
+      approveTaskProposalInputSchema.parse({
+        planId: "bad-plan-id",
+        proposalId: "bad-proposal-id"
+      })
+    ).toThrow();
+  });
+
+  it("dismissTaskProposalInputSchema.parse throws on invalid UUIDs", () => {
+    expect(() =>
+      dismissTaskProposalInputSchema.parse({
+        planId: "bad-plan-id",
+        proposalId: "bad-proposal-id"
+      })
+    ).toThrow();
   });
 
   it("continueDiscoveryInputSchema.parse succeeds on empty answers (batch-skip)", () => {

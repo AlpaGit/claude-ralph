@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,6 +9,8 @@ import type {
   AbortQueueInput,
   AgentRole,
   AppSettings,
+  ApproveTaskProposalInput,
+  ApproveTaskProposalResponse,
   CancelDiscoveryInput,
   CancelDiscoveryResponse,
   CancelRunInput,
@@ -20,6 +22,7 @@ import type {
   DiscoveryEvent,
   DiscoveryInterviewState,
   DiscoverySessionSummary,
+  DismissTaskProposalInput,
   GetRunEventsResponse,
   GetWizardGuidanceInput,
   InferStackInput,
@@ -68,6 +71,21 @@ interface QueueGitContext {
   worktreeRoot: string;
 }
 
+interface ArchitectureReviewFindingSnapshot {
+  severity: string;
+  location: string;
+  rule: string;
+  message: string;
+  recommendedAction: string;
+}
+
+interface ArchitectureReviewSnapshot {
+  status: string;
+  summary: string;
+  confidence: number;
+  findings: ArchitectureReviewFindingSnapshot[];
+}
+
 interface PhaseWorktree {
   taskId: string;
   branchName: string;
@@ -82,6 +100,7 @@ interface DiscoverySession {
   additionalContext: string;
   answerHistory: DiscoveryAnswer[];
   round: number;
+  latestState: DiscoveryInterviewState | null;
 }
 
 interface DiscordNotificationField {
@@ -135,7 +154,7 @@ export class TaskRunner {
   private readonly runningPlanQueues = new Set<string>();
   private readonly abortedPlanQueues = new Set<string>();
   private readonly discoverySessions = new Map<string, DiscoverySession>();
-  /** Set of discovery session IDs that have been cancelled. Checked between specialist completions and before synthesis. */
+  /** Set of discovery session IDs that have been cancelled. Checked between analysis-agent completions and before synthesis. */
   private readonly cancelledDiscoveries = new Set<string>();
   private agentService: RalphAgentService;
 
@@ -187,6 +206,22 @@ export class TaskRunner {
       ...lines,
       "Use this history to avoid redundant plans and preserve continuity."
     ].join("\n");
+  }
+
+  private buildPlanProgressContext(planId: string, limit = 10): string {
+    const entries = this.db.listPlanProgressEntries(planId, limit);
+    if (entries.length === 0) {
+      return "No prior progress entries have been recorded for this plan.";
+    }
+
+    const lines = entries.map((entry, index) => {
+      const source = entry.runId ? `run=${entry.runId}` : "run=none";
+      const normalized = entry.entryText.replace(/\s+/g, " ").trim();
+      const summary = normalized.length > 1000 ? `${normalized.slice(0, 997)}...` : normalized;
+      return `${index + 1}. [${entry.status}] ${entry.createdAt} (${source}) ${summary}`;
+    });
+
+    return ["Plan progress history (most recent first):", ...lines].join("\n");
   }
 
   private composeDiscoveryAdditionalContext(
@@ -293,7 +328,8 @@ export class TaskRunner {
       seedSentence: input.seedSentence,
       additionalContext: input.additionalContext,
       answerHistory: [],
-      round: 0
+      round: 0,
+      latestState: null
     };
 
     this.discoverySessions.set(sessionId, session);
@@ -301,7 +337,7 @@ export class TaskRunner {
       sessionId,
       type: "status",
       level: "info",
-      message: "Discovery started. Spawning specialist agents..."
+      message: "Discovery started. Spawning dynamic analysis agents..."
     });
 
     try {
@@ -337,6 +373,7 @@ export class TaskRunner {
         round: session.round,
         ...initialState
       };
+      session.latestState = fullState;
 
       // Persist session to database
       this.db.createDiscoverySession({
@@ -404,6 +441,7 @@ export class TaskRunner {
         stackRefreshContext: session.additionalContext,
         answerHistory: session.answerHistory,
         latestAnswers: input.answers,
+        previousState: session.latestState,
         callbacks: {
           onEvent: (event) => {
             this.emitDiscoveryEvent({
@@ -428,6 +466,7 @@ export class TaskRunner {
         round: session.round,
         ...nextState
       };
+      session.latestState = fullState;
 
       // Persist updated session state to database
       this.db.updateDiscoverySession({
@@ -497,7 +536,8 @@ export class TaskRunner {
       seedSentence: dbSession.seedSentence,
       additionalContext: dbSession.additionalContext,
       answerHistory: dbSession.answerHistory,
-      round: dbSession.roundNumber
+      round: dbSession.roundNumber,
+      latestState: dbSession.latestState
     });
 
     return dbSession.latestState;
@@ -749,12 +789,56 @@ export class TaskRunner {
 
   async runAll(input: RunAllInput): Promise<RunAllResponse> {
     if (this.runningPlanQueues.has(input.planId)) {
+      this.emitQueueInfo(input.planId, "Queue is already running for this plan.");
       return {
         queued: 0
       };
     }
 
+    const plan = this.db.getPlan(input.planId);
+    if (!plan) {
+      throw new Error(`Plan not found: ${input.planId}`);
+    }
+
+    const inProgressRuns = plan.runs.filter((run) => run.status === "in_progress");
+    const trackedActiveRuns = inProgressRuns.filter((run) => this.activeRuns.has(run.id));
+    const orphanedRuns = inProgressRuns.filter((run) => !this.activeRuns.has(run.id));
+
+    if (trackedActiveRuns.length > 0) {
+      this.emitQueueInfo(
+        input.planId,
+        "A task run is already in progress. Wait for it to finish or cancel it before starting the queue.",
+        "error"
+      );
+      return {
+        queued: 0
+      };
+    }
+
+    if (orphanedRuns.length > 0) {
+      for (const run of orphanedRuns) {
+        this.db.updateRun({
+          runId: run.id,
+          status: "cancelled",
+          endedAt: nowIso(),
+          errorText: "Cancelled (recovered orphaned in-progress run before queue start)"
+        });
+        this.db.updateTaskStatus(run.taskId, "pending");
+      }
+      this.db.updatePlanStatus(input.planId, "ready");
+      this.emitQueueInfo(
+        input.planId,
+        `Recovered ${orphanedRuns.length} orphaned in-progress run(s) before starting queue.`
+      );
+    }
+
     const estimated = this.db.countRunnableTasks(input.planId);
+    if (estimated === 0) {
+      this.emitQueueInfo(input.planId, "No runnable pending tasks available for queue start.");
+      return {
+        queued: 0
+      };
+    }
 
     this.runningPlanQueues.add(input.planId);
     void this.executeQueue(input.planId).finally(() => {
@@ -955,6 +1039,68 @@ export class TaskRunner {
       payload: {
         status: "skipped",
         message: `Task ${input.taskId} skipped by user.`
+      }
+    });
+  }
+
+  approveTaskProposal(input: ApproveTaskProposalInput): ApproveTaskProposalResponse {
+    const plan = this.db.getPlan(input.planId);
+    if (!plan) {
+      throw new Error(`Plan not found: ${input.planId}`);
+    }
+
+    const result = this.db.approveTaskFollowupProposal({
+      planId: input.planId,
+      proposalId: input.proposalId
+    });
+    if (!result) {
+      throw new Error(`Follow-up proposal not found or already processed: ${input.proposalId}`);
+    }
+
+    const latestPlan = this.db.getPlan(input.planId);
+    if (latestPlan && (latestPlan.status === "completed" || latestPlan.status === "failed")) {
+      this.db.updatePlanStatus(input.planId, "ready");
+    }
+
+    this.emitEvent({
+      runId: "",
+      planId: input.planId,
+      taskId: result.taskId,
+      type: "info",
+      level: "info",
+      payload: {
+        message: `Approved follow-up proposal and created task ${result.taskId}.`,
+        proposalId: input.proposalId,
+        taskId: result.taskId
+      }
+    });
+
+    return { taskId: result.taskId };
+  }
+
+  dismissTaskProposal(input: DismissTaskProposalInput): void {
+    const plan = this.db.getPlan(input.planId);
+    if (!plan) {
+      throw new Error(`Plan not found: ${input.planId}`);
+    }
+
+    const changed = this.db.dismissTaskFollowupProposal({
+      planId: input.planId,
+      proposalId: input.proposalId
+    });
+    if (!changed) {
+      throw new Error(`Follow-up proposal not found or already processed: ${input.proposalId}`);
+    }
+
+    this.emitEvent({
+      runId: "",
+      planId: input.planId,
+      taskId: "",
+      type: "info",
+      level: "info",
+      payload: {
+        message: "Follow-up proposal dismissed.",
+        proposalId: input.proposalId
       }
     });
   }
@@ -1542,6 +1688,138 @@ export class TaskRunner {
     }
   }
 
+  private parseArchitectureReviewPayload(payload: unknown): ArchitectureReviewSnapshot | null {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const record = payload as Record<string, unknown>;
+    if (record.kind !== "architecture_review") {
+      return null;
+    }
+
+    const review = record.review;
+    if (!review || typeof review !== "object") {
+      return null;
+    }
+
+    const reviewRecord = review as Record<string, unknown>;
+    const status = typeof reviewRecord.status === "string" ? reviewRecord.status : "";
+    const summary = typeof reviewRecord.summary === "string" ? reviewRecord.summary : "";
+    const confidence =
+      typeof reviewRecord.confidence === "number" && Number.isFinite(reviewRecord.confidence)
+        ? reviewRecord.confidence
+        : 0;
+
+    const findings = Array.isArray(reviewRecord.findings)
+      ? reviewRecord.findings
+          .map((finding) => {
+            if (!finding || typeof finding !== "object") {
+              return null;
+            }
+
+            const findingRecord = finding as Record<string, unknown>;
+            return {
+              severity:
+                typeof findingRecord.severity === "string" ? findingRecord.severity : "unknown",
+              location:
+                typeof findingRecord.location === "string" ? findingRecord.location : "unknown",
+              rule: typeof findingRecord.rule === "string" ? findingRecord.rule : "other",
+              message: typeof findingRecord.message === "string" ? findingRecord.message : "",
+              recommendedAction:
+                typeof findingRecord.recommendedAction === "string"
+                  ? findingRecord.recommendedAction
+                  : ""
+            } as ArchitectureReviewFindingSnapshot;
+          })
+          .filter((finding): finding is ArchitectureReviewFindingSnapshot => {
+            if (!finding) {
+              return false;
+            }
+            return finding.message.trim().length > 0;
+          })
+      : [];
+
+    return {
+      status,
+      summary,
+      confidence,
+      findings
+    };
+  }
+
+  private createArchitectureFollowupProposals(input: {
+    plan: RalphPlan;
+    task: RalphTask;
+    runId: string;
+    review: ArchitectureReviewSnapshot;
+  }): number {
+    if (input.review.status !== "pass_with_notes" || input.review.findings.length === 0) {
+      return 0;
+    }
+
+    let createdCount = 0;
+    for (const finding of input.review.findings) {
+      const findingKey = createHash("sha1")
+        .update(
+          [
+            input.task.id,
+            finding.severity,
+            finding.rule,
+            finding.location,
+            finding.message,
+            finding.recommendedAction
+          ].join("|")
+        )
+        .digest("hex");
+
+      const title = `Architecture follow-up: ${finding.rule} (${finding.location})`;
+      const description = [
+        finding.message.trim(),
+        finding.recommendedAction.trim().length > 0
+          ? `Recommended action: ${finding.recommendedAction.trim()}`
+          : ""
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n");
+      const acceptanceCriteria = [
+        `Address architecture note at ${finding.location}.`,
+        finding.recommendedAction.trim().length > 0
+          ? `Apply this action: ${finding.recommendedAction.trim()}`
+          : "Resolve the reported architecture note without widening scope.",
+        "Keep behavior stable and run relevant tests."
+      ];
+      const technicalNotes = [
+        `Source task: ${input.task.id}`,
+        `Source run: ${input.runId}`,
+        `Review status: ${input.review.status}`,
+        `Review confidence: ${input.review.confidence}`,
+        `Review summary: ${input.review.summary}`
+      ].join("\n");
+
+      const inserted = this.db.createTaskFollowupProposal({
+        planId: input.plan.id,
+        sourceRunId: input.runId,
+        sourceTaskId: input.task.id,
+        findingKey,
+        title,
+        description,
+        severity: finding.severity,
+        rule: finding.rule,
+        location: finding.location,
+        message: finding.message,
+        recommendedAction: finding.recommendedAction,
+        acceptanceCriteria,
+        technicalNotes
+      });
+      if (inserted) {
+        createdCount += 1;
+      }
+    }
+
+    return createdCount;
+  }
+
   private async executeRun(input: {
     runId: string;
     plan: RalphPlan;
@@ -1551,11 +1829,14 @@ export class TaskRunner {
   }): Promise<void> {
     const startedAt = Date.now();
     let sessionId: string | null = null;
+    const planProgressContext = this.buildPlanProgressContext(input.plan.id);
+    let latestArchitectureReview: ArchitectureReviewSnapshot | null = null;
 
     try {
       const result = await this.agentService.runTask({
         plan: input.plan,
         task: input.task,
+        planProgressContext,
         retryContext: input.retryContext,
         workingDirectory: input.executionContext?.workingDirectory,
         branchName: input.executionContext?.branchName,
@@ -1598,6 +1879,10 @@ export class TaskRunner {
             const record =
               payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
             const kind = typeof record?.kind === "string" ? record.kind : null;
+            const parsedArchitectureReview = this.parseArchitectureReviewPayload(payload);
+            if (parsedArchitectureReview) {
+              latestArchitectureReview = parsedArchitectureReview;
+            }
             const message =
               kind === "agent_stage"
                 ? "Agent stage update received."
@@ -1646,6 +1931,18 @@ export class TaskRunner {
           stopReason: result.stopReason,
           totalCostUsd: result.totalCostUsd
         });
+        this.db.appendPlanProgressEntry({
+          planId: input.plan.id,
+          runId: input.runId,
+          status: "cancelled",
+          entryText: [
+            `Task ${input.task.id} (${input.task.title}) was cancelled.`,
+            result.stopReason ? `Stop reason: ${result.stopReason}` : "",
+            result.resultText.trim()
+          ]
+            .filter((block) => block.length > 0)
+            .join("\n\n")
+        });
 
         this.db.updateTaskStatus(input.task.id, "pending");
         this.db.updatePlanStatus(input.plan.id, "ready");
@@ -1671,12 +1968,54 @@ export class TaskRunner {
           stopReason: result.stopReason,
           totalCostUsd: result.totalCostUsd
         });
+        this.db.appendPlanProgressEntry({
+          planId: input.plan.id,
+          runId: input.runId,
+          status: "completed",
+          entryText: [
+            `Task ${input.task.id} (${input.task.title}) completed successfully.`,
+            result.stopReason ? `Stop reason: ${result.stopReason}` : "",
+            result.resultText.trim()
+          ]
+            .filter((block) => block.length > 0)
+            .join("\n\n")
+        });
+        const createdFollowups = latestArchitectureReview
+          ? this.createArchitectureFollowupProposals({
+              plan: input.plan,
+              task: input.task,
+              runId: input.runId,
+              review: latestArchitectureReview
+            })
+          : 0;
+        if (createdFollowups > 0) {
+          this.emitEvent({
+            runId: input.runId,
+            planId: input.plan.id,
+            taskId: input.task.id,
+            type: "info",
+            level: "info",
+            payload: {
+              kind: "architecture_followup_proposals",
+              count: createdFollowups,
+              message:
+                `Architecture review produced ${createdFollowups} follow-up proposal(s). ` +
+                "Approve proposals from the plan detail view to add them to the checklist."
+            }
+          });
+        }
 
         this.db.updateTaskStatus(input.task.id, "completed");
         const allTasksCompleted = this.db
           .getTasks(input.plan.id)
-          .every((task) => task.status === "completed");
-        this.db.updatePlanStatus(input.plan.id, allTasksCompleted ? "completed" : "running");
+          .every((task) => task.status === "completed" || task.status === "skipped");
+        const queueExecution = input.executionContext?.phaseNumber !== undefined;
+        const nextPlanStatus = allTasksCompleted
+          ? "completed"
+          : queueExecution
+            ? "running"
+            : "ready";
+        this.db.updatePlanStatus(input.plan.id, nextPlanStatus);
 
         this.emitEvent({
           runId: input.runId,
@@ -1712,6 +2051,15 @@ export class TaskRunner {
         endedAt: nowIso(),
         durationMs: Date.now() - startedAt,
         errorText: message
+      });
+      this.db.appendPlanProgressEntry({
+        planId: input.plan.id,
+        runId: input.runId,
+        status: "failed",
+        entryText: [
+          `Task ${input.task.id} (${input.task.title}) failed.`,
+          `Error: ${message}`
+        ].join("\n\n")
       });
 
       this.db.updateTaskStatus(input.task.id, "failed");
@@ -2003,7 +2351,11 @@ export class TaskRunner {
       ...event
     };
 
-    this.db.appendRunEvent(payload);
+    // Queue-level informational events have no backing run row and should
+    // only be emitted to the renderer, not persisted in run_events.
+    if (payload.runId.trim().length > 0) {
+      this.db.appendRunEvent(payload);
+    }
 
     const window = this.getWindow();
     if (!window || window.isDestroyed()) {

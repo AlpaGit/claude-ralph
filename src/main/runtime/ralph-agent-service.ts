@@ -9,6 +9,7 @@ import type {
   AgentRole,
   DiscoveryAnswer,
   DiscoveryInferredContext,
+  DiscoveryInterviewState,
   GetWizardGuidanceInput,
   InferStackInput,
   InferStackResult,
@@ -54,6 +55,7 @@ interface RetryContext {
 interface RunTaskArgs {
   plan: RalphPlan;
   task: RalphTask;
+  planProgressContext?: string;
   callbacks: RunTaskCallbacks;
   retryContext?: RetryContext;
   workingDirectory?: string;
@@ -127,15 +129,11 @@ interface StartDiscoveryArgs {
 interface ContinueDiscoveryArgs extends StartDiscoveryArgs {
   answerHistory: DiscoveryAnswer[];
   latestAnswers: DiscoveryAnswer[];
+  previousState?: DiscoveryInterviewState | null;
   stackRefreshContext?: string;
 }
 
-type SpecialistAgentId =
-  | "stack-analyst"
-  | "docs-analyst"
-  | "scope-analyst"
-  | "pain-analyst"
-  | "constraints-analyst";
+type SpecialistAgentId = string;
 
 const MAX_ARCH_REFACTOR_CYCLES = 2;
 const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
@@ -145,9 +143,17 @@ const MUTATING_GIT_COMMAND_PATTERN =
 const GIT_MERGE_COMMAND_PATTERN = /\bgit\s+merge\b/i;
 const STACK_PROFILE_DIR = ".ralph";
 const STACK_PROFILE_FILE = "stack-profile.json";
+const STACK_SPECIALIST_ID = "stack-analyst";
 const STACK_REFRESH_TOKEN_PATTERN = /(?:^|\s)(?:\/refresh-stack|#refresh-stack)\b/i;
+const FULL_DISCOVERY_REFRESH_TOKEN_PATTERN =
+  /(?:^|\s)(?:\/refresh-context|#refresh-context|\/refresh-discovery|#refresh-discovery)\b/i;
+const DISCOVERY_CONTEXT_CHANGE_HINT_PATTERN =
+  /(?:\b(?:scope|requirement|constraints?|deadline|timeline|security|compliance|architecture|infra(?:structure)?|database|api)\b[\s\S]{0,42}\b(?:change|changed|switch|switched|replace|replaced|new|different|pivot)\b|\b(?:change|changed|switch|switched|replace|replaced|new|different|pivot)\b[\s\S]{0,42}\b(?:scope|requirement|constraints?|deadline|timeline|security|compliance|architecture|infra(?:structure)?|database|api)\b)/i;
 const STACK_CHANGE_HINT_PATTERN =
   /(?:\b(?:stack|framework|language|runtime|database|db|orm)\b[\s\S]{0,42}\b(?:change|changed|switch|switched|migrate|migrated|migration|replace|replaced|rewrite|refactor|move|moved)\b|\b(?:change|changed|switch|switched|migrate|migrated|migration|replace|replaced|rewrite|refactor|move|moved)\b[\s\S]{0,42}\b(?:stack|framework|language|runtime|database|db|orm)\b)/i;
+const MAX_DYNAMIC_DISCOVERY_AGENTS = 6;
+const MIN_DYNAMIC_DISCOVERY_AGENTS = 2;
+const MAX_DISCOVERY_AGENT_ID_LENGTH = 48;
 
 interface SpecialistAnalysis {
   summary: string;
@@ -166,12 +172,13 @@ interface SpecialistJob {
   id: SpecialistAgentId;
   title: string;
   objective: string;
+  producesStackProfile: boolean;
 }
 
 export interface StackProfileCache {
   version: 1;
   updatedAt: string;
-  specialistId: "stack-analyst";
+  specialistId: typeof STACK_SPECIALIST_ID;
   stackSummary: string;
   stackHints: string[];
   signals: string[];
@@ -405,12 +412,52 @@ const specialistAnalysisSchema = z.object({
 const stackProfileCacheSchema = z.object({
   version: z.literal(1),
   updatedAt: z.string().min(1),
-  specialistId: z.literal("stack-analyst"),
+  specialistId: z.literal(STACK_SPECIALIST_ID),
   stackSummary: z.string().min(1),
   stackHints: z.array(z.string()),
   signals: z.array(z.string()),
   confidence: z.number().min(0).max(100)
 });
+
+const discoveryAgentPlanSchema = z.object({
+  rationale: z.string().min(20),
+  jobs: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        title: z.string().min(3),
+        objective: z.string().min(20),
+        producesStackProfile: z.boolean()
+      })
+    )
+    .min(1)
+    .max(MAX_DYNAMIC_DISCOVERY_AGENTS)
+});
+
+const discoveryAgentPlanJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    rationale: { type: "string" },
+    jobs: {
+      type: "array",
+      minItems: 1,
+      maxItems: MAX_DYNAMIC_DISCOVERY_AGENTS,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          objective: { type: "string" },
+          producesStackProfile: { type: "boolean" }
+        },
+        required: ["id", "title", "objective", "producesStackProfile"]
+      }
+    }
+  },
+  required: ["rationale", "jobs"]
+} as const;
 
 const specialistAnalysisJsonSchema = {
   type: "object",
@@ -619,6 +666,34 @@ function normalizeConfidencePercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function sanitizeDiscoveryAgentId(raw: string, fallbackOrdinal: number): string {
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  const fallback = `analysis-agent-${fallbackOrdinal}`;
+  const base = normalized.length > 0 ? normalized : fallback;
+  return base.slice(0, MAX_DISCOVERY_AGENT_ID_LENGTH);
+}
+
+function allocateUniqueDiscoveryAgentId(raw: string, fallbackOrdinal: number, used: Set<string>): string {
+  const base = sanitizeDiscoveryAgentId(raw, fallbackOrdinal);
+  let candidate = base;
+  let suffix = 2;
+
+  while (used.has(candidate)) {
+    const suffixText = `-${suffix}`;
+    const trimmedBase = base.slice(0, Math.max(1, MAX_DISCOVERY_AGENT_ID_LENGTH - suffixText.length));
+    candidate = `${trimmedBase}${suffixText}`;
+    suffix += 1;
+  }
+
+  used.add(candidate);
+  return candidate;
+}
+
 function extractBashCommand(toolInput: Record<string, unknown>): string {
   const candidateKeys = ["command", "cmd", "script", "input", "args", "argv"];
 
@@ -811,36 +886,28 @@ function formatAnswers(answers: DiscoveryAnswer[]): string {
     .join("\n");
 }
 
-const SPECIALIST_JOBS: SpecialistJob[] = [
+const STACK_SPECIALIST_JOB: SpecialistJob = {
+  id: STACK_SPECIALIST_ID,
+  title: "Stack analysis",
+  objective:
+    "Infer the real technology stack, core architecture style, and likely integration points from repository and context.",
+  producesStackProfile: true
+};
+
+const FALLBACK_DYNAMIC_DISCOVERY_JOBS: SpecialistJob[] = [
   {
-    id: "stack-analyst",
-    title: "Stack analysis",
+    id: "prd-goal-analyst",
+    title: "PRD goal analysis",
     objective:
-      "Infer the real technology stack, core architecture style, and likely integration points from repository and context."
+      "Clarify product objective, success criteria, and ambiguous scope decisions required for a complete pre-PRD draft.",
+    producesStackProfile: false
   },
   {
-    id: "docs-analyst",
-    title: "Documentation analysis",
+    id: "delivery-risk-analyst",
+    title: "Delivery risk analysis",
     objective:
-      "Assess documentation quality, identify missing decision-critical docs, and infer documentation gaps that would block implementation."
-  },
-  {
-    id: "scope-analyst",
-    title: "Scope analysis",
-    objective:
-      "Define likely scope boundaries, impacted components/services, and out-of-scope areas to prevent overreach."
-  },
-  {
-    id: "pain-analyst",
-    title: "Pain-point analysis",
-    objective:
-      "Identify likely reliability, delivery, and performance pain points plus plausible root-cause candidates."
-  },
-  {
-    id: "constraints-analyst",
-    title: "Constraint analysis",
-    objective:
-      "Identify hard constraints such as compatibility, migration, compliance, operational, and timeline/resource limits."
+      "Identify implementation blockers, operational constraints, and unresolved decisions that can change technical execution.",
+    producesStackProfile: false
   }
 ];
 
@@ -934,7 +1001,7 @@ export class RalphAgentService {
     return {
       version: 1,
       updatedAt: new Date().toISOString(),
-      specialistId: "stack-analyst",
+      specialistId: STACK_SPECIALIST_ID,
       stackSummary: report.summary,
       stackHints: report.stackHints,
       signals: report.signals,
@@ -958,6 +1025,22 @@ export class RalphAgentService {
     return STACK_CHANGE_HINT_PATTERN.test(combined);
   }
 
+  private shouldForceFullDiscoveryRefresh(additionalContext: string, latestAnswers: DiscoveryAnswer[]): boolean {
+    const combined = [additionalContext, ...latestAnswers.map((entry) => entry.answer)]
+      .filter((value) => value.trim().length > 0)
+      .join("\n");
+
+    if (combined.length === 0) {
+      return false;
+    }
+
+    if (FULL_DISCOVERY_REFRESH_TOKEN_PATTERN.test(combined)) {
+      return true;
+    }
+
+    return DISCOVERY_CONTEXT_CHANGE_HINT_PATTERN.test(combined);
+  }
+
   async refreshStackProfile(args: {
     projectPath: string;
     additionalContext?: string;
@@ -969,10 +1052,6 @@ export class RalphAgentService {
     }
 
     const cwd = resolveQueryCwd(normalizedPath);
-    const stackJob = SPECIALIST_JOBS.find((job) => job.id === "stack-analyst");
-    if (!stackJob) {
-      throw new Error("stack-analyst specialist is not configured.");
-    }
 
     const prompt = `
 Stack profile refresh request.
@@ -990,7 +1069,7 @@ Goal:
 `;
 
     const result = await this.runSpecialistAnalysis({
-      job: stackJob,
+      job: STACK_SPECIALIST_JOB,
       prompt,
       cwd,
       maxTurns: 8,
@@ -1044,10 +1123,15 @@ Goal:
     const stackCache = await this.readStackProfileCache(args.projectPath);
     const refreshContext = args.stackRefreshContext ?? args.additionalContext;
     const refreshStack = this.shouldRefreshStackAnalysis(refreshContext, args.latestAnswers);
+    const forceFullRefresh = this.shouldForceFullDiscoveryRefresh(refreshContext, args.latestAnswers);
+    const canReusePriorContext = Boolean(args.previousState) && !refreshStack && !forceFullRefresh;
     const includeStackSpecialist = stackCache === null || refreshStack;
-    const stackRefreshReason =
-      refreshStack
+    const stackRefreshReason = canReusePriorContext
+      ? null
+      : refreshStack
         ? "Detected stack-change signal in latest answers/context. Re-running stack specialist."
+        : forceFullRefresh
+          ? "Detected significant context change in latest answers/context. Re-running full discovery analyses."
         : stackCache === null
           ? "No stack cache found; running stack analysis."
           : null;
@@ -1083,8 +1167,209 @@ Goal:
       projectPath: args.projectPath,
       includeStackSpecialist,
       stackCache,
-      stackRefreshReason
+      stackRefreshReason,
+      skipAnalysisRefresh: canReusePriorContext,
+      carryForwardState: args.previousState ?? null
     });
+  }
+
+  private buildFallbackDiscoveryJobs(includeStackSpecialist: boolean): SpecialistJob[] {
+    const usedIds = new Set<string>();
+    const jobs: SpecialistJob[] = [];
+
+    if (includeStackSpecialist) {
+      jobs.push({
+        ...STACK_SPECIALIST_JOB,
+        id: allocateUniqueDiscoveryAgentId(STACK_SPECIALIST_JOB.id, 1, usedIds),
+        producesStackProfile: true
+      });
+    }
+
+    for (const fallbackJob of FALLBACK_DYNAMIC_DISCOVERY_JOBS) {
+      if (jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
+        break;
+      }
+      jobs.push({
+        ...fallbackJob,
+        id: allocateUniqueDiscoveryAgentId(fallbackJob.id, jobs.length + 1, usedIds),
+        producesStackProfile: false
+      });
+    }
+
+    if (jobs.length === 0) {
+      jobs.push({
+        id: allocateUniqueDiscoveryAgentId("analysis-agent", 1, usedIds),
+        title: "General discovery analysis",
+        objective:
+          "Identify unresolved product, scope, and delivery decisions needed to produce a complete pre-PRD draft.",
+        producesStackProfile: false
+      });
+    }
+
+    return jobs;
+  }
+
+  private async planDynamicDiscoveryJobs(input: {
+    prompt: string;
+    cwd: string;
+    maxTurns: number;
+    callbacks?: DiscoveryCallbacks;
+    includeStackSpecialist: boolean;
+    stackCache?: StackProfileCache | null;
+    projectPath?: string;
+  }): Promise<{ jobs: SpecialistJob[]; rationale: string }> {
+    const projectPath = input.projectPath?.trim() ?? "";
+    const hasProjectPath = projectPath.length > 0 && existsSync(projectPath);
+    const stackCacheSummary =
+      input.stackCache
+        ? JSON.stringify(
+            {
+              stackSummary: input.stackCache.stackSummary,
+              stackHints: input.stackCache.stackHints,
+              signals: input.stackCache.signals,
+              confidence: input.stackCache.confidence,
+              updatedAt: input.stackCache.updatedAt
+            },
+            null,
+            2
+          )
+        : "none";
+
+    const plannerPrompt = `
+You are the master discovery orchestrator for Ralph mode.
+
+Objective:
+- Decide which analysis agents are required for this round to reach a complete pre-PRD.
+- This step plans agents only. Do not run analyses yourself.
+
+Discovery context:
+${input.prompt}
+
+Project path:
+${projectPath || "(not provided)"}
+Project mode:
+${hasProjectPath ? "existing codebase" : "new/unspecified project"}
+
+Cached project memory / stack profile (use as default truth when available):
+${stackCacheSummary}
+
+Stack refresh required this round:
+${input.includeStackSpecialist ? "yes" : "no"}
+
+Planning rules:
+1) Define a dynamic set of analysis agents based on this request. Do NOT rely on a fixed preset list.
+2) Choose the smallest set that can still complete a high-quality pre-PRD in this round.
+3) Jobs must be parallelizable and non-overlapping.
+4) Return between ${MIN_DYNAMIC_DISCOVERY_AGENTS} and ${MAX_DYNAMIC_DISCOVERY_AGENTS} jobs unless context is trivial.
+5) id must be short kebab-case and unique.
+6) objective must be concrete and evidence-oriented.
+7) If stack refresh required is "yes", exactly one job must set producesStackProfile=true.
+8) If stack refresh required is "no", set producesStackProfile=false for all jobs and rely on cached stack where present.
+`;
+
+    let structuredOutput: unknown;
+    let resultText = "";
+
+    for await (const message of query({
+      prompt: plannerPrompt,
+      options: {
+        ...baseOptions,
+        model: this.getModel("discovery_specialist"),
+        cwd: input.cwd,
+        maxTurns: Math.max(6, Math.ceil(input.maxTurns * 0.45)),
+        outputFormat: {
+          type: "json_schema",
+          schema: discoveryAgentPlanJsonSchema
+        }
+      }
+    })) {
+      const resultMessage = message as { type?: string; structured_output?: unknown; result?: string };
+      if (resultMessage.type === "result") {
+        if (typeof resultMessage.result === "string") {
+          resultText = resultMessage.result;
+        }
+        structuredOutput = resultMessage.structured_output ?? tryParseStructuredOutputFromText(resultText);
+      }
+    }
+
+    if (!structuredOutput) {
+      throw new Error("Master discovery orchestrator produced no structured agent plan.");
+    }
+
+    const parsedPlan = discoveryAgentPlanSchema.parse(structuredOutput);
+    const usedIds = new Set<string>();
+    let jobs: SpecialistJob[] = parsedPlan.jobs.map((job, index) => ({
+      id: allocateUniqueDiscoveryAgentId(job.id, index + 1, usedIds),
+      title: job.title.trim(),
+      objective: job.objective.trim(),
+      producesStackProfile: Boolean(job.producesStackProfile)
+    }));
+
+    if (!input.includeStackSpecialist) {
+      jobs = jobs.map((job) => ({ ...job, producesStackProfile: false }));
+    } else {
+      let stackAssigned = false;
+      jobs = jobs.map((job) => {
+        if (job.producesStackProfile && !stackAssigned) {
+          stackAssigned = true;
+          return { ...job, producesStackProfile: true };
+        }
+        return { ...job, producesStackProfile: false };
+      });
+
+      if (!stackAssigned) {
+        const stackJob: SpecialistJob = {
+          ...STACK_SPECIALIST_JOB,
+          id: allocateUniqueDiscoveryAgentId(STACK_SPECIALIST_JOB.id, jobs.length + 1, usedIds),
+          producesStackProfile: true
+        };
+        if (jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
+          jobs[jobs.length - 1] = stackJob;
+        } else {
+          jobs.push(stackJob);
+        }
+      }
+    }
+
+    if (jobs.length < MIN_DYNAMIC_DISCOVERY_AGENTS) {
+      for (const fallbackJob of FALLBACK_DYNAMIC_DISCOVERY_JOBS) {
+        if (jobs.length >= MIN_DYNAMIC_DISCOVERY_AGENTS || jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
+          break;
+        }
+        jobs.push({
+          ...fallbackJob,
+          id: allocateUniqueDiscoveryAgentId(fallbackJob.id, jobs.length + 1, usedIds),
+          producesStackProfile: false
+        });
+      }
+    }
+
+    if (jobs.length === 0) {
+      jobs = this.buildFallbackDiscoveryJobs(input.includeStackSpecialist);
+    }
+
+    if (jobs.length > MAX_DYNAMIC_DISCOVERY_AGENTS) {
+      jobs = jobs.slice(0, MAX_DYNAMIC_DISCOVERY_AGENTS);
+    }
+
+    if (input.includeStackSpecialist && !jobs.some((job) => job.producesStackProfile)) {
+      const usedTrimmedIds = new Set(jobs.map((job) => job.id));
+      const stackJob: SpecialistJob = {
+        ...STACK_SPECIALIST_JOB,
+        id: allocateUniqueDiscoveryAgentId(STACK_SPECIALIST_JOB.id, jobs.length + 1, usedTrimmedIds),
+        producesStackProfile: true
+      };
+      if (jobs.length >= MAX_DYNAMIC_DISCOVERY_AGENTS) {
+        jobs[jobs.length - 1] = stackJob;
+      } else {
+        jobs.push(stackJob);
+      }
+    }
+
+    return {
+      jobs,
+      rationale: parsedPlan.rationale.trim()
+    };
   }
 
   private async runDiscoveryPrompt(
@@ -1097,11 +1382,13 @@ Goal:
       includeStackSpecialist?: boolean;
       stackCache?: StackProfileCache | null;
       stackRefreshReason?: string | null;
+      skipAnalysisRefresh?: boolean;
+      carryForwardState?: DiscoveryInterviewState | null;
     }
   ): Promise<DiscoveryOutput> {
-    const selectedJobs = (options?.includeStackSpecialist ?? true)
-      ? SPECIALIST_JOBS
-      : SPECIALIST_JOBS.filter((job) => job.id !== "stack-analyst");
+    const includeStackSpecialist = options?.includeStackSpecialist ?? true;
+    const skipAnalysisRefresh = options?.skipAnalysisRefresh ?? false;
+    const carryForwardState = options?.carryForwardState ?? null;
 
     if (options?.stackRefreshReason) {
       callbacks?.onEvent({
@@ -1121,152 +1408,248 @@ Goal:
       });
     }
 
-    callbacks?.onEvent({
-      type: "status",
-      level: "info",
-      message: "Launching specialist analyses in parallel..."
-    });
+    let specialistSummary = "";
+    let failedSpecialistSummary = "none";
+    let stackReport: SpecialistAnalysis | null = null;
 
-    const specialistTurns = Math.max(8, Math.ceil(maxTurns * 0.6));
-    const specialistMaxAttempts = 2;
-
-    const specialistOutcomes = await Promise.all(
-      selectedJobs.map(async (job) => {
-        let lastError = "Unknown specialist failure.";
-
-        for (let attempt = 1; attempt <= specialistMaxAttempts; attempt += 1) {
-          try {
-            const result = await this.runSpecialistAnalysis({
-              job,
-              prompt,
-              cwd,
-              maxTurns: specialistTurns,
-              callbacks,
-              attempt,
-              maxAttempts: specialistMaxAttempts
-            });
-            return {
-              job,
-              report: result.report,
-              error: null,
-              attemptsUsed: attempt
-            };
-          } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
-            callbacks?.onEvent({
-              type: "agent",
-              level: "error",
-              message: `Specialist attempt failed: ${job.id} (${attempt}/${specialistMaxAttempts})`,
-              agent: job.id,
-              details: lastError
-            });
-          }
-        }
-
-        return {
-          job,
-          report: null,
-          error: lastError,
-          attemptsUsed: specialistMaxAttempts
-        };
-      })
-    );
-
-    const completedReports: Array<{ job: SpecialistJob; report: SpecialistAnalysis }> = specialistOutcomes
-      .filter((outcome) => outcome.report !== null)
-      .map((outcome) => ({ job: outcome.job, report: outcome.report as SpecialistAnalysis }));
-    const failedReports = specialistOutcomes.filter((outcome) => outcome.report === null);
-
-    if (completedReports.length === 0) {
-      throw new Error("All specialist analyses failed.");
-    }
-
-    if (failedReports.length > 0) {
+    if (skipAnalysisRefresh && carryForwardState) {
       callbacks?.onEvent({
         type: "status",
-        level: "error",
+        level: "info",
         message:
-          `Specialists finished with partial failures: ` +
-          `${completedReports.length} succeeded, ${failedReports.length} failed. ` +
-          "Synthesizing PRD input with available analyses."
+          "No major context change detected. Reusing prior discovery context and skipping deep analysis refresh."
       });
+
+      const carryForwardSnapshot = {
+        objective: "Carry forward prior discovery context",
+        producesStackProfile: false,
+        summary: carryForwardState.directionSummary,
+        findings: [],
+        signals: carryForwardState.inferredContext.signals,
+        painPoints: carryForwardState.inferredContext.painPoints,
+        constraints: carryForwardState.inferredContext.constraints,
+        scopeHints: [carryForwardState.inferredContext.scope],
+        stackHints: [carryForwardState.inferredContext.stack],
+        documentationHints: [carryForwardState.inferredContext.documentation],
+        questions: carryForwardState.missingCriticalInfo,
+        confidence: normalizeConfidencePercent(carryForwardState.readinessScore)
+      };
+
+      const summaries = [
+        `### carried-context\n${JSON.stringify(carryForwardSnapshot, null, 2)}`
+      ];
+      if (options?.stackCache) {
+        summaries.push(
+          `### stack-cache\n` +
+            JSON.stringify(
+              {
+                summary: options.stackCache.stackSummary,
+                findings: [],
+                signals: options.stackCache.signals,
+                painPoints: [],
+                constraints: [],
+                scopeHints: [],
+                stackHints: options.stackCache.stackHints,
+                documentationHints: [],
+                questions: [],
+                confidence: options.stackCache.confidence
+              },
+              null,
+              2
+            )
+        );
+      }
+
+      specialistSummary = summaries.join("\n\n");
     } else {
       callbacks?.onEvent({
         type: "status",
         level: "info",
-        message: `All specialists completed (${completedReports.length}/${selectedJobs.length}). Synthesizing final PRD input...`
+        message: "Master orchestrator is planning discovery agents for this round..."
       });
-    }
 
-    const stackReport = completedReports.find((entry) => entry.job.id === "stack-analyst")?.report ?? null;
-    if (stackReport && options?.projectPath) {
-      await this.writeStackProfileCache(options.projectPath, stackReport);
-    }
+      let selectedJobs: SpecialistJob[];
+      try {
+        const planned = await this.planDynamicDiscoveryJobs({
+          prompt,
+          cwd,
+          maxTurns,
+          callbacks,
+          includeStackSpecialist,
+          stackCache: options?.stackCache,
+          projectPath: options?.projectPath
+        });
+        selectedJobs = planned.jobs;
+        callbacks?.onEvent({
+          type: "status",
+          level: "info",
+          message: `Master orchestrator selected ${selectedJobs.length} dynamic analysis agents.`
+        });
+        callbacks?.onEvent({
+          type: "log",
+          level: "info",
+          message: `[orchestrator] ${planned.rationale}`
+        });
+      } catch (error) {
+        selectedJobs = this.buildFallbackDiscoveryJobs(includeStackSpecialist);
+        const details = error instanceof Error ? error.message : String(error);
+        callbacks?.onEvent({
+          type: "status",
+          level: "error",
+          message: "Dynamic agent planning failed; using fallback discovery agents.",
+          details
+        });
+      }
 
-    const specialistSummaries = completedReports.map(
-        ({ job, report }) =>
-          `### ${job.id}\n` +
-          JSON.stringify(
-            {
-              summary: report.summary,
-              findings: report.findings,
-              signals: report.signals,
-              painPoints: report.painPoints,
-              constraints: report.constraints,
-              scopeHints: report.scopeHints,
-              stackHints: report.stackHints,
-              documentationHints: report.documentationHints,
-              questions: report.questions,
-              confidence: report.confidence
-            },
-            null,
-            2
-          )
+      callbacks?.onEvent({
+        type: "status",
+        level: "info",
+        message: `Launching ${selectedJobs.length} discovery analyses in parallel...`
+      });
+
+      const specialistTurns = Math.max(8, Math.ceil(maxTurns * 0.6));
+      const specialistMaxAttempts = 2;
+
+      const specialistOutcomes = await Promise.all(
+        selectedJobs.map(async (job) => {
+          let lastError = "Unknown specialist failure.";
+
+          for (let attempt = 1; attempt <= specialistMaxAttempts; attempt += 1) {
+            try {
+              const result = await this.runSpecialistAnalysis({
+                job,
+                prompt,
+                cwd,
+                maxTurns: specialistTurns,
+                callbacks,
+                attempt,
+                maxAttempts: specialistMaxAttempts
+              });
+              return {
+                job,
+                report: result.report,
+                error: null,
+                attemptsUsed: attempt
+              };
+            } catch (error) {
+              lastError = error instanceof Error ? error.message : String(error);
+              callbacks?.onEvent({
+                type: "agent",
+                level: "error",
+                message: `Specialist attempt failed: ${job.id} (${attempt}/${specialistMaxAttempts})`,
+                agent: job.id,
+                details: lastError
+              });
+            }
+          }
+
+          return {
+            job,
+            report: null,
+            error: lastError,
+            attemptsUsed: specialistMaxAttempts
+          };
+        })
       );
 
-    if (!stackReport && options?.stackCache) {
-      specialistSummaries.push(
-        `### stack-cache\n` +
-          JSON.stringify(
-            {
-              summary: options.stackCache.stackSummary,
-              findings: [],
-              signals: options.stackCache.signals,
-              painPoints: [],
-              constraints: [],
-              scopeHints: [],
-              stackHints: options.stackCache.stackHints,
-              documentationHints: [],
-              questions: [],
-              confidence: options.stackCache.confidence
-            },
-            null,
-            2
-          )
-      );
-    }
+      const completedReports: Array<{ job: SpecialistJob; report: SpecialistAnalysis }> = specialistOutcomes
+        .filter((outcome) => outcome.report !== null)
+        .map((outcome) => ({ job: outcome.job, report: outcome.report as SpecialistAnalysis }));
+      const failedReports = specialistOutcomes.filter((outcome) => outcome.report === null);
 
-    const specialistSummary = specialistSummaries.join("\n\n");
-    const failedSpecialistSummary =
-      failedReports.length > 0
-        ? failedReports
-            .map((failed) => `- ${failed.job.id} (attempts: ${failed.attemptsUsed}): ${failed.error}`)
-            .join("\n")
-        : "none";
+      if (completedReports.length === 0) {
+        throw new Error("All discovery analyses failed.");
+      }
+
+      if (failedReports.length > 0) {
+        callbacks?.onEvent({
+          type: "status",
+          level: "error",
+          message:
+            `Discovery analyses finished with partial failures: ` +
+            `${completedReports.length} succeeded, ${failedReports.length} failed. ` +
+            "Synthesizing PRD input with available analyses."
+        });
+      } else {
+        callbacks?.onEvent({
+          type: "status",
+          level: "info",
+          message: `All discovery analyses completed (${completedReports.length}/${selectedJobs.length}). Synthesizing final PRD input...`
+        });
+      }
+
+      stackReport = completedReports.find((entry) => entry.job.producesStackProfile)?.report ?? null;
+      if (stackReport && options?.projectPath) {
+        await this.writeStackProfileCache(options.projectPath, stackReport);
+      }
+
+      const specialistSummaries = completedReports.map(
+          ({ job, report }) =>
+            `### ${job.id} (${job.title})\n` +
+            JSON.stringify(
+              {
+                objective: job.objective,
+                producesStackProfile: job.producesStackProfile,
+                summary: report.summary,
+                findings: report.findings,
+                signals: report.signals,
+                painPoints: report.painPoints,
+                constraints: report.constraints,
+                scopeHints: report.scopeHints,
+                stackHints: report.stackHints,
+                documentationHints: report.documentationHints,
+                questions: report.questions,
+                confidence: report.confidence
+              },
+              null,
+              2
+            )
+        );
+
+      if (!stackReport && options?.stackCache) {
+        specialistSummaries.push(
+          `### stack-cache\n` +
+            JSON.stringify(
+              {
+                summary: options.stackCache.stackSummary,
+                findings: [],
+                signals: options.stackCache.signals,
+                painPoints: [],
+                constraints: [],
+                scopeHints: [],
+                stackHints: options.stackCache.stackHints,
+                documentationHints: [],
+                questions: [],
+                confidence: options.stackCache.confidence
+              },
+              null,
+              2
+            )
+        );
+      }
+
+      specialistSummary = specialistSummaries.join("\n\n");
+      failedSpecialistSummary =
+        failedReports.length > 0
+          ? failedReports
+              .map((failed) => `- ${failed.job.id} (attempts: ${failed.attemptsUsed}): ${failed.error}`)
+              .join("\n")
+          : "none";
+    }
 
     const synthesisPrompt = `
 You are a senior PRD discovery synthesizer.
 
 ${prompt}
 
-Specialist outputs (parallel analyses):
+Dynamic analysis outputs (parallel):
 ${specialistSummary}
 
-Failed specialists after retries:
+Failed analyses after retries:
 ${failedSpecialistSummary}
 
 Synthesis requirements:
-1) Merge specialist findings into one coherent direction summary.
+1) Merge analysis findings into one coherent direction summary.
 2) Build inferredContext with practical stack/docs/scope/pain/constraints/signals.
 3) Produce EXACTLY 3 high-impact clarification questions per round:
    - Every question MUST have question_type set to "multiple_choice".
@@ -1279,7 +1662,7 @@ Synthesis requirements:
 4) Generate a polished prdInputDraft ready for plan generation.
 5) readinessScore must reflect real confidence.
 6) missingCriticalInfo must list blockers that can still change implementation decisions.
-7) If any specialist failed, explicitly reflect uncertainty in missingCriticalInfo.
+7) If any analysis failed, explicitly reflect uncertainty in missingCriticalInfo.
 8) If stack-cache is present, treat it as the default stack truth unless new evidence contradicts it.
 `;
 
@@ -1843,14 +2226,26 @@ Rules:
     if (!initialHead) {
       throw new Error("Unable to determine current git HEAD for task execution.");
     }
+    const strictHeadGuard = Boolean(args.branchName);
+    let expectedHead = initialHead;
 
     const ensureNoCommitYet = async (stageLabel: string): Promise<void> => {
       const currentHead = await readGitHeadCommit(cwd);
-      if (currentHead && currentHead !== initialHead) {
+      if (!currentHead || currentHead === expectedHead) {
+        return;
+      }
+
+      if (strictHeadGuard) {
         throw new Error(
-          `Runtime policy violation: git HEAD changed before committer stage (${stageLabel}). initial=${initialHead}, current=${currentHead}.`
+          `Runtime policy violation: git HEAD changed before committer stage (${stageLabel}). expected=${expectedHead}, current=${currentHead}.`
         );
       }
+
+      args.callbacks.onLog(
+        `\n[policy] Shared-checkout HEAD drift detected before committer stage (${stageLabel}). ` +
+        `expected=${expectedHead}, current=${currentHead}. Continuing and rebasing guard baseline.\n`
+      );
+      expectedHead = currentHead;
     };
 
     const runStage = async (input: {
@@ -2035,9 +2430,19 @@ Rules:
     const worktreeInjection = args.branchName
       ? `\nExecution context: cwd=${cwd}, branch=${args.branchName}, phase=${args.phaseNumber ?? "n/a"}\n`
       : "";
+    const planProgressContext =
+      args.planProgressContext && args.planProgressContext.trim().length > 0
+        ? args.planProgressContext.trim()
+        : "No prior progress entries have been recorded for this plan.";
     const taskContext = `
 Plan summary:
 ${args.plan.summary}
+
+PRD:
+${args.plan.prdText}
+
+Plan progress history:
+${planProgressContext}
 
 Task:
 - id: ${args.task.id}
@@ -2071,7 +2476,7 @@ ${worktreeInjection}
 ${taskContext}
 
 Instructions:
-1) Read PRD.md and progress.txt.
+1) Use the in-prompt PRD and plan progress history as authoritative context.
 2) Implement only this task.
 3) Keep code changes scoped and production-safe.
 4) Do NOT run git commit or git merge.
