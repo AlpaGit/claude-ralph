@@ -420,3 +420,29 @@ p1-14: Create PlanListView and LiveRunView stubs with real data   [DONE]
     - Responsive: single-column below 900px
     - All values reference tokens.css custom properties
   - Build and typecheck pass
+
+p1-15: Create SettingsView stub   [DONE]
+  - src/renderer/views/SettingsView.tsx
+    - Replaced stub with full settings view reading from settingsStore
+    - Three UCard sections: Model Configuration, Application Preferences, About
+    - Model Configuration: read-only table of agent roles (planning, discovery, execution, wizard)
+    - Each role row shows: role name, human-readable description, model ID with "(default)" hint
+    - MODEL_ROLES ordered list and ROLE_DESCRIPTIONS map for display
+    - Loads settings on mount via useSettingsStore.loadSettings()
+    - Loading state: USkeleton text placeholder while settings load
+    - Error state: styled error panel when loadSettings fails
+    - Application Preferences: placeholder text for future theme, notifications, default paths
+    - About section: 2-column grid showing App Version, Electron, Node.js, Chromium versions
+    - Version info hardcoded (0.1.0, 33.x, 20.x, 130.x) -- IPC exposure deferred to Phase 2
+  - src/renderer/views/SettingsView.module.css
+    - View layout: padded, max-width constrained, auto-centered
+    - Sections stack: flex column with gap spacing
+    - Model table: mono font, dashed border rows, uppercase headers, role capitalized
+    - Model cell: accent-2 color with italic read-only hint
+    - About grid: 2-column auto/1fr layout with sans label + mono value
+    - Placeholder text: muted mono font
+    - Error panel: red border with error-bg background
+    - Responsive: single-column about grid below 768px
+    - All values reference tokens.css custom properties
+  - Route /settings already wired in router.tsx from p1-09
+  - Build and typecheck pass
