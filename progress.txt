@@ -510,3 +510,18 @@ p1-18: Fix bug: taskRunMap shows latest run per task   [DONE]
     - getPlan() already had ORDER BY started_at DESC on runs query (no change needed)
     - DB ordering is now a performance optimization, not a correctness requirement
   - Build and typecheck pass
+
+p1-19: Fix bug: getPlan surfaces JSON parse errors   [DONE]
+  - src/main/runtime/app-database.ts
+    - PlanParseError class (new export): custom Error subclass with field, entityId, cause
+    - Message format: "Failed to parse ${field} for plan ${entityId}: ${causeMsg}"
+    - getPlan(): technical_pack_json catch block now logs error and throws PlanParseError
+      instead of silently returning null
+    - parseJsonArray(): signature extended with (field, entityId) context params
+    - parseJsonArray(): catch block now logs with [AppDatabase] prefix and throws PlanParseError
+      instead of silently returning []
+    - All parseJsonArray call sites updated in getPlan(), getTask(), getTasks()
+      to pass field name and entity (task) ID for diagnostic context
+    - Callers (ipc.ts, planStore.ts, task-runner.ts) already have try/catch
+      that surface thrown errors properly
+  - Build and typecheck pass
