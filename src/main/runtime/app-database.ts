@@ -130,10 +130,10 @@ export class AppDatabase {
     // Bind touchProject so repositories can resolve project identity
     // without owning the projects table directly.
     const touchProjectBound = this.touchProject.bind(this);
-    this.planRepo = new PlanRepository(this.db, touchProjectBound);
+    this.proposalRepo = new ProposalRepository(this.db);
+    this.planRepo = new PlanRepository(this.db, touchProjectBound, this.proposalRepo);
     this.taskRepo = new TaskRepository(this.db);
     this.runRepo = new RunRepository(this.db);
-    this.proposalRepo = new ProposalRepository(this.db);
   }
 
   private parseProjectStackProfile(raw: string | null): ProjectStackProfile | null {

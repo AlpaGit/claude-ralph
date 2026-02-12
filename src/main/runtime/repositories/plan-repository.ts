@@ -6,7 +6,6 @@ import type {
   PlanStatus,
   RalphPlan,
   RalphTask,
-  TaskFollowupProposal,
   TaskRun,
   TechnicalPack,
 } from "@shared/types";
@@ -17,13 +16,12 @@ import {
   type PlanProgressEntryRow,
   type PlanRow,
   type RunRow,
-  type TaskFollowupProposalRow,
   type TaskRow,
   mapPlanListRow,
   mapRunRow,
-  mapTaskFollowupProposalRow,
   mapTaskRow,
 } from "./row-mappers";
+import type { ProposalRepository } from "./proposal-repository";
 
 /**
  * Callback that resolves a project path to a project identity.
@@ -44,6 +42,7 @@ export class PlanRepository {
   constructor(
     private readonly conn: BetterSqlite3.Database,
     private readonly touchProject: TouchProjectFn,
+    private readonly proposalRepo: ProposalRepository,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -130,21 +129,6 @@ export class PlanRepository {
       .prepare("SELECT * FROM runs WHERE plan_id = ? ORDER BY started_at DESC;")
       .all(planId) as RunRow[];
 
-    const proposalRows = this.conn
-      .prepare(
-        `
-        SELECT
-          id, plan_id, source_run_id, source_task_id, finding_key,
-          title, description, severity, rule, location, message, recommended_action,
-          acceptance_criteria_json, technical_notes,
-          status, approved_task_id, created_at, updated_at
-        FROM task_followup_proposals
-        WHERE plan_id = ?
-        ORDER BY created_at DESC;
-      `,
-      )
-      .all(planId) as TaskFollowupProposalRow[];
-
     let technicalPack: TechnicalPack;
     try {
       technicalPack = JSON.parse(planRow.technical_pack_json) as TechnicalPack;
@@ -157,7 +141,7 @@ export class PlanRepository {
 
     const tasks: RalphTask[] = taskRows.map(mapTaskRow);
     const runs: TaskRun[] = runRows.map(mapRunRow);
-    const taskProposals: TaskFollowupProposal[] = proposalRows.map(mapTaskFollowupProposalRow);
+    const taskProposals = this.proposalRepo.listTaskFollowupProposals(planId);
 
     return {
       id: planRow.id,
