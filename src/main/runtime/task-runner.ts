@@ -51,7 +51,12 @@ import type {
   UpdateAppSettingsInput
 } from "@shared/types";
 import { AppDatabase } from "./app-database";
-import { type ModelConfigMap, createModelResolver } from "./agent-constants";
+import {
+  CLAUDE_COAUTHOR_TRAILER,
+  CONVENTIONAL_COMMIT_HEADER,
+  type ModelConfigMap,
+  createModelResolver
+} from "./agent-constants";
 import { DiscoveryAgent, type StackProfileStore } from "./discovery-agent";
 import { PlannerAgent, type CreatePlanResult } from "./planner-agent";
 import { TaskAgent } from "./task-agent";
@@ -202,9 +207,6 @@ const QUEUE_MERGE_VALIDATION_COMMANDS = (() => {
     .map((command) => command.trim())
     .filter((command) => command.length > 0);
 })();
-
-const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
-const CLAUDE_COAUTHOR_TRAILER = /co-authored-by:\s*.*claude/i;
 
 export class TaskRunner {
   private readonly activeRuns = new Map<string, ActiveRun>();
