@@ -8,6 +8,7 @@ import { USkeleton } from "../components/ui";
 import { PlanOverview } from "../components/plan/PlanOverview";
 import { TechnicalPackPanel } from "../components/plan/TechnicalPackPanel";
 import { TaskCard } from "../components/plan/TaskCard";
+import { AgentActivityBoard } from "../components/plan/AgentActivityBoard";
 import { RecentEvents } from "../components/plan/RecentEvents";
 import { toastService } from "../services/toastService";
 import styles from "./PlanDetailView.module.css";
@@ -507,6 +508,16 @@ export function PlanDetailView(): JSX.Element {
               />
             ))}
           </div>
+        </div>
+
+        {/* Agent Activity Board */}
+        <div className={styles.spanFull}>
+          <AgentActivityBoard
+            plan={plan}
+            events={planEvents}
+            selectedRunId={selectedRunId}
+            onSelectRun={handleOpenRun}
+          />
         </div>
 
         {/* Live Run Panel */}
