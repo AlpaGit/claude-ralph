@@ -3,6 +3,7 @@ import { immer } from "zustand/middleware/immer";
 import type { RunEvent, TodoItem } from "@shared/types";
 import { RingBuffer } from "../components/ui/RingBuffer";
 import { toastService } from "../services/toastService";
+import { LRUMap } from "./LRUMap";
 
 /** Cancel timeout in ms -- must match the backend CANCEL_TIMEOUT_MS. */
 const CANCEL_TIMEOUT_MS = 10_000;
@@ -10,37 +11,93 @@ const CANCEL_TIMEOUT_MS = 10_000;
 /** Maximum in-memory log lines per run, backed by RingBuffer. */
 const LOG_BUFFER_CAPACITY = 5_000;
 
-/* ── Module-level ring buffer storage ──────────────────────
+/**
+ * Maximum number of runs whose log buffers are retained in memory.
+ * 20 runs × 5 000 lines each ≈ reasonable memory ceiling.
+ */
+const MAX_BUFFERED_RUNS = 20;
+
+/* ── Module-level ring buffer storage (LRU-bounded) ────────
  * RingBuffer instances live outside Zustand/immer state because they are
  * mutable containers that should not be proxied.  The store's `runLogs`
  * field is derived from `ringBuffer.toArray()` after each mutation so
  * React subscribers see the updated array reference.
+ *
+ * An LRU cache caps the number of runs with active log buffers.
+ * When evicted, the RingBuffer is cleared to release its backing array
+ * and the corresponding Zustand state entries (runLogs, runLogOverflow)
+ * are cleaned up to free the string arrays.
  * ───────────────────────────────────────────────────────── */
 
-/** Ring buffer instance per runId. */
-const logBuffers = new Map<string, RingBuffer<string>>();
-
-/** Total lines pushed per runId (including those dropped by the ring buffer). */
-const totalPushed = new Map<string, number>();
-
-/** Get or create the RingBuffer for a given runId. */
-function getLogBuffer(runId: string): RingBuffer<string> {
-  let buf = logBuffers.get(runId);
-  if (!buf) {
-    buf = new RingBuffer<string>(LOG_BUFFER_CAPACITY);
-    logBuffers.set(runId, buf);
-    totalPushed.set(runId, 0);
-  }
-  return buf;
+/** Per-run log buffer state stored in the LRU cache. */
+interface RunLogEntry {
+  buffer: RingBuffer<string>;
+  totalPushed: number;
 }
 
-/** Push a line into a run's ring buffer and return the current overflow count. */
-function pushToBuffer(runId: string, line: string): number {
-  const buf = getLogBuffer(runId);
-  buf.push(line);
-  const pushed = (totalPushed.get(runId) ?? 0) + 1;
-  totalPushed.set(runId, pushed);
-  return Math.max(0, pushed - buf.capacity);
+/**
+ * LRU cache of run log buffers. When a run is evicted, its RingBuffer is
+ * cleared and the associated Zustand state is cleaned up.
+ */
+const logCache = new LRUMap<string, RunLogEntry>(
+  MAX_BUFFERED_RUNS,
+  (entry: RunLogEntry, runId: string) => {
+    // Release the RingBuffer's backing array synchronously.
+    entry.buffer.clear();
+
+    // Defer Zustand state cleanup to the next microtask.  Eviction may fire
+    // from inside an active immer `set()` recipe; calling setState()
+    // synchronously would create a re-entrant produce whose commit is
+    // overwritten when the outer recipe finalises (lost-update bug).
+    queueMicrotask(() => {
+      const state = useRunStore.getState();
+      if (runId in state.runLogs || runId in state.runLogOverflow) {
+        useRunStore.setState((draft) => {
+          delete draft.runLogs[runId];
+          delete draft.runLogOverflow[runId];
+        });
+      }
+    });
+  }
+);
+
+/** Get or create the log entry for a given runId (promotes it to most-recent). */
+function getLogEntry(runId: string): RunLogEntry {
+  let entry = logCache.get(runId);
+  if (!entry) {
+    entry = { buffer: new RingBuffer<string>(LOG_BUFFER_CAPACITY), totalPushed: 0 };
+    logCache.set(runId, entry);
+  }
+  return entry;
+}
+
+/** Result of pushing a line into a run's ring buffer. */
+interface PushResult {
+  entry: RunLogEntry;
+  overflow: number;
+}
+
+/** Push a line into a run's ring buffer. Returns the entry and overflow count. */
+function pushToBuffer(runId: string, line: string): PushResult {
+  const entry = getLogEntry(runId);
+  entry.buffer.push(line);
+  entry.totalPushed += 1;
+  return { entry, overflow: Math.max(0, entry.totalPushed - entry.buffer.capacity) };
+}
+
+/**
+ * Push a log line to a run's buffer and apply the resulting state to an immer
+ * draft.  Shared by `appendLog` and `_handleRunEvent`'s "log" case to avoid
+ * duplicating the push → snapshot → draft-update pattern.
+ */
+function applyLogLine(
+  draft: { runLogs: Record<string, string[]>; runLogOverflow: Record<string, number> },
+  runId: string,
+  line: string,
+): void {
+  const { entry, overflow } = pushToBuffer(runId, line);
+  draft.runLogs[runId] = entry.buffer.toArray();
+  draft.runLogOverflow[runId] = overflow;
 }
 
 interface RunState {
@@ -157,11 +214,8 @@ export const useRunStore = create<RunState>()(
     getCancelTimeoutMs: (): number => CANCEL_TIMEOUT_MS,
 
     appendLog: (runId: string, line: string): void => {
-      const overflow = pushToBuffer(runId, line);
-      const buf = getLogBuffer(runId);
       set((draft) => {
-        draft.runLogs[runId] = buf.toArray();
-        draft.runLogOverflow[runId] = overflow;
+        applyLogLine(draft, runId, line);
       });
     },
 
@@ -195,10 +249,7 @@ export const useRunStore = create<RunState>()(
           case "log": {
             const line = String((event.payload as { line?: string })?.line ?? "");
             if (line.trim().length > 0) {
-              const overflow = pushToBuffer(event.runId, line);
-              const buf = getLogBuffer(event.runId);
-              draft.runLogs[event.runId] = buf.toArray();
-              draft.runLogOverflow[event.runId] = overflow;
+              applyLogLine(draft, event.runId, line);
             }
             break;
           }
@@ -260,3 +311,21 @@ export function initRunEventSubscription(): () => void {
 
   return unsubscribe;
 }
+
+/* ── Test helpers ─────────────────────────────────────────
+ * Exported for unit tests only. These allow tests to reset module-level
+ * state between runs without module re-evaluation.
+ * ───────────────────────────────────────────────────────── */
+
+/** @internal Clear the LRU log cache. For tests only. */
+export function _resetLogCache(): void {
+  logCache.clear();
+}
+
+/** @internal Current number of entries in the LRU log cache. For tests only. */
+export function _getLogCacheSize(): number {
+  return logCache.size;
+}
+
+/** @internal The max buffered runs constant. For tests only. */
+export const _MAX_BUFFERED_RUNS = MAX_BUFFERED_RUNS;
