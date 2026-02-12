@@ -250,10 +250,18 @@ export interface InferStackResult {
   rationale: string;
 }
 
+export type DiscoveryQuestionType = "text" | "multiple_choice";
+
 export interface DiscoveryQuestion {
   id: string;
   question: string;
   reason: string;
+  /** Determines how the question is rendered in the UI. Defaults to 'text'. */
+  question_type?: DiscoveryQuestionType;
+  /** Available options when question_type is 'multiple_choice'. Defaults to []. */
+  options?: string[];
+  /** Suggested best option (one of the options values) when question_type is 'multiple_choice'. Defaults to null. */
+  recommendedOption?: string | null;
 }
 
 export interface DiscoveryInferredContext {

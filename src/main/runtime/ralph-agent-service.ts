@@ -92,6 +92,9 @@ interface DiscoveryOutput {
     id: string;
     question: string;
     reason: string;
+    question_type?: "text" | "multiple_choice";
+    options?: string[];
+    recommendedOption?: string | null;
   }>;
   prdInputDraft: string;
   readinessScore: number;
@@ -283,7 +286,10 @@ const discoveryOutputSchema = z.object({
     z.object({
       id: z.string().min(1),
       question: z.string().min(8),
-      reason: z.string().min(8)
+      reason: z.string().min(8),
+      question_type: z.enum(["text", "multiple_choice"]).default("text"),
+      options: z.array(z.string()).default([]),
+      recommendedOption: z.string().nullable().default(null)
     })
   ),
   prdInputDraft: z.string().min(120),
@@ -326,7 +332,10 @@ const discoveryOutputJsonSchema = {
         properties: {
           id: { type: "string" },
           question: { type: "string" },
-          reason: { type: "string" }
+          reason: { type: "string" },
+          question_type: { type: "string", enum: ["text", "multiple_choice"], default: "text" },
+          options: { type: "array", items: { type: "string" }, default: [] },
+          recommendedOption: { type: ["string", "null"], default: null }
         },
         required: ["id", "question", "reason"]
       }
