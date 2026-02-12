@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { JSX } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePlanStore } from "../stores/planStore";
 import type { PlanSummary } from "../stores/planStore";
-import { UStatusPill, USkeleton } from "../components/ui";
+import { UStatusPill, USkeleton, UConfirmModal } from "../components/ui";
 import styles from "./PlanListView.module.css";
 
 /* ── Helpers ───────────────────────────────────────────── */
@@ -58,16 +58,32 @@ function truncatePath(path: string, segments: number = 2): string {
   return ".../" + parts.slice(-segments).join("/");
 }
 
+/**
+ * Simple class name joiner.
+ */
+function cn(...classes: (string | false | undefined | null)[]): string {
+  return classes.filter(Boolean).join(" ");
+}
+
+/* ── Types ─────────────────────────────────────────────── */
+
+interface ConfirmState {
+  type: "delete" | "archive" | "unarchive";
+  planId: string;
+  planSummary: string;
+}
+
 /* ── Component ─────────────────────────────────────────── */
 
 /**
- * PlanListView -- shows all saved plans as cards with search filtering.
+ * PlanListView -- shows all saved plans as cards with search filtering,
+ * archive toggle, and per-card delete/archive actions with confirmation dialogs.
  *
  * Route: /
  *
  * Reads plansList from planStore, displays each plan as a clickable card
- * with summary, status pill, project path, and created date. Includes a
- * search input that filters by summary text (case-insensitive).
+ * with summary, status pill, project path, timestamps, and action buttons.
+ * Includes a debounced search input (300ms) and an archive toggle.
  */
 export function PlanListView(): JSX.Element {
   const navigate = useNavigate();
@@ -77,27 +93,56 @@ export function PlanListView(): JSX.Element {
   const loadingList = usePlanStore((s) => s.loadingList);
   const error = usePlanStore((s) => s.error);
   const loadPlanList = usePlanStore((s) => s.loadPlanList);
+  const deletePlan = usePlanStore((s) => s.deletePlan);
+  const archivePlan = usePlanStore((s) => s.archivePlan);
+  const unarchivePlan = usePlanStore((s) => s.unarchivePlan);
 
-  /* ── Local search state ──────────────────────────────── */
-  const [searchQuery, setSearchQuery] = useState("");
+  /* ── Local state ─────────────────────────────────────── */
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  /* ── Load plans on mount ─────────────────────────────── */
+  /* ── Debounce search input (300ms) ───────────────────── */
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchInput(value);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+    }, 300);
+  }, []);
+
+  // Cleanup debounce timer on unmount
   useEffect(() => {
-    void loadPlanList();
-  }, [loadPlanList]);
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
 
-  /* ── Filtered list ───────────────────────────────────── */
+  /* ── Load plans on mount and when archive filter changes ── */
+  useEffect(() => {
+    void loadPlanList({ archived: showArchived ? true : undefined });
+  }, [loadPlanList, showArchived]);
+
+  /* ── Filtered list (client-side search on top of server data) ── */
   const filteredPlans = useMemo((): PlanSummary[] => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
     if (query.length === 0) return plansList;
     return plansList.filter(
       (plan) =>
         plan.summary.toLowerCase().includes(query) ||
         plan.projectPath.toLowerCase().includes(query)
     );
-  }, [plansList, searchQuery]);
+  }, [plansList, debouncedSearch]);
 
-  /* ── Callbacks ───────────────────────────────────────── */
+  /* ── Navigation callback ─────────────────────────────── */
   const handleCardClick = useCallback(
     (planId: string) => {
       navigate(`/plan/${planId}`);
@@ -114,6 +159,68 @@ export function PlanListView(): JSX.Element {
     },
     [navigate]
   );
+
+  /* ── Action handlers ─────────────────────────────────── */
+
+  const handleDeleteClick = useCallback(
+    (e: React.MouseEvent, plan: PlanSummary) => {
+      e.stopPropagation();
+      setConfirmState({ type: "delete", planId: plan.id, planSummary: plan.summary });
+    },
+    []
+  );
+
+  const handleArchiveClick = useCallback(
+    (e: React.MouseEvent, plan: PlanSummary) => {
+      e.stopPropagation();
+      if (plan.archivedAt) {
+        setConfirmState({ type: "unarchive", planId: plan.id, planSummary: plan.summary });
+      } else {
+        setConfirmState({ type: "archive", planId: plan.id, planSummary: plan.summary });
+      }
+    },
+    []
+  );
+
+  const handleConfirm = useCallback(async () => {
+    if (!confirmState) return;
+    setActionLoading(true);
+    try {
+      if (confirmState.type === "delete") {
+        await deletePlan(confirmState.planId);
+      } else if (confirmState.type === "archive") {
+        await archivePlan(confirmState.planId);
+      } else if (confirmState.type === "unarchive") {
+        await unarchivePlan(confirmState.planId);
+      }
+      setConfirmState(null);
+    } finally {
+      setActionLoading(false);
+    }
+  }, [confirmState, deletePlan, archivePlan, unarchivePlan]);
+
+  const handleCancelConfirm = useCallback(() => {
+    setConfirmState(null);
+  }, []);
+
+  /* ── Confirmation dialog content ─────────────────────── */
+  const confirmTitle = confirmState
+    ? confirmState.type === "delete"
+      ? "Delete Plan"
+      : confirmState.type === "archive"
+        ? "Archive Plan"
+        : "Unarchive Plan"
+    : "";
+
+  const confirmLabel = confirmState
+    ? confirmState.type === "delete"
+      ? "Delete"
+      : confirmState.type === "archive"
+        ? "Archive"
+        : "Unarchive"
+    : "";
+
+  const confirmVariant: "primary" | "danger" = confirmState?.type === "delete" ? "danger" : "primary";
 
   /* ── Loading state ───────────────────────────────────── */
   if (loadingList && plansList.length === 0) {
@@ -145,23 +252,6 @@ export function PlanListView(): JSX.Element {
     );
   }
 
-  /* ── Empty state ─────────────────────────────────────── */
-  if (plansList.length === 0) {
-    return (
-      <section className={styles.view}>
-        <div className={styles.header}>
-          <h1 className={styles.title}>Plans</h1>
-        </div>
-        <div className={styles.emptyState}>
-          <h3 className={styles.emptyTitle}>No plans yet</h3>
-          <p className={styles.emptyText}>
-            Create a plan by running Discovery or importing PRD text.
-          </p>
-        </div>
-      </section>
-    );
-  }
-
   /* ── Main render ─────────────────────────────────────── */
   return (
     <section className={styles.view}>
@@ -169,33 +259,55 @@ export function PlanListView(): JSX.Element {
         <h1 className={styles.title}>Plans</h1>
       </div>
 
-      {/* Search input */}
-      <div className={styles.searchRow}>
+      {/* Search and filter controls */}
+      <div className={styles.controlsRow}>
         <input
           type="text"
           className={styles.searchInput}
           placeholder="Search plans by summary or path..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
           aria-label="Search plans"
         />
+
+        <button
+          type="button"
+          className={cn(styles.archiveToggle, showArchived && styles.archiveToggleActive)}
+          onClick={() => setShowArchived((prev) => !prev)}
+          aria-pressed={showArchived}
+          aria-label={showArchived ? "Showing archived plans" : "Show archived plans"}
+        >
+          {showArchived ? "Showing Archived" : "Show Archived"}
+        </button>
       </div>
 
       {/* Match count when filtering */}
-      {searchQuery.trim().length > 0 ? (
+      {debouncedSearch.trim().length > 0 ? (
         <p className={styles.matchCount}>
           {filteredPlans.length} of {plansList.length} plan
           {plansList.length !== 1 ? "s" : ""} matching
         </p>
       ) : null}
 
-      {/* No matches */}
-      {filteredPlans.length === 0 && searchQuery.trim().length > 0 ? (
+      {/* Empty state -- no plans at all */}
+      {plansList.length === 0 && !loadingList ? (
+        <div className={styles.emptyState}>
+          <h3 className={styles.emptyTitle}>
+            {showArchived ? "No archived plans" : "No plans yet"}
+          </h3>
+          <p className={styles.emptyText}>
+            {showArchived
+              ? "Archived plans will appear here."
+              : "Create a plan by running Discovery or importing PRD text."}
+          </p>
+        </div>
+      ) : null}
+
+      {/* No matches from search */}
+      {filteredPlans.length === 0 && debouncedSearch.trim().length > 0 && plansList.length > 0 ? (
         <div className={styles.emptyState}>
           <h3 className={styles.emptyTitle}>No matching plans</h3>
-          <p className={styles.emptyText}>
-            Try a different search term.
-          </p>
+          <p className={styles.emptyText}>Try a different search term.</p>
         </div>
       ) : null}
 
@@ -204,7 +316,7 @@ export function PlanListView(): JSX.Element {
         {filteredPlans.map((plan) => (
           <div
             key={plan.id}
-            className={styles.planCard}
+            className={cn(styles.planCard, plan.archivedAt && styles.planCardArchived)}
             role="button"
             tabIndex={0}
             onClick={() => handleCardClick(plan.id)}
@@ -213,7 +325,12 @@ export function PlanListView(): JSX.Element {
           >
             <div className={styles.planCardHeader}>
               <p className={styles.planSummary}>{plan.summary}</p>
-              <UStatusPill status={plan.status} />
+              <div className={styles.statusRow}>
+                <UStatusPill status={plan.status} />
+                {plan.archivedAt ? (
+                  <span className={styles.archivedBadge}>Archived</span>
+                ) : null}
+              </div>
             </div>
 
             <div className={styles.planMeta}>
@@ -225,13 +342,59 @@ export function PlanListView(): JSX.Element {
                 <span className={styles.metaLabel}>Created:</span>
                 {shortDate(plan.createdAt)}
               </span>
-              <span className={styles.metaItem}>
-                {timeAgo(plan.createdAt)}
-              </span>
+              <span className={styles.metaItem}>{timeAgo(plan.createdAt)}</span>
+            </div>
+
+            {/* Action buttons */}
+            <div className={styles.cardActions}>
+              <button
+                type="button"
+                className={styles.actionBtn}
+                onClick={(e) => handleArchiveClick(e, plan)}
+                aria-label={plan.archivedAt ? `Unarchive plan: ${plan.summary}` : `Archive plan: ${plan.summary}`}
+              >
+                {plan.archivedAt ? "Unarchive" : "Archive"}
+              </button>
+              <button
+                type="button"
+                className={cn(styles.actionBtn, styles.actionBtnDanger)}
+                onClick={(e) => handleDeleteClick(e, plan)}
+                aria-label={`Delete plan: ${plan.summary}`}
+              >
+                Delete
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Confirmation modal */}
+      <UConfirmModal
+        open={confirmState !== null}
+        onCancel={handleCancelConfirm}
+        onConfirm={handleConfirm}
+        title={confirmTitle}
+        confirmLabel={confirmLabel}
+        confirmVariant={confirmVariant}
+        loading={actionLoading}
+      >
+        {confirmState?.type === "delete" ? (
+          <p>
+            This will permanently delete the plan and all associated tasks, runs, and logs.
+            This cannot be undone.
+          </p>
+        ) : confirmState?.type === "archive" ? (
+          <p>
+            Archive <strong>{confirmState.planSummary}</strong>? Archived plans are hidden
+            from the default view but can be restored at any time.
+          </p>
+        ) : confirmState?.type === "unarchive" ? (
+          <p>
+            Restore <strong>{confirmState.planSummary}</strong> from the archive? It will
+            appear in the main plans list again.
+          </p>
+        ) : null}
+      </UConfirmModal>
     </section>
   );
 }

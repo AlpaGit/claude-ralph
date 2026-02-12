@@ -1,4 +1,5 @@
-/* PlanListView -- list of plan cards with search filtering */
+/* PlanListView -- list of plan cards with search filtering, archive toggle,
+   and per-card delete/archive actions */
 
 .view {
   padding: var(--space-lg);
@@ -23,14 +24,18 @@
   font-weight: 800;
 }
 
-/* ── Search ─────────────────────────────────────────────── */
+/* ── Controls row (search + archive toggle) ──────────────── */
 
-.searchRow {
+.controlsRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
   margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
 }
 
 .searchInput {
-  width: 100%;
+  flex: 1 1 280px;
   max-width: 420px;
   padding: 0.55rem 0.75rem;
   border: 2px solid var(--color-border-input);
@@ -49,6 +54,41 @@
 
 .searchInput:focus {
   border-color: var(--color-accent-2);
+}
+
+.archiveToggle {
+  flex-shrink: 0;
+  padding: 0.5rem 0.85rem;
+  border: 2px solid var(--color-border-btn);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.archiveToggle:hover {
+  border-color: var(--color-accent-2);
+  color: var(--color-text);
+}
+
+.archiveToggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.archiveToggleActive {
+  border-color: var(--color-accent-2);
+  background: var(--color-accent-2);
+  color: var(--color-white);
+}
+
+.archiveToggleActive:hover {
+  color: var(--color-white);
 }
 
 /* ── Plan card grid ─────────────────────────────────────── */
@@ -86,6 +126,11 @@
   outline-offset: 2px;
 }
 
+.planCardArchived {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
 .planCardHeader {
   display: flex;
   justify-content: space-between;
@@ -100,6 +145,26 @@
   font-weight: 700;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.archivedBadge {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--color-muted);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  letter-spacing: 0.03em;
 }
 
 .planMeta {
@@ -121,6 +186,51 @@
 .metaLabel {
   font-weight: 600;
   color: var(--color-text);
+}
+
+/* ── Card action buttons ────────────────────────────────── */
+
+.cardActions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  border-top: 1px dashed var(--color-border-dashed);
+  padding-top: var(--space-sm);
+}
+
+.actionBtn {
+  padding: 0.3rem 0.6rem;
+  border: 1.5px solid var(--color-border-btn);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.actionBtn:hover {
+  border-color: var(--color-accent-2);
+  transform: translateY(-1px);
+}
+
+.actionBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.actionBtnDanger {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.actionBtnDanger:hover {
+  background: var(--color-error);
+  color: var(--color-white);
+  border-color: var(--color-error);
 }
 
 /* ── Loading / empty / error states ─────────────────────── */
@@ -185,6 +295,11 @@
   .header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .controlsRow {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .searchInput {
