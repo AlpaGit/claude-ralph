@@ -1240,3 +1240,45 @@ p3-09: Preserve IPC error context in development mode   [DONE]
     - Sets both error (string) and lastIpcError (IpcError) for backward compatibility
     - toastService.error calls use parsed ipcError.message
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p4-01: Set up Vitest for unit testing   [DONE]
+  - Installed vitest@3.2.4, jsdom@28, @vitest/coverage-v8@3.2.4 as devDependencies
+  - vitest.config.ts
+    - Default environment: "node" for main process tests (DB, schemas, migrations)
+    - Renderer tests opt in to jsdom via per-file annotation: // @vitest-environment jsdom
+    - @shared alias resolved via resolve.alias for import path consistency
+    - Coverage provider: v8, reporters: text + lcov
+    - Coverage includes src/**/*.{ts,tsx}, excludes test files and test-utils
+    - globals: false (explicit imports), restoreMocks: true, testTimeout: 10_000
+    - Include pattern: src/**/*.{test,spec}.{ts,tsx}
+  - package.json scripts
+    - test:unit: vitest run (single run)
+    - test:unit:watch: vitest watch (file-watching mode)
+    - test:coverage: vitest run --coverage (with v8 provider)
+  - src/test-utils/mock-database.ts
+    - createMockDatabase(): returns MockDatabase { db, cleanup }
+    - Uses AppDatabase(":memory:", migrationsDir) for in-memory SQLite
+    - Resolves migrationsDir to resources/migrations via __dirname
+    - cleanup() calls db.close() to release connection
+    - Each call produces a fresh, isolated database (no state leakage)
+  - src/test-utils/mock-ralph-api.ts
+    - createMockRalphApi(): returns MockRalphApi with vi.fn() for every RalphApi method
+    - Event subscription methods (onRunEvent, onDiscoveryEvent) default to no-op unsubscribe
+    - installMockRalphApi(): installs mock on window.ralphApi for jsdom tests
+    - MockRalphApi type: mapped type over RalphApi keys
+  - src/test-utils/index.ts
+    - Barrel export: createMockDatabase, MockDatabase, createMockRalphApi,
+      installMockRalphApi, MockRalphApi
+  - src/main/runtime/app-database.test.ts
+    - Smoke test suite for in-memory mock database factory
+    - Uses describe.skipIf(!sqliteAvailable) for graceful skip when better-sqlite3
+      is compiled for Electron ABI (common on dev machines)
+    - Tests: migrations apply cleanly, createPlan/getPlan round-trip, null for
+      non-existent plan, listPlans, updateTaskStatus
+  - src/renderer/stores/planStore.test.ts
+    - jsdom environment test (// @vitest-environment jsdom annotation)
+    - Tests: createMockRalphApi produces all methods, mock return value configuration,
+      no-op unsubscribe for event subscriptions, installMockRalphApi on window,
+      jsdom environment active (document/window available)
+  - Test results: 5 passed (jsdom), 5 skipped (node/native ABI mismatch expected)
+  - Build and typecheck pass
