@@ -32,6 +32,7 @@ import {
   inferStackInputSchema,
   updateModelConfigInputSchema,
   updateAppSettingsInputSchema,
+  testDiscordWebhookInputSchema,
   discoveryResumeInputSchema,
   discoveryAbandonInputSchema,
   discoveryCancelInputSchema
@@ -1079,6 +1080,69 @@ describe("updateAppSettingsInputSchema", () => {
 });
 
 // ---------------------------------------------------------------------------
+// testDiscordWebhookInputSchema
+// ---------------------------------------------------------------------------
+
+describe("testDiscordWebhookInputSchema", () => {
+  it("accepts valid https webhook URL", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: "https://discord.com/api/webhooks/123/abc"
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts valid http webhook URL", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: "http://localhost:3000/webhook"
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("trims whitespace before validation", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: "  https://discord.com/api/webhooks/123/abc  "
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.webhookUrl).toBe("https://discord.com/api/webhooks/123/abc");
+    }
+  });
+
+  it("rejects empty string (unlike updateAppSettings)", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: ""
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-url string", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: "not-a-url"
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing webhookUrl", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-string webhookUrl", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: 42
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects whitespace-only string", () => {
+    const result = testDiscordWebhookInputSchema.safeParse({
+      webhookUrl: "   "
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // discoveryResumeInputSchema
 // ---------------------------------------------------------------------------
 
@@ -1224,6 +1288,22 @@ describe("IPC handler validation (schema.parse rejects before handler)", () => {
     expect(() =>
       updateAppSettingsInputSchema.parse({
         discordWebhookUrl: { nested: "bad" }
+      })
+    ).toThrow();
+  });
+
+  it("testDiscordWebhookInputSchema.parse throws on empty string", () => {
+    expect(() =>
+      testDiscordWebhookInputSchema.parse({
+        webhookUrl: ""
+      })
+    ).toThrow();
+  });
+
+  it("testDiscordWebhookInputSchema.parse throws on non-url string", () => {
+    expect(() =>
+      testDiscordWebhookInputSchema.parse({
+        webhookUrl: "not-a-url"
       })
     ).toThrow();
   });

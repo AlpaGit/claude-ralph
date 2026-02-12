@@ -43,6 +43,8 @@ import type {
   RunTaskResponse,
   SkipTaskInput,
   StartDiscoveryInput,
+  TestDiscordWebhookInput,
+  TestDiscordWebhookResult,
   TodoItem,
   UpdateAppSettingsInput
 } from "@shared/types";
@@ -374,6 +376,67 @@ export class TaskRunner {
 
   updateAppSettings(input: UpdateAppSettingsInput): void {
     this.db.updateAppSettings(input);
+  }
+
+  /**
+   * Send a test embed to the given Discord webhook URL.
+   * Returns { ok: true } on success, or { ok: false, error } on failure.
+   */
+  async testDiscordWebhook(input: TestDiscordWebhookInput): Promise<TestDiscordWebhookResult> {
+    const { webhookUrl } = input;
+
+    if (typeof fetch !== "function") {
+      return { ok: false, error: "Global fetch is unavailable in this environment." };
+    }
+
+    const payload = this.buildDiscordPayload({
+      speaker: "Ralph",
+      title: "\u2705 Webhook Test Successful",
+      description:
+        "This is a test notification from **Ralph Desktop**. " +
+        "If you can see this message, your Discord webhook is configured correctly!",
+      level: "info",
+      fields: [
+        { name: "Status", value: "Connected", inline: true },
+        { name: "Sent At", value: new Date().toLocaleString(), inline: true }
+      ],
+      footer: "Ralph Desktop \u2014 Test Notification"
+    });
+
+    // Override the default info color with green/teal per task spec
+    if (Array.isArray(payload.embeds)) {
+      const embed = payload.embeds[0] as Record<string, unknown> | undefined;
+      if (embed) {
+        embed.color = 0x10b981;
+      }
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        return {
+          ok: false,
+          error: `Discord returned HTTP ${response.status}: ${body.slice(0, 180)}`
+        };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async startDiscovery(input: StartDiscoveryInput): Promise<DiscoveryInterviewState> {

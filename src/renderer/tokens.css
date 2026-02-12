@@ -68,6 +68,7 @@
   --color-failed: #b91c1c;
 
   /* ── Feedback ──────────────────────────────────────────── */
+  --color-success: #059669;
   --color-error: #b91c1c;
   --color-error-bg: #fee2e2;
   --color-warning: #b45309;
