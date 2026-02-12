@@ -301,6 +301,24 @@ export function PlanDetailView(): JSX.Element {
     [plan, loadPlan]
   );
 
+  const handleSetTaskPending = useCallback(
+    async (task: RalphTask) => {
+      if (!plan) return;
+      const api = window.ralphApi;
+      if (!api) return;
+      try {
+        await api.setTaskPending({ planId: plan.id, taskId: task.id });
+        toastService.info(`Task reset to pending: ${task.id.slice(0, 8)}...`);
+        void loadPlan(plan.id);
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : "Failed to reset task to pending.";
+        toastService.error(message);
+      }
+    },
+    [plan, loadPlan]
+  );
+
   const handleAbortQueue = useCallback(async () => {
     if (!plan) return;
     const api = window.ralphApi;
@@ -503,6 +521,7 @@ export function PlanDetailView(): JSX.Element {
                 onOpenRun={handleOpenRun}
                 onRetryTask={(t) => void handleRetryTask(t)}
                 onSkipTask={(t) => void handleSkipTask(t)}
+                onSetTaskPending={(t) => void handleSetTaskPending(t)}
                 onAbortQueue={() => void handleAbortQueue()}
                 queueRunning={plan.status === "running"}
               />

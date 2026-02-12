@@ -40,6 +40,7 @@ import type {
   RunTaskInput,
   RunTaskResponse,
   SkipTaskInput,
+  SetTaskPendingInput,
   StartDiscoveryInput,
   UnarchivePlanInput,
   UpdateModelConfigInput,
@@ -102,6 +103,10 @@ const api: RalphApi = {
 
   skipTask(input: SkipTaskInput): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.skipTask, input);
+  },
+
+  setTaskPending(input: SetTaskPendingInput): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.setTaskPending, input);
   },
 
   approveTaskProposal(input: ApproveTaskProposalInput): Promise<ApproveTaskProposalResponse> {

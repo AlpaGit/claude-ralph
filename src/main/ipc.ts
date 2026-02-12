@@ -23,6 +23,7 @@ import {
   retryTaskInputSchema,
   runAllInputSchema,
   runTaskInputSchema,
+  setTaskPendingInputSchema,
   skipTaskInputSchema,
   startDiscoveryInputSchema,
   unarchivePlanInputSchema,
@@ -218,6 +219,15 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = skipTaskInputSchema.parse(rawInput);
       taskRunner.skipTask(input);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.setTaskPending, async (_event, rawInput) => {
+    try {
+      const input = setTaskPendingInputSchema.parse(rawInput);
+      taskRunner.setTaskPending(input);
     } catch (error) {
       throw createIpcError(error);
     }

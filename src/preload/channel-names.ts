@@ -3,7 +3,7 @@
  * DO NOT EDIT MANUALLY — changes will be overwritten on next build.
  *
  * Source of truth: src/shared/ipc.ts → IPC_CHANNELS
- * Generated: 31 channels
+ * Generated: 32 channels
  */
 
 // ---------------------------------------------------------------------------
@@ -23,6 +23,7 @@ export const CHANNEL_RUN_ALL = "task:runAll" as const;
 export const CHANNEL_CANCEL_RUN = "run:cancel" as const;
 export const CHANNEL_RETRY_TASK = "task:retry" as const;
 export const CHANNEL_SKIP_TASK = "task:skip" as const;
+export const CHANNEL_SET_TASK_PENDING = "task:setPending" as const;
 export const CHANNEL_APPROVE_TASK_PROPOSAL = "proposal:approve" as const;
 export const CHANNEL_DISMISS_TASK_PROPOSAL = "proposal:dismiss" as const;
 export const CHANNEL_ABORT_QUEUE = "queue:abort" as const;
@@ -60,6 +61,7 @@ export const IPC_CHANNELS = {
   cancelRun: "run:cancel",
   retryTask: "task:retry",
   skipTask: "task:skip",
+  setTaskPending: "task:setPending",
   approveTaskProposal: "proposal:approve",
   dismissTaskProposal: "proposal:dismiss",
   abortQueue: "queue:abort",
@@ -101,6 +103,7 @@ export const ALL_CHANNELS: ReadonlySet<IpcChannel> = new Set([
   CHANNEL_CANCEL_RUN,
   CHANNEL_RETRY_TASK,
   CHANNEL_SKIP_TASK,
+  CHANNEL_SET_TASK_PENDING,
   CHANNEL_APPROVE_TASK_PROPOSAL,
   CHANNEL_DISMISS_TASK_PROPOSAL,
   CHANNEL_ABORT_QUEUE,

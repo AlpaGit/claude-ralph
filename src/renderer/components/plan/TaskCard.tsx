@@ -19,6 +19,8 @@ export interface TaskCardProps {
   onRetryTask?: (task: RalphTask) => void;
   /** Called when the user clicks "Skip" on a failed task. */
   onSkipTask?: (task: RalphTask) => void;
+  /** Called when the user resets a completed task back to pending. */
+  onSetTaskPending?: (task: RalphTask) => void;
   /** Called when the user clicks "Abort Queue". */
   onAbortQueue?: () => void;
   /** Whether a queue is currently running for this plan. */
@@ -48,6 +50,7 @@ export function TaskCard({
   onOpenRun,
   onRetryTask,
   onSkipTask,
+  onSetTaskPending,
   onAbortQueue,
   queueRunning,
 }: TaskCardProps): JSX.Element {
@@ -133,13 +136,25 @@ export function TaskCard({
               ) : null}
             </>
           ) : (
-            <button
-              type="button"
-              className={cn(styles.btn, styles.btnPrimary)}
-              onClick={() => onRunTask(task)}
-            >
-              Run Task
-            </button>
+            <>
+              <button
+                type="button"
+                className={cn(styles.btn, styles.btnPrimary)}
+                onClick={() => onRunTask(task)}
+              >
+                Run Task
+              </button>
+              {task.status === "completed" && onSetTaskPending ? (
+                <button
+                  type="button"
+                  className={cn(styles.btn, styles.btnGhost)}
+                  onClick={() => onSetTaskPending(task)}
+                  disabled={queueRunning}
+                >
+                  Set Pending
+                </button>
+              ) : null}
+            </>
           )}
           {latestRun ? (
             <button

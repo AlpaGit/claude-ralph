@@ -45,6 +45,7 @@ export function createMockRalphApi(): MockRalphApi {
     cancelRun: vi.fn(),
     retryTask: vi.fn(),
     skipTask: vi.fn(),
+    setTaskPending: vi.fn(),
     approveTaskProposal: vi.fn(),
     dismissTaskProposal: vi.fn(),
     abortQueue: vi.fn(),
