@@ -176,3 +176,30 @@ p1-07: Create ULogViewer component with virtualization   [DONE]
     - All values reference tokens.css custom properties
   - src/renderer/components/ui.ts -- barrel export updated with ULogViewer, ULogViewerHandle, RingBuffer
   - Build and typecheck pass
+
+p1-09: Install react-router-dom and create route structure   [DONE]
+  - Installed react-router-dom@7 (v7.13.0) as production dependency
+  - src/renderer/router.tsx
+    - createHashRouter with createRoutesFromElements (HashRouter required for Electron file://)
+    - AppShell layout route wrapping all child routes
+    - Routes: / -> PlanListView, /plan/:planId -> PlanDetailView,
+      /discovery -> DiscoveryView, /run/:runId -> LiveRunView, /settings -> SettingsView
+  - src/renderer/components/AppShell/AppShell.tsx
+    - Layout component with sidebar + main content area
+    - Sidebar: brand badge, NavLink navigation with active state styling
+    - NavLink uses className callback for isActive -> navLinkActive class
+    - Renders child routes via <Outlet /> in main content area
+    - NAV_ITEMS: Plans (/), Discovery (/discovery), Settings (/settings)
+  - src/renderer/components/AppShell/AppShell.module.css
+    - CSS grid layout: 220px sidebar + 1fr content
+    - Sidebar: flex column, panel background, 2px solid right border
+    - NavLink: rounded, hover warm surface, active wizard-green highlight
+    - Responsive: collapses to horizontal nav bar below 768px
+    - All values reference tokens.css custom properties
+  - src/renderer/views/PlanListView.tsx -- stub view for plan list (route: /)
+  - src/renderer/views/PlanDetailView.tsx -- stub view with useParams planId (route: /plan/:planId)
+  - src/renderer/views/DiscoveryView.tsx -- stub view for discovery interview (route: /discovery)
+  - src/renderer/views/LiveRunView.tsx -- stub view with useParams runId (route: /run/:runId)
+  - src/renderer/views/SettingsView.tsx -- stub view for settings (route: /settings)
+  - src/renderer/index.tsx -- updated to render RouterProvider with hash router instead of App
+  - Build and typecheck pass
