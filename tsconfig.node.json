@@ -27,6 +27,7 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
+    "src/test-utils/**/*.ts",
     "src/renderer/vite-env.d.ts"
   ]
 }

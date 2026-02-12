@@ -44,6 +44,6 @@ export function createMockDatabase(): MockDatabase {
 
   return {
     db,
-    cleanup: () => db.close()
+    cleanup: () => db.close(),
   };
 }
