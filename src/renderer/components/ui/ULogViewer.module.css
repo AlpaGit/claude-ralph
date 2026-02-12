@@ -22,7 +22,7 @@
 .viewer.fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 9998;
   border-radius: 0;
   border: none;
 }

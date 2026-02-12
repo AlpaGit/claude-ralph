@@ -182,6 +182,7 @@ export function AppShell(): JSX.Element {
 
       <Toaster
         position="bottom-right"
+        containerStyle={{ zIndex: 10000 }}
         toastOptions={{
           style: {
             background: "#1a1a1a",
