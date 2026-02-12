@@ -1,0 +1,130 @@
+/*
+ * UButton CSS Module
+ * Brutalist button component with variants, sizes, and states.
+ * Consumes design tokens from tokens.css.
+ */
+
+/* ── Base ──────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  border: 2px solid var(--color-border-btn);
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  user-select: none;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── Variants ──────────────────────────────────────────── */
+
+.primary {
+  background: var(--color-accent);
+  color: var(--color-white);
+}
+
+.secondary {
+  background: var(--color-accent-2);
+  color: var(--color-white);
+}
+
+.ghost {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.danger {
+  background: var(--color-danger);
+  color: var(--color-white);
+}
+
+/* ── Sizes ─────────────────────────────────────────────── */
+
+.sm {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.md {
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.lg {
+  padding: 0.7rem 1.1rem;
+  font-size: 1rem;
+}
+
+/* ── Disabled state ────────────────────────────────────── */
+
+.btn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+/* ── Loading state ─────────────────────────────────────── */
+
+.loading {
+  position: relative;
+  cursor: wait;
+  color: transparent;
+}
+
+.loading > * {
+  visibility: hidden;
+}
+
+.spinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: visible;
+  color: currentColor;
+}
+
+.loading.primary .spinner,
+.loading.secondary .spinner,
+.loading.danger .spinner {
+  color: var(--color-white);
+}
+
+.loading.ghost .spinner {
+  color: var(--color-text);
+}
+
+.spinnerIcon {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-circle);
+  animation: btn-spin 0.6s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
