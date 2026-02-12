@@ -1384,10 +1384,12 @@ export class TaskRunner {
       throw new Error("Unable to resolve repository root for queue execution.");
     }
 
+    await this.autoCleanWorkspaceForQueue(plan.id, repoRoot);
+
     const statusResult = await this.runGitCommand(["status", "--porcelain"], repoRoot);
     if (statusResult.stdout.trim().length > 0) {
       throw new Error(
-        "Repository has uncommitted changes. Queue merges require a clean working tree in the main checkout."
+        "Repository still has uncommitted changes after automatic queue cleanup. Queue merges require a clean working tree in the main checkout."
       );
     }
 
@@ -1417,6 +1419,87 @@ export class TaskRunner {
       originalBranch,
       worktreeRoot
     };
+  }
+
+  private async autoCleanWorkspaceForQueue(planId: string, repoRoot: string): Promise<void> {
+    const removedNul = await this.removeWindowsNulFileIfPresent(repoRoot);
+    if (removedNul) {
+      this.emitQueueInfo(planId, 'Removed root "nul" file before queue start.');
+    }
+
+    const statusBeforeCommit = await this.runGitCommand(["status", "--porcelain"], repoRoot);
+    if (statusBeforeCommit.stdout.trim().length === 0) {
+      return;
+    }
+
+    this.emitQueueInfo(
+      planId,
+      "Repository has local changes. Creating an automatic pre-queue commit."
+    );
+
+    await this.runGitCommand(["add", "-A"], repoRoot);
+
+    const timestampToken = nowIso().replace(/[:.]/g, "-");
+    const commitMessage = `chore(queue): auto-commit workspace before run-all (${timestampToken})`;
+    await this.runGitCommand(["commit", "--no-verify", "-m", commitMessage], repoRoot);
+
+    const commitHash = (await this.runGitCommand(["rev-parse", "--short", "HEAD"], repoRoot)).stdout.trim();
+    this.emitQueueInfo(
+      planId,
+      `Created pre-queue auto-commit ${commitHash || "(hash unavailable)"}.`
+    );
+
+    const statusAfterCommit = await this.runGitCommand(["status", "--porcelain"], repoRoot);
+    if (statusAfterCommit.stdout.trim().length > 0) {
+      throw new Error(
+        "Repository still has uncommitted changes after automatic pre-queue commit."
+      );
+    }
+  }
+
+  private async removeWindowsNulFileIfPresent(repoRoot: string): Promise<boolean> {
+    const nulStatusBefore = await this.runGitCommand(["status", "--porcelain", "--", "nul"], repoRoot);
+    if (nulStatusBefore.stdout.trim().length === 0) {
+      return false;
+    }
+
+    if (process.platform === "win32") {
+      const repoRootWindows = repoRoot.replace(/\//g, "\\");
+      const namespacedNulPath = `\\\\?\\${repoRootWindows}\\nul`;
+      await new Promise<void>((resolve, reject) => {
+        execFile(
+          "cmd",
+          ["/d", "/s", "/c", `del /f /q "${namespacedNulPath}"`],
+          {
+            cwd: repoRoot,
+            windowsHide: true,
+            maxBuffer: 8 * 1024 * 1024
+          },
+          (error, _stdout, stderr) => {
+            if (error) {
+              const details = String(stderr ?? "").trim() || error.message;
+              reject(new Error(`Failed to remove root "nul" file: ${details}`));
+              return;
+            }
+            resolve();
+          }
+        );
+      });
+    } else {
+      await rm(join(repoRoot, "nul"), { force: true });
+    }
+
+    const nulStatusAfter = await this.runGitCommand(["status", "--porcelain", "--", "nul"], repoRoot);
+    const hasUntrackedNul = nulStatusAfter.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .some((line) => /^\?\?\s+"?nul"?$/i.test(line));
+
+    if (hasUntrackedNul) {
+      throw new Error('Failed to remove root "nul" file before queue start.');
+    }
+
+    return true;
   }
 
   private async createPhaseWorktrees(
