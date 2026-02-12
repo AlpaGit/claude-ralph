@@ -147,6 +147,19 @@ const MAX_RETRIES = 3;
 /** Default timeout (ms) to wait for SDK interrupt before force-cancelling a run. */
 const CANCEL_TIMEOUT_MS = 10_000;
 
+/** Maximum time (ms) a queue task run may remain active before forced cancellation. */
+const QUEUE_RUN_TIMEOUT_MS = (() => {
+  const raw = process.env.RALPH_QUEUE_RUN_TIMEOUT_MS;
+  if (!raw) {
+    return 45 * 60 * 1000; // 45 minutes
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 45 * 60 * 1000;
+  }
+  return parsed;
+})();
+
 /** Stale run threshold: runs in_progress for longer than this (ms) with no active tracking are cleaned up. */
 const STALE_RUN_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 const CONVENTIONAL_COMMIT_HEADER = /^[a-z]+(?:\([^)]+\))?!?: .+/;
@@ -1282,11 +1295,16 @@ export class TaskRunner {
         );
 
         const phaseWorktrees = await this.createPhaseWorktrees(plan, phaseNumber, phaseTasks, gitContext);
+        const worktreeByTaskId = new Map(phaseWorktrees.map((worktree) => [worktree.taskId, worktree]));
+        const worktreeByRunId = new Map<string, PhaseWorktree>();
+        const unmergedWorktrees = new Map(phaseWorktrees.map((worktree) => [worktree.taskId, worktree]));
         const phaseRuns: Array<{ runId: string; taskId: string }> = [];
+        const activeRunIds = new Set<string>();
+        let phaseFailed = false;
 
         try {
           for (const task of phaseTasks) {
-            const worktree = phaseWorktrees.find((candidate) => candidate.taskId === task.id);
+            const worktree = worktreeByTaskId.get(task.id);
             if (!worktree) {
               throw new Error(`Missing worktree context for task ${task.id}.`);
             }
@@ -1306,9 +1324,9 @@ export class TaskRunner {
               runId: run.runId,
               taskId: task.id
             });
+            worktreeByRunId.set(run.runId, worktree);
+            activeRunIds.add(run.runId);
           }
-
-          await Promise.all(phaseRuns.map((run) => this.waitForRun(run.runId)));
         } catch (error) {
           if (phaseRuns.length > 0) {
             await Promise.all(
@@ -1323,45 +1341,97 @@ export class TaskRunner {
           throw error;
         }
 
+        while (activeRunIds.size > 0) {
+          if (this.abortedPlanQueues.has(planId)) {
+            await Promise.all(
+              [...activeRunIds].map(async (runId) => {
+                await this.cancelRun({ runId }).catch(() => ({ ok: false }));
+                await this.waitForRun(runId);
+              })
+            );
+            activeRunIds.clear();
+            await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
+            break;
+          }
+
+          const completedRunId = await Promise.race(
+            [...activeRunIds].map(async (runId) => {
+              await this.waitForRun(runId);
+              return runId;
+            })
+          );
+
+          activeRunIds.delete(completedRunId);
+          const runState = this.db.getRun(completedRunId);
+          const completedWorktree = worktreeByRunId.get(completedRunId);
+
+          if (!completedWorktree) {
+            throw new Error(`Missing worktree metadata for completed run ${completedRunId}.`);
+          }
+
+          if (!runState || runState.status !== "completed") {
+            phaseFailed = true;
+            this.emitQueueInfo(
+              planId,
+              `Phase ${phaseNumber} stopped because task ${runState?.taskId ?? completedWorktree.taskId} ended with status ${runState?.status ?? "unknown"}.`,
+              "error"
+            );
+
+            if (activeRunIds.size > 0) {
+              await Promise.all(
+                [...activeRunIds].map(async (runId) => {
+                  await this.cancelRun({ runId }).catch(() => ({ ok: false }));
+                  await this.waitForRun(runId);
+                })
+              );
+              activeRunIds.clear();
+            }
+
+            await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
+            break;
+          }
+
+          try {
+            await this.validatePhaseBranchCommits(planId, phaseNumber, [completedWorktree], gitContext);
+            await this.mergePhaseBranches(
+              planId,
+              phaseNumber,
+              [completedWorktree.branchName],
+              gitContext
+            );
+            await this.cleanupPhaseWorktrees(gitContext, [completedWorktree], true);
+            unmergedWorktrees.delete(completedWorktree.taskId);
+            this.emitQueueInfo(
+              planId,
+              `Phase ${phaseNumber}: merged completed task ${runState.taskId} and removed its worktree.`
+            );
+          } catch (error) {
+            if (activeRunIds.size > 0) {
+              await Promise.all(
+                [...activeRunIds].map(async (runId) => {
+                  await this.cancelRun({ runId }).catch(() => ({ ok: false }));
+                  await this.waitForRun(runId);
+                })
+              );
+              activeRunIds.clear();
+            }
+            await this.cleanupPhaseWorktrees(gitContext, [...unmergedWorktrees.values()], false);
+            throw error;
+          }
+        }
+
         if (this.abortedPlanQueues.has(planId)) {
-          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
           break;
         }
 
-        const unfinishedRuns = phaseRuns.filter((run) => {
-          const runState = this.db.getRun(run.runId);
-          return !runState || runState.status !== "completed";
-        });
-
-        if (unfinishedRuns.length > 0) {
-          this.emitQueueInfo(
-            planId,
-            `Phase ${phaseNumber} stopped because ${unfinishedRuns.length} task(s) did not complete successfully.`,
-            "error"
-          );
-          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
+        if (phaseFailed) {
           break;
         }
 
-        await this.validatePhaseBranchCommits(planId, phaseNumber, phaseWorktrees, gitContext);
-
-        try {
-          await this.mergePhaseBranches(
-            planId,
-            phaseNumber,
-            phaseWorktrees.map((worktree) => worktree.branchName),
-            gitContext
-          );
-
-          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, true);
-          this.emitQueueInfo(
-            planId,
-            `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`
-          );
-        } catch (error) {
-          await this.cleanupPhaseWorktrees(gitContext, phaseWorktrees, false);
-          throw error;
-        }
+        this.emitQueueInfo(
+          planId,
+          `Phase ${phaseNumber} merged successfully into ${gitContext.mergeTargetBranch}.`
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown queue failure.";
