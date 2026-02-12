@@ -1,0 +1,29 @@
+/*
+ * UStatusPill — colored badge for plan / task / run status values.
+ * Extracts and refines the .status-pill / .status-* patterns from styles.css.
+ * Color mapping is driven inline via the component (--pill-color custom property).
+ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--pill-color, var(--color-black));
+  border-radius: var(--radius-pill);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  color: var(--pill-color, var(--color-text));
+  background: var(--pill-bg, transparent);
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: var(--radius-circle);
+  background: var(--pill-color, var(--color-muted));
+  flex-shrink: 0;
+}

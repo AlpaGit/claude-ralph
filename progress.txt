@@ -66,3 +66,40 @@ p1-04: Create UButton component with CSS Module   [DONE]
     - Loading spinner via CSS animation (border-based spinner)
     - All values reference tokens.css custom properties
   - Build and typecheck pass
+
+p1-05: Create UCard, UStatusPill, UInput, UTextArea components  [DONE]
+  - src/renderer/components/UCard/UCard.tsx
+    - Bordered panel container with optional title, subtitle, headerAction, footer slots
+    - Uses consistent padding/margin via tokens.css spacing variables
+    - Accepts children as body content, className for composition
+  - src/renderer/components/UCard/UCard.module.css
+    - Extracted .panel / .panel-header patterns from styles.css into CSS Module
+    - Flex column layout with gap, dashed border footer separator
+  - src/renderer/components/UStatusPill/UStatusPill.tsx
+    - Colored badge for plan/task/run status values with automatic color mapping
+    - STATUS_COLOR_MAP: pending=#6b7280, in_progress=#d97706, completed=#15803d,
+      failed=#b91c1c, cancelled=#6b7280, draft=#6b7280, ready=#156f67,
+      running=#d97706, queued=#6b7280
+    - Optional colored dot indicator, label override, className
+    - Uses CSS custom properties (--pill-color, --pill-bg) for dynamic styling
+  - src/renderer/components/UStatusPill/UStatusPill.module.css
+    - Extracted .status-pill / .status-* patterns from styles.css into CSS Module
+    - Pill border radius, mono font, uppercase text transform
+  - src/renderer/components/UInput/UInput.tsx
+    - Text input with label, error state, helper text
+    - Extends InputHTMLAttributes for full native input API passthrough
+    - Auto-generates id via useId, wires label/aria-describedby/aria-invalid
+  - src/renderer/components/UInput/UInput.module.css
+    - Extracted .text-input / .label patterns from styles.css into CSS Module
+    - Focus state with accent-2 border, disabled opacity, error border color
+  - src/renderer/components/UTextArea/UTextArea.tsx
+    - Multi-line textarea with label, error state, char count, and auto-resize
+    - Extends TextareaHTMLAttributes for full native textarea API passthrough
+    - Auto-resize via ref + scrollHeight measurement on change and value update
+    - Live character counter with over-limit warning when maxLength is set
+  - src/renderer/components/UTextArea/UTextArea.module.css
+    - Extracted .text-area / .label patterns from styles.css into CSS Module
+    - Footer row with justified error/helper text and char count
+    - Auto-resize class disables manual resize and hides overflow
+  - src/renderer/components/ui.ts -- barrel export for all four UI primitives
+  - Build and typecheck pass

@@ -1,0 +1,79 @@
+/*
+ * UTextArea — multi-line textarea with label, error state, char count, and auto-resize.
+ * Extracts and refines the .text-area / .label patterns from styles.css.
+ */
+
+.wrapper {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.label {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 180px;
+  border: 2px solid var(--color-border-input);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  background: var(--color-surface);
+  resize: vertical;
+  transition: border-color var(--transition-fast);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-accent-2);
+}
+
+.textarea:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.textareaError {
+  border-color: var(--color-error);
+}
+
+.textareaAutoResize {
+  resize: none;
+  overflow: hidden;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.helperText {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  margin: 0;
+}
+
+.errorText {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-error);
+  margin: 0;
+}
+
+.charCount {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.charCountOver {
+  color: var(--color-error);
+}
