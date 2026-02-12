@@ -136,6 +136,12 @@
   transform: translateY(-1px);
 }
 
+.runAllBtn:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* ── Live Run panel ────────────────────────────────────── */
 
 .liveRunCard {

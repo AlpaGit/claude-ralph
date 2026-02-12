@@ -124,6 +124,26 @@
   padding-top: var(--space-sm);
 }
 
+.manualPrdSection {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.manualPrdHint {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.manualPrdError {
+  margin: 0;
+  color: var(--color-error);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
 .actions {
   display: flex;
   gap: var(--space-sm);

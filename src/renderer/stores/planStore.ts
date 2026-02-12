@@ -88,7 +88,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     } catch (caught) {
       const ipcError = parseIpcError(caught);
       set({ error: ipcError.message, lastIpcError: ipcError });
-      toastService.error(ipcError.message);
+      toastService.error(ipcError.message, ipcError);
       throw caught;
     } finally {
       set({ creating: false });
@@ -166,7 +166,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     } catch (caught) {
       const ipcError = parseIpcError(caught);
       set({ error: ipcError.message, lastIpcError: ipcError });
-      toastService.error(ipcError.message);
+      toastService.error(ipcError.message, ipcError);
     }
   },
 
@@ -184,7 +184,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     } catch (caught) {
       const ipcError = parseIpcError(caught);
       set({ error: ipcError.message, lastIpcError: ipcError });
-      toastService.error(ipcError.message);
+      toastService.error(ipcError.message, ipcError);
     }
   },
 
@@ -202,7 +202,7 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     } catch (caught) {
       const ipcError = parseIpcError(caught);
       set({ error: ipcError.message, lastIpcError: ipcError });
-      toastService.error(ipcError.message);
+      toastService.error(ipcError.message, ipcError);
     }
   },
 

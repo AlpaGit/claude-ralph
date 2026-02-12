@@ -30,3 +30,6 @@ export { RingBuffer } from "./ui/RingBuffer";
 
 export { IpcErrorDetails } from "./ui/IpcErrorDetails";
 export type { IpcErrorDetailsProps } from "./ui/IpcErrorDetails";
+
+export { ErrorToast } from "./ui/ErrorToast";
+export type { ErrorToastProps } from "./ui/ErrorToast";

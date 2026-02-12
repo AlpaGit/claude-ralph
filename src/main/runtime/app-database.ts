@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { normalize } from "node:path";
 import Database from "better-sqlite3";
 import type {
   AppSettings,
@@ -6,9 +7,12 @@ import type {
   DiscoveryInterviewState,
   DiscoverySession,
   DiscoverySessionStatus,
+  ListProjectMemoryInput,
   ListPlansFilter,
   PlanListItem,
   PlanStatus,
+  ProjectMemoryItem,
+  ProjectStackProfile as SharedProjectStackProfile,
   RalphPlan,
   RalphTask,
   RunEvent,
@@ -69,6 +73,8 @@ interface AppSettingRow {
 interface PlanRow {
   id: string;
   project_path: string;
+  project_id: string | null;
+  project_key: string | null;
   prd_text: string;
   summary: string;
   technical_pack_json: string;
@@ -83,6 +89,8 @@ interface PlanListRow {
   summary: string;
   status: PlanStatus;
   project_path: string;
+  project_id: string | null;
+  project_key: string | null;
   created_at: string;
   archived_at: string | null;
 }
@@ -130,6 +138,8 @@ interface RunEventRow {
 interface DiscoverySessionRow {
   id: string;
   project_path: string;
+  project_id: string | null;
+  project_key: string | null;
   seed_sentence: string;
   additional_context: string;
   answer_history_json: string;
@@ -175,6 +185,20 @@ interface CreatePlanInput {
   tasks: CreatePlanTaskInput[];
 }
 
+export type ProjectStackProfile = SharedProjectStackProfile;
+
+interface ProjectRow {
+  id: string;
+  project_key: string;
+  canonical_path: string;
+  display_name: string;
+  metadata_json: string;
+  stack_profile_json: string | null;
+  created_at: string;
+  updated_at: string;
+  last_stack_refresh_at: string | null;
+}
+
 interface CreateRunInput {
   id: string;
   planId: string;
@@ -196,6 +220,36 @@ interface UpdateRunInput {
 }
 
 const nowIso = (): string => new Date().toISOString();
+
+function normalizeProjectKey(projectPath: string): string {
+  const trimmed = projectPath.trim();
+  if (trimmed.length === 0) {
+    return "";
+  }
+
+  const normalized = normalize(trimmed).replace(/[\\/]+/g, "/").trim();
+  if (normalized.length === 0) {
+    return "";
+  }
+
+  return normalized.toLowerCase();
+}
+
+function buildStableProjectId(projectKey: string): string {
+  const digest = createHash("sha1").update(projectKey).digest("hex");
+  return `proj-${digest.slice(0, 24)}`;
+}
+
+function deriveProjectDisplayName(projectPath: string): string {
+  const normalized = projectPath.replace(/[\\/]+/g, "/").replace(/\/+$/, "");
+  if (normalized.length === 0) {
+    return "Unnamed project";
+  }
+
+  const parts = normalized.split("/");
+  const last = parts[parts.length - 1]?.trim();
+  return last && last.length > 0 ? last : normalized;
+}
 
 /**
  * Parse a JSON string expected to contain a string array (e.g. dependencies, acceptance criteria).
@@ -232,14 +286,269 @@ export class AppDatabase {
     runner.run();
   }
 
+  private parseProjectStackProfile(raw: string | null): ProjectStackProfile | null {
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as ProjectStackProfile;
+      if (
+        parsed &&
+        parsed.version === 1 &&
+        parsed.specialistId === "stack-analyst" &&
+        typeof parsed.updatedAt === "string" &&
+        typeof parsed.stackSummary === "string" &&
+        Array.isArray(parsed.stackHints) &&
+        Array.isArray(parsed.signals) &&
+        typeof parsed.confidence === "number"
+      ) {
+        return parsed;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseProjectMetadata(raw: string): Record<string, unknown> {
+    if (!raw || raw.trim().length === 0) {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Ignore parse errors and return empty metadata.
+    }
+    return {};
+  }
+
+  private mapPlanListRow(row: PlanListRow): PlanListItem {
+    return {
+      id: row.id,
+      summary: row.summary,
+      status: row.status,
+      projectPath: row.project_path,
+      createdAt: row.created_at,
+      archivedAt: row.archived_at
+    };
+  }
+
+  private mapProjectMemoryRow(row: ProjectRow, limitPlans: number): ProjectMemoryItem {
+    const planRows = this.db
+      .prepare(`
+        SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at
+        FROM plans
+        WHERE project_id = @project_id
+        ORDER BY created_at DESC
+        LIMIT @limit;
+      `)
+      .all({
+        project_id: row.id,
+        limit: limitPlans
+      }) as PlanListRow[];
+
+    return {
+      projectId: row.id,
+      projectKey: row.project_key,
+      projectPath: row.canonical_path,
+      displayName: row.display_name,
+      metadata: this.parseProjectMetadata(row.metadata_json),
+      stackProfile: this.parseProjectStackProfile(row.stack_profile_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastStackRefreshAt: row.last_stack_refresh_at,
+      recentPlans: planRows.map((planRow) => this.mapPlanListRow(planRow))
+    };
+  }
+
+  private touchProject(projectPath: string): { projectId: string; projectKey: string; canonicalPath: string } | null {
+    const projectKey = normalizeProjectKey(projectPath);
+    if (projectKey.length === 0) {
+      return null;
+    }
+
+    const canonicalPath = projectPath.trim().length > 0 ? projectPath.trim() : projectKey;
+    const displayName = deriveProjectDisplayName(canonicalPath);
+    const timestamp = nowIso();
+    const stableProjectId = buildStableProjectId(projectKey);
+
+    this.db
+      .prepare(`
+        INSERT INTO projects (
+          id, project_key, canonical_path, display_name, metadata_json,
+          stack_profile_json, created_at, updated_at, last_stack_refresh_at
+        ) VALUES (
+          @id, @project_key, @canonical_path, @display_name, '{}',
+          NULL, @created_at, @updated_at, NULL
+        )
+        ON CONFLICT(project_key) DO UPDATE SET
+          canonical_path = excluded.canonical_path,
+          display_name = CASE
+            WHEN projects.display_name IS NULL OR projects.display_name = '' THEN excluded.display_name
+            ELSE projects.display_name
+          END,
+          updated_at = excluded.updated_at;
+      `)
+      .run({
+        id: stableProjectId,
+        project_key: projectKey,
+        canonical_path: canonicalPath,
+        display_name: displayName,
+        created_at: timestamp,
+        updated_at: timestamp
+      });
+
+    const row = this.db
+      .prepare("SELECT id, project_key, canonical_path FROM projects WHERE project_key = ? LIMIT 1;")
+      .get(projectKey) as { id: string; project_key: string; canonical_path: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    this.db
+      .prepare(`
+        UPDATE plans
+        SET project_id = @project_id
+        WHERE project_key = @project_key
+          AND (project_id IS NULL OR project_id = '');
+      `)
+      .run({
+        project_id: row.id,
+        project_key: projectKey
+      });
+
+    this.db
+      .prepare(`
+        UPDATE discovery_sessions
+        SET project_id = @project_id
+        WHERE project_key = @project_key
+          AND (project_id IS NULL OR project_id = '');
+      `)
+      .run({
+        project_id: row.id,
+        project_key: projectKey
+      });
+
+    return {
+      projectId: row.id,
+      projectKey: row.project_key,
+      canonicalPath: row.canonical_path
+    };
+  }
+
+  getProjectStackProfile(projectPath: string): ProjectStackProfile | null {
+    const project = this.touchProject(projectPath);
+    if (!project) {
+      return null;
+    }
+
+    const row = this.db
+      .prepare("SELECT stack_profile_json FROM projects WHERE id = ? LIMIT 1;")
+      .get(project.projectId) as Pick<ProjectRow, "stack_profile_json"> | undefined;
+
+    return this.parseProjectStackProfile(row?.stack_profile_json ?? null);
+  }
+
+  upsertProjectStackProfile(projectPath: string, profile: ProjectStackProfile): void {
+    const project = this.touchProject(projectPath);
+    if (!project) {
+      return;
+    }
+
+    this.db
+      .prepare(`
+        UPDATE projects
+        SET stack_profile_json = @stack_profile_json,
+            updated_at = @updated_at,
+            last_stack_refresh_at = @last_stack_refresh_at
+        WHERE id = @project_id;
+      `)
+      .run({
+        project_id: project.projectId,
+        stack_profile_json: JSON.stringify(profile),
+        updated_at: nowIso(),
+        last_stack_refresh_at: profile.updatedAt
+      });
+  }
+
+  listPlansByProject(projectPath: string, limit = 10): PlanListItem[] {
+    const project = this.touchProject(projectPath);
+    if (!project) {
+      return [];
+    }
+
+    const rows = this.db
+      .prepare(`
+        SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at
+        FROM plans
+        WHERE project_id = @project_id
+        ORDER BY created_at DESC
+        LIMIT @limit;
+      `)
+      .all({
+        project_id: project.projectId,
+        limit
+      }) as PlanListRow[];
+
+    return rows.map((row) => this.mapPlanListRow(row));
+  }
+
+  listProjectMemory(input: ListProjectMemoryInput = {}): ProjectMemoryItem[] {
+    const limitPlans = Math.min(Math.max(input.limitPlans ?? 6, 1), 20);
+    const search = input.search?.trim();
+    const params: Record<string, unknown> = {};
+    const filters: string[] = [];
+
+    if (search && search.length > 0) {
+      filters.push("(canonical_path LIKE @search OR display_name LIKE @search)");
+      params.search = `%${search}%`;
+    }
+
+    const where = filters.length > 0 ? `WHERE ${filters.join(" AND ")}` : "";
+    const rows = this.db
+      .prepare(`
+        SELECT id, project_key, canonical_path, display_name, metadata_json, stack_profile_json, created_at, updated_at, last_stack_refresh_at
+        FROM projects
+        ${where}
+        ORDER BY updated_at DESC;
+      `)
+      .all(params) as ProjectRow[];
+
+    return rows.map((row) => this.mapProjectMemoryRow(row, limitPlans));
+  }
+
+  getProjectMemoryItemById(projectId: string, limitPlans = 6): ProjectMemoryItem | null {
+    const row = this.db
+      .prepare(`
+        SELECT id, project_key, canonical_path, display_name, metadata_json, stack_profile_json, created_at, updated_at, last_stack_refresh_at
+        FROM projects
+        WHERE id = ?
+        LIMIT 1;
+      `)
+      .get(projectId) as ProjectRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return this.mapProjectMemoryRow(row, Math.min(Math.max(limitPlans, 1), 20));
+  }
+
   createPlan(input: CreatePlanInput): void {
     const createdAt = nowIso();
+    const project = this.touchProject(input.projectPath);
 
     const insertPlan = this.db.prepare(`
       INSERT INTO plans (
-        id, project_path, prd_text, summary, technical_pack_json, status, created_at, updated_at
+        id, project_path, project_id, project_key, prd_text, summary, technical_pack_json, status, created_at, updated_at
       ) VALUES (
-        @id, @project_path, @prd_text, @summary, @technical_pack_json, @status, @created_at, @updated_at
+        @id, @project_path, @project_id, @project_key, @prd_text, @summary, @technical_pack_json, @status, @created_at, @updated_at
       );
     `);
 
@@ -255,6 +564,8 @@ export class AppDatabase {
       insertPlan.run({
         id: input.id,
         project_path: input.projectPath,
+        project_id: project?.projectId ?? null,
+        project_key: project?.projectKey ?? null,
         prd_text: input.prdText,
         summary: input.summary,
         technical_pack_json: JSON.stringify(input.technicalPack),
@@ -700,7 +1011,7 @@ export class AppDatabase {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const sql = `SELECT id, summary, status, project_path, created_at, archived_at FROM plans ${where} ORDER BY created_at DESC;`;
+    const sql = `SELECT id, summary, status, project_path, project_id, project_key, created_at, archived_at FROM plans ${where} ORDER BY created_at DESC;`;
 
     const rows = this.db.prepare(sql).all(params) as PlanListRow[];
 
@@ -811,15 +1122,16 @@ export class AppDatabase {
    */
   createDiscoverySession(input: CreateDiscoverySessionInput): DiscoverySession {
     const now = nowIso();
+    const project = this.touchProject(input.projectPath);
 
     this.db
       .prepare(`
         INSERT INTO discovery_sessions (
-          id, project_path, seed_sentence, additional_context,
+          id, project_path, project_id, project_key, seed_sentence, additional_context,
           answer_history_json, round_number, latest_state_json,
           status, created_at, updated_at
         ) VALUES (
-          @id, @project_path, @seed_sentence, @additional_context,
+          @id, @project_path, @project_id, @project_key, @seed_sentence, @additional_context,
           @answer_history_json, @round_number, @latest_state_json,
           @status, @created_at, @updated_at
         );
@@ -827,6 +1139,8 @@ export class AppDatabase {
       .run({
         id: input.id,
         project_path: input.projectPath,
+        project_id: project?.projectId ?? null,
+        project_key: project?.projectKey ?? null,
         seed_sentence: input.seedSentence,
         additional_context: input.additionalContext,
         answer_history_json: "[]",

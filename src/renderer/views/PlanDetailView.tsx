@@ -183,7 +183,7 @@ export function PlanDetailView(): JSX.Element {
     [plan, selectRun]
   );
 
-  const handleRunAll = useCallback(async () => {
+  const handleStartPlan = useCallback(async () => {
     if (!plan) return;
     const api = window.ralphApi;
     if (!api) return;
@@ -361,10 +361,11 @@ export function PlanDetailView(): JSX.Element {
               <button
                 type="button"
                 className={styles.runAllBtn}
-                onClick={() => void handleRunAll()}
-                title="Run Next Available Tasks (Ctrl+R)"
+                onClick={() => void handleStartPlan()}
+                disabled={plan.status === "running" || !plan.tasks.some((task) => task.status === "pending")}
+                title="Démarrer le plan automatiquement (Ctrl+R)"
               >
-                Run Next Available Tasks
+                Démarrer le plan
               </button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import type {
   StartDiscoveryInput,
   ContinueDiscoveryInput,
 } from "@shared/types";
+import { parseIpcError } from "../services/ipcErrorService";
 import { toastService } from "../services/toastService";
 
 /* ── Answer map: questionId -> answer text ─────────────── */
@@ -193,10 +194,9 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
 
       _discoveryUnsubscribe = unsubscribe;
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : "Failed to start discovery.";
-      set({ error: message });
-      toastService.error(message);
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message });
+      toastService.error(ipcError.message, ipcError);
     } finally {
       set((state) => ({
         loading: false,
@@ -265,10 +265,9 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
       }));
       toastService.success("Discovery updated. PRD input refreshed.");
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : "Failed to continue discovery.";
-      set({ error: message });
-      toastService.error(message);
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message });
+      toastService.error(ipcError.message, ipcError);
     } finally {
       set((state) => ({
         loading: false,
@@ -320,9 +319,9 @@ export const useDiscoveryStore = create<DiscoveryState>((set, get) => ({
         copyNotice: `Resumed discovery session (round ${state.round}).`,
       });
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : "Failed to resume discovery session.";
-      set({ error: message });
+      const ipcError = parseIpcError(caught);
+      set({ error: ipcError.message });
+      toastService.error(ipcError.message, ipcError);
     } finally {
       set({ loading: false });
     }

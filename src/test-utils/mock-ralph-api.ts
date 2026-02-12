@@ -35,6 +35,8 @@ export function createMockRalphApi(): MockRalphApi {
     createPlan: vi.fn(),
     getPlan: vi.fn(),
     listPlans: vi.fn(),
+    listProjectMemory: vi.fn(),
+    refreshProjectStackProfile: vi.fn(),
     deletePlan: vi.fn(),
     archivePlan: vi.fn(),
     unarchivePlan: vi.fn(),

@@ -1,0 +1,231 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.92rem;
+  color: var(--color-muted);
+}
+
+.controls {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.searchInput {
+  width: min(560px, 100%);
+  padding: 0.62rem 0.75rem;
+  border: 2px solid var(--color-border-mid);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+}
+
+.searchInput:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.errorPanel {
+  padding: var(--space-md);
+  border: 2px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  color: var(--color-text);
+}
+
+.skeletonStack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-md);
+}
+
+.skeletonCard {
+  padding: var(--space-md);
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.emptyState {
+  padding: var(--space-lg);
+  border: 2px dashed var(--color-border-mid);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.emptyState h3 {
+  margin: 0;
+}
+
+.emptyState p {
+  margin: 0.5rem 0 0;
+  color: var(--color-muted);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: var(--space-md);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 2px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.projectName {
+  margin: 0;
+  font-size: 1.06rem;
+}
+
+.projectPath {
+  margin: 0.3rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  word-break: break-all;
+}
+
+.refreshButton {
+  flex-shrink: 0;
+  padding: 0.5rem 0.72rem;
+  border: 2px solid var(--color-border-btn);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-white);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.refreshButton:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.stackSection h3,
+.plansSection h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.stackSummary {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.pillRow {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border: 1.5px solid var(--color-border-mid);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  background: var(--color-surface);
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.84rem;
+}
+
+.planList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.planButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.48rem 0.6rem;
+  border: 1.5px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+  text-align: left;
+}
+
+.planButton:hover {
+  border-color: var(--color-border-mid);
+}
+
+.planSummary {
+  font-size: 0.82rem;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planStatus {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 768px) {
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .refreshButton {
+    width: 100%;
+  }
+}

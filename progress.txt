@@ -1597,3 +1597,11 @@ Build and unit tests pass (208 passed, 105 skipped for native ABI). Pre-existing
 
 **Notes**:
 Z-index hierarchy verified and documented: modals (1000-1001) < fullscreen log viewer (9990) < toasts (10000). Toast container z-index 10000 was already set in p3-04; this task confirmed correctness and added documentation comments. ULogViewer fullscreen z-index lowered from 9998 to 9990 for cleaner separation from toast layer. Warning toasts already had 5s duration configured per-call in toastService.warning(); added explicit amber borderColor (#d97706) for styling consistency with success/error variants. react-hot-toast does not expose a built-in "warning" type in toastOptions, so warning duration remains configured per-call. DiscoveryView resumeOverlay (z-index 1000) correctly sits below toast layer. Build and typecheck pass.
+
+## p1-05 (v2) — Write toast troubleshooting documentation
+**Status**: Done
+**Files changed**:
+- docs/TROUBLESHOOTING.md (created)
+
+**Notes**:
+Created docs/TROUBLESHOOTING.md with a complete toast notification troubleshooting section. Covers: z-index architecture with ASCII stack diagram and source file table, 5 common failure modes with symptoms/root-cause/diagnosis/fix for each (invisible toasts behind overlays, missing Toaster container, premature dismissal, wrong styling, production build issues), step-by-step verification instructions (manual DevTools check, DOM inspection, automated test commands), guidelines for adding new overlay layers safely, and toastService API reference with all active call sites. All z-index values and file paths reference the actual implementation.

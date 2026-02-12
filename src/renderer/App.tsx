@@ -332,7 +332,7 @@ export function App(): JSX.Element {
             <div className={styles.panelHeader}>
               <h2>Checklist</h2>
               <button className={`${styles.actionBtn} ${styles.secondary}`} onClick={() => void handleRunAll()}>
-                Run Next Available Tasks
+                Démarrer le plan
               </button>
             </div>
             <div className={styles.taskList}>

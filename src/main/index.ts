@@ -19,19 +19,9 @@ function createWindow(): BrowserWindow {
     height: 980,
     minWidth: 1040,
     minHeight: 740,
-    // macOS: "hiddenInset" hides the title bar and insets the traffic lights.
-    // Windows: "hidden" removes the default title bar; titleBarOverlay renders
-    // native window-control buttons (minimize / maximize / close) on top.
-    titleBarStyle: isMac ? "hiddenInset" : "hidden",
-    ...(isMac
-      ? {}
-      : {
-          titleBarOverlay: {
-            color: "#1a1a1a",
-            symbolColor: "#e0e0e0",
-            height: 36
-          }
-        }),
+    // Use the native title bar so window dragging always works reliably.
+    // Keep hiddenInset on macOS to preserve the expected traffic-light layout.
+    titleBarStyle: isMac ? "hiddenInset" : "default",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

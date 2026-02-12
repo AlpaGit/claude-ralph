@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DiscoveryEvent, DiscoverySessionSummary } from "@shared/types";
 import { useDiscoveryStore } from "../stores/discoveryStore";
+import { usePlanStore } from "../stores/planStore";
 import { UButton } from "../components/ui/UButton";
 import { UInput } from "../components/UInput/UInput";
 import { UTextArea } from "../components/UTextArea/UTextArea";
@@ -94,6 +95,8 @@ export function DiscoveryView(): JSX.Element {
   const lastDiscoveryDurationSec = useDiscoveryStore((s) => s.lastDiscoveryDurationSec);
   const lastReadyAtIso = useDiscoveryStore((s) => s.lastReadyAtIso);
   const copyNotice = useDiscoveryStore((s) => s.copyNotice);
+  const creatingPlan = usePlanStore((s) => s.creating);
+  const createPlan = usePlanStore((s) => s.createPlan);
 
   // ── Session management slices ───────────────────────
   const activeSessions = useDiscoveryStore((s) => s.activeSessions);
@@ -115,6 +118,8 @@ export function DiscoveryView(): JSX.Element {
 
   // ── Resume dialog state ────────────────────────────
   const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [existingPrdInput, setExistingPrdInput] = useState("");
+  const [existingPrdError, setExistingPrdError] = useState<string | null>(null);
 
   // Check for active sessions on mount
   useEffect(() => {
@@ -230,6 +235,25 @@ export function DiscoveryView(): JSX.Element {
     void continueDiscovery();
   };
 
+  const handleCreatePlanFromExistingPrd = (): void => {
+    const prd = existingPrdInput.trim();
+    if (prd.length < 20) {
+      setExistingPrdError("PRD input must be at least 20 characters.");
+      return;
+    }
+
+    setExistingPrdError(null);
+    void (async () => {
+      try {
+        const planId = await createPlan(prd, projectPath.trim());
+        navigate(`/plan/${planId}`);
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : "Failed to create plan from PRD input.";
+        setExistingPrdError(message);
+      }
+    })();
+  };
+
   const handleCopyPrdInput = async (): Promise<void> => {
     if (!interview) return;
     try {
@@ -249,9 +273,14 @@ export function DiscoveryView(): JSX.Element {
 
   const handleUsePlanInput = (): void => {
     if (!interview) return;
-    // Navigate to plan list view with PRD text in location state.
+    // Navigate to plan list view with PRD text + project path in location state.
     // The plan creation UI (when built) will read this state to pre-fill.
-    navigate("/", { state: { prdText: interview.prdInputDraft } });
+    navigate("/", {
+      state: {
+        prdText: interview.prdInputDraft,
+        projectPath: projectPath.trim()
+      }
+    });
   };
 
   // ── Render ───────────────────────────────────────────
@@ -315,7 +344,8 @@ export function DiscoveryView(): JSX.Element {
           <p className={styles.headerNotice}>
             Write one short goal sentence. AI specialists will inspect the project
             (if path is set), ask detailed questions, and build a ready-to-use PRD
-            input draft.
+            input draft. Add <code>/refresh-stack</code> in context/answers to
+            force a stack re-analysis only when needed.
           </p>
         </div>
 
@@ -347,6 +377,37 @@ export function DiscoveryView(): JSX.Element {
                 placeholder="Business context, deadlines, constraints, known issues, etc."
                 autoResize
               />
+            </div>
+          </details>
+
+          <details>
+            <summary className={styles.advancedToggle}>I already have a PRD input</summary>
+            <div className={styles.advancedContent}>
+              <div className={styles.manualPrdSection}>
+                <p className={styles.manualPrdHint}>
+                  Paste your existing PRD input to skip discovery and create the actionable plan directly.
+                  Project path above will be used if provided.
+                </p>
+                <UTextArea
+                  label="Existing PRD Input"
+                  value={existingPrdInput}
+                  onChange={(e) => setExistingPrdInput(e.target.value)}
+                  placeholder="Paste PRD text here..."
+                  autoResize
+                />
+                <div className={styles.actions}>
+                  <UButton
+                    variant="primary"
+                    onClick={handleCreatePlanFromExistingPrd}
+                    loading={creatingPlan}
+                  >
+                    {creatingPlan ? "Creating Plan..." : "Create Plan from PRD"}
+                  </UButton>
+                </div>
+                {existingPrdError ? (
+                  <p className={styles.manualPrdError}>{existingPrdError}</p>
+                ) : null}
+              </div>
             </div>
           </details>
 
@@ -436,7 +497,10 @@ export function DiscoveryView(): JSX.Element {
               </span>
               <span>
                 Specialists: {specialistProgress.completed}/
-                {Math.max(5, specialistProgress.started)} done
+                {Math.max(
+                  specialistProgress.started,
+                  specialistProgress.completed
+                )} done
               </span>
             </div>
 

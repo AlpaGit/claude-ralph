@@ -23,11 +23,14 @@ import type {
   GetRunEventsResponse,
   GetWizardGuidanceInput,
   InferStackInput,
+  ListProjectMemoryInput,
   ListPlansFilter,
   ModelConfigEntry,
   PlanListItem,
+  ProjectMemoryItem,
   RalphPlan,
   RalphTask,
+  RefreshProjectStackProfileInput,
   RetryTaskInput,
   RetryTaskResponse,
   RunAllInput,
@@ -41,7 +44,11 @@ import type {
   UpdateAppSettingsInput
 } from "@shared/types";
 import { AppDatabase } from "./app-database";
-import { RalphAgentService, type ModelConfigMap } from "./ralph-agent-service";
+import {
+  RalphAgentService,
+  type ModelConfigMap,
+  type StackProfileStore
+} from "./ralph-agent-service";
 
 interface ActiveRun {
   interrupt?: () => Promise<void>;
@@ -75,6 +82,21 @@ interface DiscoverySession {
   additionalContext: string;
   answerHistory: DiscoveryAnswer[];
   round: number;
+}
+
+interface DiscordNotificationField {
+  name: string;
+  value: string;
+  inline?: boolean;
+}
+
+interface DiscordNotificationInput {
+  speaker: string;
+  title: string;
+  description?: string;
+  level?: "info" | "error";
+  fields?: DiscordNotificationField[];
+  footer?: string;
 }
 
 function nowIso(): string {
@@ -121,7 +143,7 @@ export class TaskRunner {
     private readonly db: AppDatabase,
     private readonly getWindow: () => BrowserWindow | null
   ) {
-    this.agentService = new RalphAgentService(this.buildModelConfigMap());
+    this.agentService = this.createAgentService();
     this.cleanupStaleRuns();
   }
 
@@ -138,12 +160,59 @@ export class TaskRunner {
     return map;
   }
 
+  private buildStackProfileStore(): StackProfileStore {
+    return {
+      read: (projectPath: string) => this.db.getProjectStackProfile(projectPath),
+      write: (projectPath: string, profile) => this.db.upsertProjectStackProfile(projectPath, profile)
+    };
+  }
+
+  private createAgentService(): RalphAgentService {
+    return new RalphAgentService(this.buildModelConfigMap(), this.buildStackProfileStore());
+  }
+
+  private buildProjectHistoryContext(projectPath: string): string {
+    const history = this.db.listPlansByProject(projectPath, 8);
+    if (history.length === 0) {
+      return "";
+    }
+
+    const lines = history.map(
+      (plan, index) =>
+        `${index + 1}. [${plan.status}] ${plan.summary} (id=${plan.id}, created=${plan.createdAt})`
+    );
+
+    return [
+      "Project memory (recent plans for the same project path):",
+      ...lines,
+      "Use this history to avoid redundant plans and preserve continuity."
+    ].join("\n");
+  }
+
+  private composeDiscoveryAdditionalContext(
+    userAdditionalContext: string,
+    projectPath: string
+  ): string {
+    const blocks: string[] = [];
+    const trimmed = userAdditionalContext.trim();
+    if (trimmed.length > 0) {
+      blocks.push(trimmed);
+    }
+
+    const projectHistory = this.buildProjectHistoryContext(projectPath);
+    if (projectHistory.length > 0) {
+      blocks.push(projectHistory);
+    }
+
+    return blocks.join("\n\n");
+  }
+
   /**
    * Rebuild the agent service with fresh model configuration from the database.
    * Called after model config changes so subsequent SDK calls use updated models.
    */
   refreshModelConfig(): void {
-    const newService = new RalphAgentService(this.buildModelConfigMap());
+    const newService = this.createAgentService();
     this.agentService = newService;
   }
 
@@ -153,6 +222,31 @@ export class TaskRunner {
 
   listPlans(filter?: ListPlansFilter): PlanListItem[] {
     return this.db.listPlans(filter);
+  }
+
+  listProjectMemory(input: ListProjectMemoryInput = {}): ProjectMemoryItem[] {
+    return this.db.listProjectMemory(input);
+  }
+
+  async refreshProjectStackProfile(input: RefreshProjectStackProfileInput): Promise<ProjectMemoryItem> {
+    const project = this.db.getProjectMemoryItemById(input.projectId, 8);
+    if (!project) {
+      throw new Error(`Project not found: ${input.projectId}`);
+    }
+
+    const refreshedProfile = await this.agentService.refreshStackProfile({
+      projectPath: project.projectPath,
+      additionalContext: "Manual refresh requested from Project Memory view."
+    });
+
+    this.db.upsertProjectStackProfile(project.projectPath, refreshedProfile);
+
+    const updated = this.db.getProjectMemoryItemById(input.projectId, 8);
+    if (!updated) {
+      throw new Error(`Project memory not found after refresh: ${input.projectId}`);
+    }
+
+    return updated;
   }
 
   deletePlan(planId: string): void {
@@ -211,10 +305,14 @@ export class TaskRunner {
     });
 
     try {
+      const discoveryAdditionalContext = this.composeDiscoveryAdditionalContext(
+        input.additionalContext,
+        input.projectPath
+      );
       const initialState = await this.agentService.startDiscovery({
         projectPath: input.projectPath,
         seedSentence: input.seedSentence,
-        additionalContext: input.additionalContext,
+        additionalContext: discoveryAdditionalContext,
         callbacks: {
           onEvent: (event) => {
             this.emitDiscoveryEvent({
@@ -295,10 +393,15 @@ export class TaskRunner {
     });
 
     try {
+      const discoveryAdditionalContext = this.composeDiscoveryAdditionalContext(
+        session.additionalContext,
+        session.projectPath
+      );
       const nextState = await this.agentService.continueDiscovery({
         projectPath: session.projectPath,
         seedSentence: session.seedSentence,
-        additionalContext: session.additionalContext,
+        additionalContext: discoveryAdditionalContext,
+        stackRefreshContext: session.additionalContext,
         answerHistory: session.answerHistory,
         latestAnswers: input.answers,
         callbacks: {
@@ -457,27 +560,37 @@ export class TaskRunner {
 
   async createPlan(input: CreatePlanInput): Promise<CreatePlanResponse> {
     void this.postDiscordNotification(
-      [
-        "[RALPH][plan][plan_synthesis]",
-        "status=started",
-        `projectPath=${input.projectPath || "(none)"}`,
-      ].join("\n")
+      {
+        speaker: this.displayRoleLabel("plan_synthesis"),
+        title: "Creating Plan",
+        description: "Generating technical plan from PRD input.",
+        level: "info",
+        fields: [
+          {
+            name: "Project Path",
+            value: input.projectPath || "(none provided)"
+          }
+        ]
+      }
     );
 
     let planResult: Awaited<ReturnType<RalphAgentService["createPlan"]>>;
     try {
+      const projectHistoryContext = this.buildProjectHistoryContext(input.projectPath);
       planResult = await this.agentService.createPlan({
         projectPath: input.projectPath,
-        prdText: input.prdText
+        prdText: input.prdText,
+        projectHistoryContext
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       void this.postDiscordNotification(
-        [
-          "[RALPH][plan][plan_synthesis]",
-          "status=failed",
-          `error=${message.slice(0, 350)}`
-        ].join("\n")
+        {
+          speaker: this.displayRoleLabel("plan_synthesis"),
+          title: "Plan Creation Failed",
+          description: this.truncateForDiscord(message, 800),
+          level: "error"
+        }
       );
       throw error;
     }
@@ -497,11 +610,12 @@ export class TaskRunner {
         offset += 1;
       }
 
-      normalizedIds.add(candidate);
-      taskIdMap.set(item.id, candidate);
+      const scopedId = `${planId}-${candidate}`;
+      normalizedIds.add(scopedId);
+      taskIdMap.set(item.id, scopedId);
 
       return {
-        id: candidate,
+        id: scopedId,
         ordinal: index + 1,
         title: item.title,
         description: item.description,
@@ -513,7 +627,15 @@ export class TaskRunner {
 
     for (const task of tasks) {
       task.dependencies = task.dependencies
-        .map((dependencyId) => taskIdMap.get(dependencyId) ?? normalizeTaskId(dependencyId, task.ordinal))
+        .map((dependencyId) => {
+          const mapped = taskIdMap.get(dependencyId);
+          if (mapped) {
+            return mapped;
+          }
+
+          const normalizedDependency = normalizeTaskId(dependencyId, task.ordinal);
+          return `${planId}-${normalizedDependency}`;
+        })
         .filter((dependencyId) => normalizedIds.has(dependencyId) && dependencyId !== task.id);
     }
 
@@ -527,13 +649,16 @@ export class TaskRunner {
     });
 
     void this.postDiscordNotification(
-      [
-        "[RALPH][plan][plan_synthesis]",
-        "status=completed",
-        `plan=${planId}`,
-        `tasks=${tasks.length}`,
-        `summary=${planResult.summary.slice(0, 350)}`
-      ].join("\n")
+      {
+        speaker: this.displayRoleLabel("plan_synthesis"),
+        title: "Plan Created",
+        description: this.truncateForDiscord(planResult.summary, 1200),
+        level: "info",
+        fields: [
+          { name: "Plan ID", value: planId, inline: true },
+          { name: "Tasks", value: String(tasks.length), inline: true }
+        ]
+      }
     );
 
     return { planId };
@@ -1167,14 +1292,17 @@ export class TaskRunner {
       `Committer is merging phase ${phaseNumber} into ${gitContext.mergeTargetBranch} (${branches.length} branch(es)).`
     );
     void this.postDiscordNotification(
-      [
-        "[RALPH][queue][committer]",
-        `plan=${planId}`,
-        `phase=${phaseNumber}`,
-        `status=started`,
-        `target=${gitContext.mergeTargetBranch}`,
-        `branches=${branches.join(",")}`
-      ].join("\n")
+      {
+        speaker: this.displayRoleLabel("committer"),
+        title: `Queue Merge Started (Phase ${phaseNumber})`,
+        description: "Merging completed phase worktrees into target branch.",
+        level: "info",
+        fields: [
+          { name: "Plan", value: planId, inline: true },
+          { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
+          { name: "Branches", value: branches.join("\n") || "(none)" }
+        ]
+      }
     );
 
     const beforeHead = (
@@ -1219,15 +1347,18 @@ export class TaskRunner {
       `phase ${phaseNumber} merge`
     );
     void this.postDiscordNotification(
-      [
-        "[RALPH][queue][committer]",
-        `plan=${planId}`,
-        `phase=${phaseNumber}`,
-        "status=completed",
-        `target=${gitContext.mergeTargetBranch}`,
-        `before=${beforeHead}`,
-        `after=${afterHead}`
-      ].join("\n")
+      {
+        speaker: this.displayRoleLabel("committer"),
+        title: `Queue Merge Completed (Phase ${phaseNumber})`,
+        description: "All phase branches were merged and validated.",
+        level: "info",
+        fields: [
+          { name: "Plan", value: planId, inline: true },
+          { name: "Target", value: gitContext.mergeTargetBranch, inline: true },
+          { name: "Before", value: beforeHead, inline: false },
+          { name: "After", value: afterHead, inline: false }
+        ]
+      }
     );
   }
 
@@ -1620,14 +1751,89 @@ export class TaskRunner {
     return url.length > 0 ? url : null;
   }
 
-  private truncateForDiscord(text: string, maxLength = 1900): string {
+  private truncateForDiscord(text: string, maxLength = 1800): string {
     if (text.length <= maxLength) {
       return text;
     }
     return `${text.slice(0, maxLength - 3)}...`;
   }
 
-  private async postDiscordNotification(content: string): Promise<void> {
+  private toDiscordColor(level: "info" | "error"): number {
+    return level === "error" ? 0xdc2626 : 0x2563eb;
+  }
+
+  private speakerToAvatarUrl(speaker: string): string {
+    const seed = encodeURIComponent(speaker.trim().toLowerCase() || "ralph");
+    return `https://api.dicebear.com/9.x/bottts-neutral/png?seed=${seed}`;
+  }
+
+  private displayRoleLabel(rawRole: string): string {
+    switch (rawRole) {
+      case "task_execution":
+        return "Task Execution Agent";
+      case "architecture_specialist":
+        return "Architecture Specialist";
+      case "tester":
+        return "Tester Agent";
+      case "committer":
+        return "Committer Agent";
+      case "plan_synthesis":
+        return "Plan Synthesis Agent";
+      case "discovery_specialist":
+        return "Discovery Specialist";
+      default:
+        return rawRole
+          .split(/[_-]/g)
+          .filter((part) => part.length > 0)
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(" ");
+    }
+  }
+
+  private buildDiscordPayload(input: DiscordNotificationInput): Record<string, unknown> {
+    const fields = (input.fields ?? [])
+      .slice(0, 8)
+      .map((field) => ({
+        name: this.truncateForDiscord(field.name, 256),
+        value: this.truncateForDiscord(field.value, 1024),
+        inline: field.inline ?? false
+      }))
+      .filter((field) => field.name.trim().length > 0 && field.value.trim().length > 0);
+
+    const embed: Record<string, unknown> = {
+      title: this.truncateForDiscord(input.title, 256),
+      description: this.truncateForDiscord(input.description ?? "", 4096),
+      color: this.toDiscordColor(input.level ?? "info"),
+      timestamp: new Date().toISOString(),
+      author: {
+        name: input.speaker
+      },
+      footer: {
+        text: input.footer ?? "Ralph Desktop"
+      }
+    };
+
+    if (fields.length > 0) {
+      embed.fields = fields;
+    }
+
+    return {
+      username: input.speaker,
+      avatar_url: this.speakerToAvatarUrl(input.speaker),
+      embeds: [embed],
+      allowed_mentions: {
+        parse: []
+      }
+    };
+  }
+
+  private compactDiscordFields(
+    fields: Array<DiscordNotificationField | null | undefined>
+  ): DiscordNotificationField[] {
+    return fields.filter((field): field is DiscordNotificationField => field !== null && field !== undefined);
+  }
+
+  private async postDiscordNotification(input: DiscordNotificationInput): Promise<void> {
     const webhookUrl = this.getDiscordWebhookUrl();
     if (!webhookUrl) {
       return;
@@ -1646,12 +1852,7 @@ export class TaskRunner {
         headers: {
           "content-type": "application/json"
         },
-        body: JSON.stringify({
-          content: this.truncateForDiscord(content),
-          allowed_mentions: {
-            parse: []
-          }
-        }),
+        body: JSON.stringify(this.buildDiscordPayload(input)),
         signal: controller.signal
       });
 
@@ -1674,17 +1875,20 @@ export class TaskRunner {
       return;
     }
 
-    const content = [
-      `[RALPH][discovery][${event.type}]`,
-      `session=${event.sessionId}`,
-      event.agent ? `agent=${event.agent}` : null,
-      `message=${event.message}`,
-      event.details ? `details=${event.details}` : null
-    ]
-      .filter((line): line is string => !!line)
-      .join("\n");
+    const speaker = event.agent
+      ? this.displayRoleLabel(event.agent)
+      : "Discovery Orchestrator";
 
-    void this.postDiscordNotification(content);
+    void this.postDiscordNotification({
+      speaker,
+      title: `Discovery ${event.type.replace(/_/g, " ")}`,
+      description: [event.message, event.details].filter(Boolean).join("\n"),
+      level: event.level,
+      fields: this.compactDiscordFields([
+        { name: "Session", value: event.sessionId, inline: true },
+        event.agent ? { name: "Agent", value: event.agent, inline: true } : null
+      ])
+    });
   }
 
   private notifyDiscordForSubagentPayload(input: {
@@ -1711,19 +1915,21 @@ export class TaskRunner {
       const status = typeof record.status === "string" ? record.status : "unknown";
       const summary = typeof record.summary === "string" ? record.summary : "";
       const stopReason = typeof record.stopReason === "string" ? record.stopReason : "";
-      const content = [
-        `[RALPH][task][agent-stage]`,
-        `plan=${input.plan.id}`,
-        `task=${input.task.id}`,
-        `role=${role}`,
-        `stage=${stage}`,
-        `status=${status}`,
-        summary ? `summary=${summary}` : null,
-        stopReason ? `stopReason=${stopReason}` : null
-      ]
-        .filter((line): line is string => !!line)
-        .join("\n");
-      void this.postDiscordNotification(content);
+      const level: "info" | "error" = status === "failed" ? "error" : "info";
+      void this.postDiscordNotification({
+        speaker: this.displayRoleLabel(role),
+        title: `${stage} • ${status}`,
+        description: this.truncateForDiscord(summary || "Stage update received.", 1200),
+        level,
+        fields: this.compactDiscordFields([
+          { name: "Plan", value: input.plan.id, inline: true },
+          { name: "Task", value: input.task.id, inline: true },
+          { name: "Role", value: role, inline: true },
+          stopReason
+            ? { name: "Stop Reason", value: this.truncateForDiscord(stopReason, 600) }
+            : null
+        ])
+      });
       return;
     }
 
@@ -1742,31 +1948,51 @@ export class TaskRunner {
         })
         .filter((line): line is string => !!line);
 
-      const content = [
-        `[RALPH][task][architecture-review]`,
-        `plan=${input.plan.id}`,
-        `task=${input.task.id}`,
-        `iteration=${String(record.iteration ?? "?")}/${String(record.maxIterations ?? "?")}`,
-        `status=${String(review?.status ?? "unknown")}`,
-        `confidence=${String(review?.confidence ?? "n/a")}`,
-        `summary=${String(review?.summary ?? "")}`,
-        topFindings.length > 0 ? `findings=${topFindings.join(" | ")}` : null
-      ]
-        .filter((line): line is string => !!line)
-        .join("\n");
-      void this.postDiscordNotification(content);
+      const reviewStatus = String(review?.status ?? "unknown");
+      const level: "info" | "error" =
+        reviewStatus === "blocked" || reviewStatus === "needs_refactor" ? "error" : "info";
+      void this.postDiscordNotification({
+        speaker: this.displayRoleLabel("architecture_specialist"),
+        title: `Architecture Review • ${reviewStatus}`,
+        description: this.truncateForDiscord(String(review?.summary ?? ""), 1200),
+        level,
+        fields: this.compactDiscordFields([
+          { name: "Plan", value: input.plan.id, inline: true },
+          { name: "Task", value: input.task.id, inline: true },
+          {
+            name: "Iteration",
+            value: `${String(record.iteration ?? "?")}/${String(record.maxIterations ?? "?")}`,
+            inline: true
+          },
+          {
+            name: "Confidence",
+            value: String(review?.confidence ?? "n/a"),
+            inline: true
+          },
+          topFindings.length > 0
+            ? {
+              name: "Top Findings",
+              value: this.truncateForDiscord(topFindings.join("\n"), 1000)
+            }
+            : null
+        ])
+      });
       return;
     }
 
     if (kind === "committer_summary") {
-      const content = [
-        `[RALPH][task][committer]`,
-        `plan=${input.plan.id}`,
-        `task=${input.task.id}`,
-        `headBefore=${String(record.headBefore ?? "unknown")}`,
-        `headAfter=${String(record.headAfter ?? "unknown")}`
-      ].join("\n");
-      void this.postDiscordNotification(content);
+      void this.postDiscordNotification({
+        speaker: this.displayRoleLabel("committer"),
+        title: "Committer Summary",
+        description: "Commit range created successfully for this task.",
+        level: "info",
+        fields: [
+          { name: "Plan", value: input.plan.id, inline: true },
+          { name: "Task", value: input.task.id, inline: true },
+          { name: "Head Before", value: String(record.headBefore ?? "unknown") },
+          { name: "Head After", value: String(record.headAfter ?? "unknown") }
+        ]
+      });
     }
   }
 

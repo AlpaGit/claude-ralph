@@ -9,6 +9,7 @@ import { PlanListView } from "./views/PlanListView";
 import { PlanDetailView } from "./views/PlanDetailView";
 import { DiscoveryView } from "./views/DiscoveryView";
 import { LiveRunView } from "./views/LiveRunView";
+import { ProjectMemoryView } from "./views/ProjectMemoryView";
 import { SettingsView } from "./views/SettingsView";
 
 /**
@@ -30,6 +31,7 @@ export const router = createHashRouter(
       <Route path="/" element={<RouteErrorBoundary><PlanListView /></RouteErrorBoundary>} />
       <Route path="/plan/:planId" element={<RouteErrorBoundary><PlanDetailView /></RouteErrorBoundary>} />
       <Route path="/discovery" element={<RouteErrorBoundary><DiscoveryView /></RouteErrorBoundary>} />
+      <Route path="/project-memory" element={<RouteErrorBoundary><ProjectMemoryView /></RouteErrorBoundary>} />
       <Route path="/run/:runId" element={<RouteErrorBoundary><LiveRunView /></RouteErrorBoundary>} />
       <Route path="/settings" element={<RouteErrorBoundary><SettingsView /></RouteErrorBoundary>} />
     </Route>

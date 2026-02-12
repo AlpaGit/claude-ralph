@@ -400,6 +400,82 @@ describe.skipIf(!sqliteAvailable)("AppDatabase (comprehensive)", () => {
   });
 
   // =========================================================================
+  // project profiles (per-project memory)
+  // =========================================================================
+
+  describe("project memory", () => {
+    it("should save and load stack profile per project path", () => {
+      const projectPath = "/tmp/per-project-memory";
+
+      db.upsertProjectStackProfile(projectPath, {
+        version: 1,
+        updatedAt: "2026-02-12T00:00:00.000Z",
+        specialistId: "stack-analyst",
+        stackSummary: "TypeScript + Electron + SQLite",
+        stackHints: ["typescript", "electron", "sqlite"],
+        signals: ["package.json", "electron.vite.config.ts"],
+        confidence: 92
+      });
+
+      const profile = db.getProjectStackProfile(projectPath);
+      expect(profile).not.toBeNull();
+      expect(profile!.specialistId).toBe("stack-analyst");
+      expect(profile!.stackSummary).toContain("Electron");
+      expect(profile!.stackHints).toContain("sqlite");
+    });
+
+    it("should list plans by project key", () => {
+      createTestPlan(db, { id: "project-a-1", projectPath: "/tmp/project-a", summary: "A1" });
+      createTestPlan(db, { id: "project-a-2", projectPath: "/tmp/project-a", summary: "A2" });
+      createTestPlan(db, { id: "project-b-1", projectPath: "/tmp/project-b", summary: "B1" });
+
+      const projectAPlans = db.listPlansByProject("/tmp/project-a");
+      expect(projectAPlans.map((p) => p.id)).toContain("project-a-1");
+      expect(projectAPlans.map((p) => p.id)).toContain("project-a-2");
+      expect(projectAPlans.map((p) => p.id)).not.toContain("project-b-1");
+    });
+
+    it("should expose project memory rows with stack profile and recent plans", () => {
+      createTestPlan(db, { id: "project-a-1", projectPath: "/tmp/project-a", summary: "A1" });
+      createTestPlan(db, { id: "project-a-2", projectPath: "/tmp/project-a", summary: "A2" });
+      createTestPlan(db, { id: "project-b-1", projectPath: "/tmp/project-b", summary: "B1" });
+
+      db.upsertProjectStackProfile("/tmp/project-a", {
+        version: 1,
+        updatedAt: "2026-02-12T12:00:00.000Z",
+        specialistId: "stack-analyst",
+        stackSummary: "Node + TypeScript + SQLite",
+        stackHints: ["node", "typescript", "sqlite"],
+        signals: ["package.json"],
+        confidence: 88
+      });
+
+      const memories = db.listProjectMemory({ limitPlans: 2 });
+      const projectA = memories.find((entry) => entry.projectPath === "/tmp/project-a");
+
+      expect(projectA).toBeDefined();
+      expect(projectA!.stackProfile).not.toBeNull();
+      expect(projectA!.recentPlans).toHaveLength(2);
+      expect(projectA!.recentPlans.map((plan) => plan.id)).toContain("project-a-1");
+      expect(projectA!.recentPlans.map((plan) => plan.id)).toContain("project-a-2");
+      expect(projectA!.projectId.startsWith("proj-")).toBe(true);
+    });
+
+    it("should return a project memory row by project ID", () => {
+      createTestPlan(db, { id: "project-c-1", projectPath: "/tmp/project-c", summary: "C1" });
+      const memory = db.listProjectMemory({ limitPlans: 1 }).find((entry) => entry.projectPath === "/tmp/project-c");
+
+      expect(memory).toBeDefined();
+
+      const byId = db.getProjectMemoryItemById(memory!.projectId, 1);
+      expect(byId).not.toBeNull();
+      expect(byId!.projectPath).toBe("/tmp/project-c");
+      expect(byId!.recentPlans).toHaveLength(1);
+      expect(byId!.recentPlans[0].id).toBe("project-c-1");
+    });
+  });
+
+  // =========================================================================
   // deletePlan
   // =========================================================================
 

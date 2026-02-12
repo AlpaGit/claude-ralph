@@ -21,9 +21,12 @@ import type {
   InferStackInput,
   InferStackResult,
   ListPlansInput,
+  ListProjectMemoryInput,
   ModelConfigEntry,
   PlanListItem,
+  ProjectMemoryItem,
   RalphApi,
+  RefreshProjectStackProfileInput,
   RalphPlan,
   ResumeDiscoveryInput,
   RetryTaskInput,
@@ -47,6 +50,8 @@ const IPC_CHANNELS = {
   createPlan: "plan:create",
   getPlan: "plan:get",
   listPlans: "plan:list",
+  listProjectMemory: "project-memory:list",
+  refreshProjectStackProfile: "project-memory:refresh",
   deletePlan: "plan:delete",
   archivePlan: "plan:archive",
   unarchivePlan: "plan:unarchive",
@@ -84,6 +89,14 @@ const api: RalphApi = {
 
   listPlans(input: ListPlansInput): Promise<PlanListItem[]> {
     return ipcRenderer.invoke(IPC_CHANNELS.listPlans, input);
+  },
+
+  listProjectMemory(input: ListProjectMemoryInput): Promise<ProjectMemoryItem[]> {
+    return ipcRenderer.invoke(IPC_CHANNELS.listProjectMemory, input);
+  },
+
+  refreshProjectStackProfile(input: RefreshProjectStackProfileInput): Promise<ProjectMemoryItem> {
+    return ipcRenderer.invoke(IPC_CHANNELS.refreshProjectStackProfile, input);
   },
 
   deletePlan(input: DeletePlanInput): Promise<void> {

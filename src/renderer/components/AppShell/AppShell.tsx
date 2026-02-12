@@ -104,7 +104,7 @@ export function AppShell(): JSX.Element {
         key: "r",
         ctrl: true,
         label: "Ctrl+R",
-        description: "Run all tasks (on plan detail page)",
+        description: "Démarrer le plan (on plan detail page)",
         category: "Actions",
         preventDefault: true,
         handler: () => void handleRunAll(),

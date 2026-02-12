@@ -16,6 +16,8 @@ import {
   inferStackInputSchema,
   IPC_CHANNELS,
   listPlansInputSchema,
+  listProjectMemoryInputSchema,
+  refreshProjectStackProfileInputSchema,
   retryTaskInputSchema,
   runAllInputSchema,
   runTaskInputSchema,
@@ -125,6 +127,24 @@ export function registerIpcHandlers(taskRunner: TaskRunner): void {
     try {
       const input = listPlansInputSchema.parse(rawInput);
       return taskRunner.listPlans(input.filter);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listProjectMemory, async (_event, rawInput) => {
+    try {
+      const input = listProjectMemoryInputSchema.parse(rawInput);
+      return taskRunner.listProjectMemory(input);
+    } catch (error) {
+      throw createIpcError(error);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.refreshProjectStackProfile, async (_event, rawInput) => {
+    try {
+      const input = refreshProjectStackProfileInputSchema.parse(rawInput);
+      return await taskRunner.refreshProjectStackProfile(input);
     } catch (error) {
       throw createIpcError(error);
     }

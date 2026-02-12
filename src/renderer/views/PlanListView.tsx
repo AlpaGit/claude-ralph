@@ -109,8 +109,10 @@ export function PlanListView(): JSX.Element {
   const [actionLoading, setActionLoading] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
 
-  /* ── Plan creation from Discovery (location.state.prdText) ── */
-  const incomingPrd = (location.state as { prdText?: string } | null)?.prdText ?? null;
+  /* ── Plan creation from Discovery (location.state.prdText + projectPath) ── */
+  const discoveryState = location.state as { prdText?: string; projectPath?: string } | null;
+  const incomingPrd = discoveryState?.prdText ?? null;
+  const incomingProjectPath = discoveryState?.projectPath?.trim() ?? "";
   const prdConsumedRef = useRef(false);
 
   useEffect(() => {
@@ -119,7 +121,7 @@ export function PlanListView(): JSX.Element {
       setCreationError(null);
       void (async () => {
         try {
-          const planId = await createPlan(incomingPrd, "");
+          const planId = await createPlan(incomingPrd, incomingProjectPath);
           navigate(`/plan/${planId}`, { replace: true });
         } catch (caught) {
           const msg = caught instanceof Error ? caught.message : "Failed to create plan.";
@@ -127,7 +129,7 @@ export function PlanListView(): JSX.Element {
         }
       })();
     }
-  }, [incomingPrd, creating, createPlan, navigate]);
+  }, [incomingPrd, incomingProjectPath, creating, createPlan, navigate]);
 
   /* ── Debounce search input (300ms) ───────────────────── */
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

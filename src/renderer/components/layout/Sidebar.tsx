@@ -61,6 +61,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Plans", end: true },
   { to: "/discovery", label: "Discovery", shortcutHint: "Ctrl+N" },
+  { to: "/project-memory", label: "Project Memory" },
   { to: "/settings", label: "Settings", shortcutHint: "Ctrl+," },
 ];
 

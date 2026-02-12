@@ -1,0 +1,232 @@
+/*
+ * ErrorToast -- custom toast renderer for error toasts with expandable details.
+ * Brutalist style matching the existing design system.
+ */
+
+.toast {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.875rem;
+  background: #1a1a1a;
+  color: #e6e6e6;
+  border: 2px solid var(--color-error);
+  border-radius: 8px;
+  box-shadow: 4px 4px 0 #000;
+  max-width: 420px;
+  width: 100%;
+  overflow: hidden;
+  animation: slideIn 200ms ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.toastExiting {
+  animation: slideOut 150ms ease-in forwards;
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+/* ── Header row (icon + message + dismiss) ──────────── */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.message {
+  flex: 1;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #777;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 100ms ease-in-out;
+}
+
+.dismiss:hover {
+  color: #e6e6e6;
+}
+
+.dismiss:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ── Details toggle button ──────────────────────────── */
+
+.detailsToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  border-top: 1px dashed rgba(185, 28, 28, 0.4);
+  background: transparent;
+  padding: 6px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-error);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 100ms ease-in-out;
+}
+
+.detailsToggle:hover {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+.detailsToggle:focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: -2px;
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 0.6rem;
+  transition: transform 150ms ease-in-out;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* ── Expandable details section ─────────────────────── */
+
+.details {
+  border-top: 1px dashed rgba(185, 28, 28, 0.4);
+  padding: 10px 16px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.detailRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.detailLabel {
+  color: #777;
+  flex-shrink: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+  padding-top: 1px;
+}
+
+.detailValue {
+  color: #ccc;
+  word-break: break-word;
+}
+
+/* ── Validation issues list ─────────────────────────── */
+
+.issuesSection {
+  margin-top: 8px;
+}
+
+.sectionTitle {
+  font-weight: 700;
+  font-size: 0.65rem;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+}
+
+.issueList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.issueItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.issuePath {
+  font-weight: 700;
+  color: var(--color-accent-2);
+}
+
+.issueMessage {
+  color: #ccc;
+}
+
+.issueMeta {
+  font-size: 0.65rem;
+  color: #777;
+}
+
+.issueMeta strong {
+  color: #ccc;
+}
+
+/* ── Stack trace ────────────────────────────────────── */
+
+.stackSection {
+  margin-top: 8px;
+}
+
+.stackTrace {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #999;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 140px;
+  overflow-y: auto;
+  margin: 0;
+}
