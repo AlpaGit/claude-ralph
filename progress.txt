@@ -1167,3 +1167,32 @@ p3-07: Add keyboard shortcuts for common actions   [DONE]
   - src/renderer/views/LiveRunView.tsx
     - "Cancel Run" button: added title="Cancel Run (Esc)"
   - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
+
+p3-08: Cap log accumulation with ring buffer in runStore   [DONE]
+  - src/renderer/stores/runStore.ts
+    - Imported RingBuffer from P1-07 (src/renderer/components/ui/RingBuffer.ts)
+    - LOG_BUFFER_CAPACITY constant: 5_000 (max in-memory log lines per run)
+    - Module-level logBuffers Map<string, RingBuffer<string>>: stores ring buffer instances
+      outside Zustand/immer state to avoid proxy overhead on mutable containers
+    - Module-level totalPushed Map<string, number>: tracks total lines pushed per runId
+      (including those dropped by the ring buffer) for overflow calculation
+    - getLogBuffer(runId): lazily creates a RingBuffer<string> per run
+    - pushToBuffer(runId, line): pushes to ring buffer, increments totalPushed,
+      returns overflow count (max(0, totalPushed - capacity))
+    - runLogOverflow state: Record<string, number> tracking dropped line count per run
+    - appendLog action: pushes to ring buffer, sets runLogs[runId] from buf.toArray(),
+      sets runLogOverflow[runId] from overflow count
+    - _handleRunEvent "log" case: same ring buffer logic (pushToBuffer + toArray)
+    - DB persistence (appendRunEvent in main process) is completely unaffected;
+      ring buffer only caps the in-memory display window
+  - src/renderer/components/ui/ULogViewer.tsx
+    - ULogViewerProps: added truncatedCount optional prop (number, default 0)
+    - Footer: when truncatedCount > 0, renders a truncation indicator span showing
+      "{N} older lines truncated" (formatted with toLocaleString for readability)
+  - src/renderer/components/ui/ULogViewer.module.css
+    - .truncatedIndicator: accent-2 color, bold weight, 0.7rem font-size, nowrap
+  - src/renderer/views/LiveRunView.tsx
+    - Reads runLogOverflow from runStore via selector
+    - Derives logOverflow number for current runId
+    - Passes truncatedCount={logOverflow} to ULogViewer
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
