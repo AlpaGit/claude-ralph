@@ -733,3 +733,29 @@ p2-06: Integrate model config into Agent SDK calls   [DONE]
     - updateModelForRole(): now calls refreshModelConfig() after DB write so subsequent
       SDK calls use the updated model immediately
   - Build and typecheck pass
+
+p2-07: Add discovery_sessions table and persistence   [DONE]
+  - resources/migrations/003_discovery_sessions.sql
+    - CREATE TABLE discovery_sessions: id TEXT PK, project_path TEXT NOT NULL,
+      seed_sentence TEXT NOT NULL, additional_context TEXT NOT NULL DEFAULT '',
+      answer_history_json TEXT NOT NULL DEFAULT '[]', round_number INTEGER NOT NULL DEFAULT 1,
+      latest_state_json TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    - Indexes: idx_discovery_sessions_status (status), idx_discovery_sessions_project (project_path)
+  - src/shared/types.ts
+    - DiscoverySessionStatus type: "active" | "completed" | "abandoned"
+    - DiscoverySession interface: id, projectPath, seedSentence, additionalContext,
+      answerHistory (DiscoveryAnswer[]), roundNumber, latestState (DiscoveryInterviewState),
+      status, createdAt, updatedAt
+  - src/main/runtime/app-database.ts
+    - DiscoverySessionRow interface (raw DB row shape)
+    - CreateDiscoverySessionInput interface: id, projectPath, seedSentence, additionalContext, latestState
+    - UpdateDiscoverySessionInput interface: id, answerHistory?, roundNumber?, latestState?, status?
+    - createDiscoverySession(): inserts new session with empty answer history and round 1, returns DiscoverySession
+    - updateDiscoverySession(): dynamic SET clause updates only provided fields plus updated_at
+    - getActiveDiscoverySessions(): returns all sessions with status 'active', ordered by updated_at DESC
+    - getDiscoverySession(id): returns single session by ID or null
+    - abandonDiscoverySession(id): sets status to 'abandoned' and updates updated_at
+    - mapDiscoverySessionRow() private helper: parses answer_history_json and latest_state_json,
+      throws PlanParseError on corrupt latest_state_json
+  - Build and typecheck pass (pre-existing task-runner.ts TS2352 error unrelated to this task)
